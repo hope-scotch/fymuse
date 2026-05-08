@@ -548,10 +548,11 @@
   body.view-listener #info-sidebar { display: none; }
   body.view-listener main > #graph-panel { flex: 1 1 100%; }
   #listener-view { display: flex; flex-direction: column; gap: 14px; }
-  .listener-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-  .listener-view-title { margin: 0 0 4px 0; font-size: 22px; font-weight: 700; letter-spacing: -0.4px; display: flex; align-items: center; gap: 10px; color: var(--text); }
+  .listener-view-header { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .listener-view-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+  .listener-view-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.4px; display: flex; align-items: center; gap: 10px; color: var(--text); }
   .listener-view-title i { color: var(--accent-2); font-size: 26px; }
-  .listener-view-sub { font-size: 12.5px; color: var(--muted); max-width: 640px; line-height: 1.5; }
+  .listener-view-sub { font-size: 12.5px; color: var(--muted); max-width: 760px; line-height: 1.5; }
   .listener-view-controls { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
   .listener-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 22px; align-items: start; }
   @media (max-width: 1100px) { .listener-grid { grid-template-columns: 1fr; } }
@@ -594,16 +595,22 @@
   .listener-alt-bar-fill { height: 100%; background: var(--accent-2); opacity: 0.6; }
   .listener-alt-pct { width: 38px; text-align: right; font-size: 10.5px; }
 
-  .listener-suggestions { display: flex; flex-direction: column; gap: 6px; }
-  .listener-suggest-card { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; transition: border-color 0.12s, background 0.12s; }
-  .listener-suggest-card:hover { border-color: var(--accent); background: var(--panel); }
-  .listener-suggest-name { flex: 1; font-family: var(--font-mono); font-size: 13.5px; color: var(--text); font-weight: 600; }
-  .listener-suggest-roman { font-family: var(--font-mono); font-size: 10.5px; color: var(--accent-2); padding: 2px 6px; background: var(--bg); border-radius: 3px; }
-  .listener-suggest-reason { font-size: 10.5px; color: var(--muted); flex-basis: 100%; margin-top: 2px; }
-  .listener-suggest-card .ls-row { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
-  .listener-suggest-actions { display: flex; gap: 4px; }
-  .listener-suggest-actions button { padding: 4px 8px; font-size: 11px; background: var(--panel); border: 1px solid var(--border); color: var(--text-2); border-radius: 4px; cursor: pointer; transition: all 0.12s; }
-  .listener-suggest-actions button:hover { color: var(--accent); border-color: var(--accent); }
+  .listener-suggestions { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .listener-suggestions .lyrics-empty { grid-column: 1 / -1; padding: 20px; text-align: center; background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; }
+  .ls-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 14px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s; }
+  .ls-card:hover { border-color: var(--accent); background: var(--panel); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+  .ls-card-flow { display: flex; align-items: center; gap: 8px; }
+  .ls-card-from { font-family: var(--font-mono); font-size: 13.5px; color: var(--muted); font-weight: 500; }
+  .ls-card-arrow { color: var(--accent-2); font-size: 14px; opacity: 0.85; }
+  .ls-card-to { font-family: var(--font-mono); font-size: 24px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; line-height: 1.05; }
+  .ls-card-numeral { font-family: var(--font-mono); font-size: 10.5px; color: var(--accent-2); padding: 3px 8px; background: var(--bg); border-radius: 4px; margin-left: auto; flex-shrink: 0; letter-spacing: 0.4px; }
+  .ls-card-notes { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+  .ls-card-reason { color: var(--text-2); font-size: 11.5px; line-height: 1.4; flex: 1; }
+  .ls-card-actions { display: flex; gap: 5px; margin-top: 6px; }
+  .ls-card-actions button { flex: 1; padding: 7px 6px; font-size: 11px; background: var(--panel); border: 1px solid var(--border); color: var(--text-2); border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; transition: all 0.12s; font-weight: 500; }
+  .ls-card-actions button:hover { color: var(--accent); border-color: var(--accent); }
+  .ls-card-actions button[data-action="play"] { background: var(--accent); color: #1a1a1a; border-color: var(--accent); font-weight: 600; }
+  .ls-card-actions button[data-action="play"]:hover { filter: brightness(1.1); color: #1a1a1a; border-color: var(--accent); }
 
   .listener-chroma { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; height: 120px; align-items: end; }
   .listener-chroma-bar { background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px 3px 0 0; position: relative; min-height: 4px; transition: height 0.08s linear, background 0.12s; }
@@ -4626,21 +4633,25 @@ function renderListenerSuggestions(detected) {
     return;
   }
   wrap.innerHTML = suggestions.map((s, idx) => {
-    return '<div class="listener-suggest-card" data-idx="' + idx + '">' +
-      '<div class="ls-row">' +
-        '<span class="listener-suggest-name">' + s.chord.name + '</span>' +
-        '<span class="listener-suggest-roman">' + s.numeral + '</span>' +
-        '<span class="listener-suggest-reason">' + s.reason + '</span>' +
+    const notes = (s.chord.notes || []).join(' · ');
+    return '<div class="ls-card" data-idx="' + idx + '">' +
+      '<div class="ls-card-flow">' +
+        '<span class="ls-card-from">' + detected.name + '</span>' +
+        '<span class="ls-card-arrow">→</span>' +
+        '<span class="ls-card-to">' + s.chord.name + '</span>' +
+        '<span class="ls-card-numeral">' + s.numeral + '</span>' +
       '</div>' +
-      '<div class="listener-suggest-actions">' +
-        '<button data-action="play" title="Play this chord"><i class="ph-duotone ph-play sz-sm"></i></button>' +
-        '<button data-action="follow" title="Play detected → suggested"><i class="ph-duotone ph-arrow-right sz-sm"></i> Try</button>' +
-        '<button data-action="add" title="Add to Builder"><i class="ph-duotone ph-plus sz-sm"></i></button>' +
+      (notes ? '<div class="ls-card-notes">' + notes + '</div>' : '') +
+      '<div class="ls-card-reason">' + s.reason + '</div>' +
+      '<div class="ls-card-actions">' +
+        '<button data-action="play" title="Play just this chord"><i class="ph-duotone ph-play sz-sm"></i> Play</button>' +
+        '<button data-action="follow" title="Play detected → suggested"><i class="ph-duotone ph-arrow-right sz-sm"></i> Pair</button>' +
+        '<button data-action="add" title="Add detected + suggestion to Builder"><i class="ph-duotone ph-plus sz-sm"></i> Add</button>' +
       '</div>' +
     '</div>';
   }).join('');
   // Wire up
-  wrap.querySelectorAll('.listener-suggest-card').forEach(card => {
+  wrap.querySelectorAll('.ls-card').forEach(card => {
     const idx = parseInt(card.dataset.idx, 10);
     const s = suggestions[idx];
     card.querySelector('[data-action="play"]').onclick = async () => {
@@ -4679,14 +4690,14 @@ function renderListenerSuggestions(detected) {
 function buildListenerViewSkeleton(root) {
   root.innerHTML = `
     <div class="listener-view-header">
-      <div>
+      <div class="listener-view-titlebar">
         <h2 class="listener-view-title"><i class="ph-duotone ph-microphone"></i> Listener</h2>
-        <div class="listener-view-sub">Play a chord on any instrument near the mic — Listener identifies it and proposes likely next chords for your key &amp; genre.</div>
+        <div class="listener-view-controls">
+          <button class="primary" id="listener-toggle"><i class="ph-duotone ph-microphone sz-sm"></i> Start listening</button>
+          <span class="listener-status" id="listener-status">Mic off</span>
+        </div>
       </div>
-      <div class="listener-view-controls">
-        <button class="primary" id="listener-toggle"><i class="ph-duotone ph-microphone sz-sm"></i> Start listening</button>
-        <span class="listener-status" id="listener-status">Mic off</span>
-      </div>
+      <div class="listener-view-sub">Play a chord on any instrument near the mic — Listener identifies it and proposes likely next chords for your key &amp; genre.</div>
     </div>
 
     <div class="listener-meter-row">
