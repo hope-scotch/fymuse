@@ -294,6 +294,10 @@
   .chord-card:hover .chord-card-add { opacity: 1; }
   .chord-card-add:hover { background: var(--accent); transform: scale(1.12); }
   .chord-card-add:active { transform: scale(0.95); }
+  /* Keyboard shortcut badge — bottom-left of each card */
+  .chord-card-key { position: absolute; bottom: 4px; left: 6px; font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.7; transition: opacity 0.15s, color 0.15s; pointer-events: none; }
+  .chord-card:hover .chord-card-key { opacity: 1; color: var(--text-2); }
+  .chord-card.key-pressed { background: var(--accent-soft); border-color: var(--accent); transform: scale(0.97); box-shadow: 0 0 0 2px rgba(245,165,36,0.35); }
   .next-moves-panel { margin-top: 10px; padding: 10px; background: var(--panel); border-radius: 6px; border: 1px solid var(--border); }
   .next-moves-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
   .next-moves-row:hover { color: var(--accent); }
@@ -529,11 +533,11 @@
   .song-section-actions button { padding: 5px 10px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text-2); border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 500; transition: all 0.15s; font-family: var(--font-sans); }
   .song-section-actions button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
   .song-section-actions button:disabled { opacity: 0.35; cursor: not-allowed; }
-  .lyrics-rendered { background: var(--panel-2); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; min-height: 2.5em; font-family: var(--font-sans); font-size: 14px; line-height: 1.7; border: 1px solid var(--border); }
-  .cw-pair { display: inline-block; vertical-align: bottom; margin-right: 6px; }
-  .cw-chord { display: block; color: var(--accent); font-weight: 600; font-size: 11px; line-height: 1.2; min-height: 1.2em; font-family: var(--font-mono); }
-  .cw-word { display: block; line-height: 1.3; }
-  .lyrics-line { margin-bottom: 4px; }
+  .lyrics-rendered { background: var(--panel-2); border-radius: 8px; padding: 12px 14px; margin-bottom: 6px; min-height: 2.5em; font-family: var(--font-sans); font-size: 14px; line-height: 1; border: 1px solid var(--border); }
+  .cw-pair { display: inline-block; vertical-align: top; margin: 0 8px 8px 0; }
+  .cw-chord { display: block; color: var(--accent); font-weight: 600; font-size: 11px; line-height: 1; min-height: 12px; font-family: var(--font-mono); margin-bottom: 3px; }
+  .cw-word { display: block; line-height: 1.2; font-size: 14px; }
+  .lyrics-line { margin-bottom: 6px; }
   .lyrics-line:last-child { margin-bottom: 0; }
   .lyrics-empty { color: var(--muted); font-style: italic; font-size: 11.5px; padding: 4px 0; }
   .lyrics-textarea { width: 100%; min-height: 80px; box-sizing: border-box; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 5px; font-family: var(--font-mono); font-size: 12.5px; resize: vertical; line-height: 1.6; }
@@ -552,7 +556,7 @@
         <button id="header-pathfinder-btn" class="header-action-btn" title="Open Path Finder · A → B"><i class="ph-duotone ph-arrows-merge"></i> Path Finder</button>
         <button id="header-melody-btn" class="header-action-btn" title="Open Melody Mode · note-by-note"><i class="ph-duotone ph-music-note"></i> Melody Mode</button>
         <button id="header-customchord-btn" class="header-action-btn" title="Build a custom chord (e.g. Cm7add9add11)"><i class="ph-duotone ph-pencil-line"></i> Custom Chord</button>
-        <button id="header-songwriter-btn" class="header-action-btn" title="Open Songwriter shutter"><i class="ph-duotone ph-note-pencil"></i> Songwriter</button>
+        <button id="header-songwriter-btn" class="header-action-btn" title="Open Songwriter shutter (Shift+S)"><i class="ph-duotone ph-note-pencil"></i> Songwriter</button>
         <button id="header-sidebar-btn" class="header-action-btn active" title="Toggle reference sidebar (templates, chord detail, substitutions)"><i class="ph-duotone ph-sidebar-simple"></i> Sidebar</button>
       </div>
       <div class="control-group">
@@ -588,7 +592,6 @@
       <h2 class="panel-title" style="margin:0;">Chord Map</h2>
       <div style="display:flex;gap:6px;flex-shrink:0;">
         <button class="pill tour" id="walk-graph"><i class="ph-duotone ph-play sz-sm"></i> Walk the graph</button>
-        <button class="pill tour" id="stop-audio" style="background:var(--panel);"><i class="ph-duotone ph-stop sz-sm"></i> Stop</button>
       </div>
     </div>
     <div class="focus-controls" style="margin-bottom:8px;">
@@ -740,12 +743,13 @@
     <span class="drawer-spacer"></span>
     <span class="drawer-audio">Audio: <span class="audio-dot" id="audio-dot"></span><span id="audio-label">click any chord to enable</span></span>
     <button class="drawer-toggle" id="drawer-expand" title="Toggle fullscreen size"><i class="ph-duotone ph-arrows-out sz-sm"></i></button>
-    <button class="drawer-toggle" id="drawer-toggle"><i class="ph-duotone ph-caret-up sz-sm"></i> Expand</button>
+    <button class="drawer-toggle" id="drawer-toggle" title="Toggle Builder (Shift+D)"><i class="ph-duotone ph-caret-up sz-sm"></i> Expand</button>
   </div>
   <div class="drawer-body">
     <div class="builder-queue" id="builder-queue"></div>
     <div class="builder-controls">
-      <button class="primary" id="builder-play"><i class="ph-duotone ph-play sz-sm"></i> Play</button>
+      <button class="primary" id="builder-play" title="Play queue (Space)"><i class="ph-duotone ph-play sz-sm"></i> Play</button>
+      <button id="builder-stop" title="Stop all audio (Space)"><i class="ph-duotone ph-stop sz-sm"></i> Stop</button>
       <button id="builder-add-rest" title="Insert a silent rest"><i class="ph-duotone ph-pause sz-sm"></i> Rest</button>
       <button id="builder-clear"><i class="ph-duotone ph-trash sz-sm"></i> Clear</button>
     </div>
@@ -2821,7 +2825,7 @@ async function walkTheGraph(steps=8) {
   playProgression(path, state.key, state.genre.bpm, {});
 }
 document.getElementById('walk-graph').onclick = () => walkTheGraph(8);
-document.getElementById('stop-audio').onclick = () => stopAllAudio();
+document.getElementById('builder-stop').onclick = () => stopAllAudio();
 
 //==================================================================
 // RENDER ALL
@@ -3754,16 +3758,22 @@ function getPlaygroundCategories() {
   return state.genre.categories || [];
 }
 
+// Pool of keyboard shortcuts assigned to playground cards in order. ~36 keys covers all chords.
+const PLAYGROUND_KEY_POOL = '1234567890qwertyuiopasdfghjklzxcvbnm';
+let playgroundKeyMap = {}; // key char → { numeral, chord, cardEl }
+
 function renderPlayground() {
   const view = document.getElementById('playground-view');
   if (!view) return;
   view.innerHTML = `
     <div class="playground-header">
-      <h2><i class="ph-duotone ph-piano-keys" style="color:var(--accent);font-size:22px;vertical-align:-4px;margin-right:6px;"></i>Playground <small>· every useful chord in</small> <span class="playground-key-badge">${state.key} ${state.mode}</span> <small>· click a card to inspect, hover and click + to add it to the Builder</small></h2>
-      <button class="pill tour" id="playground-stop"><i class="ph-duotone ph-stop sz-sm"></i> Stop</button>
+      <h2><i class="ph-duotone ph-piano-keys" style="color:var(--accent);font-size:22px;vertical-align:-4px;margin-right:6px;"></i>Playground <small>· every useful chord in</small> <span class="playground-key-badge">${state.key} ${state.mode}</span> <small>· click a card to inspect, hover + to add to Builder, or press the keyboard shortcut shown on each card</small></h2>
     </div>
     <div id="playground-categories"></div>
   `;
+  // Reset keyboard mapping on every render
+  playgroundKeyMap = {};
+  let keyIdx = 0;
   const cats = view.querySelector('#playground-categories');
   const categories = getPlaygroundCategories();
   categories.forEach(cat => {
@@ -3816,13 +3826,74 @@ function renderPlayground() {
         renderAll();
         playChord(chord);
       };
+      // Assign a keyboard shortcut if any are still available in the pool
+      if (keyIdx < PLAYGROUND_KEY_POOL.length) {
+        const k = PLAYGROUND_KEY_POOL[keyIdx++];
+        card.dataset.key = k;
+        playgroundKeyMap[k] = { numeral, chord, card };
+        const keyBadge = document.createElement('span');
+        keyBadge.className = 'chord-card-key';
+        keyBadge.textContent = k;
+        card.appendChild(keyBadge);
+      }
       grid.appendChild(card);
     });
     section.appendChild(grid);
     cats.appendChild(section);
   });
-  document.getElementById('playground-stop').onclick = () => stopAllAudio();
 }
+
+// Global keydown — app-wide shortcuts (Shift+D, Shift+S) + playground chord shortcuts
+document.addEventListener('keydown', (e) => {
+  // Don't capture when typing in inputs / textareas / selects
+  const tag = (e.target && e.target.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+  // App-wide shortcuts (work in any view, no modifiers): Space toggles Play/Stop
+  if ((e.key === ' ' || e.code === 'Space') && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    if (activeEvents.length > 0) {
+      stopAllAudio();
+    } else if (builderState.queue.length > 0) {
+      const playBtn = document.getElementById('builder-play');
+      if (playBtn) playBtn.click();
+    }
+    return;
+  }
+
+  // App-wide shortcuts (work in any view): Shift + D (Builder), Shift + S (Songwriter)
+  if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    const k = (e.key || '').toLowerCase();
+    if (k === 'd') {
+      e.preventDefault();
+      const drawer = document.getElementById('builder-drawer');
+      if (drawer && window._setDrawer) {
+        window._setDrawer(drawer.classList.contains('collapsed'));
+      }
+      return;
+    }
+    if (k === 's') {
+      e.preventDefault();
+      const btn = document.getElementById('header-songwriter-btn');
+      if (btn) btn.click();
+      return;
+    }
+  }
+
+  // Playground chord shortcuts (only when Playground is the active view, no modifiers)
+  if (!state.genre || !state.genre.isPlayground) return;
+  if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+  const k = (e.key || '').toLowerCase();
+  const entry = playgroundKeyMap[k];
+  if (!entry) return;
+  e.preventDefault();
+  playChord(entry.chord);
+  // Brief visual flash on the matching card
+  if (entry.card) {
+    entry.card.classList.add('key-pressed');
+    setTimeout(() => entry.card.classList.remove('key-pressed'), 220);
+  }
+});
 
 renderAll();
 setupDrawer();

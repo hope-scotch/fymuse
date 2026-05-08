@@ -83,14 +83,17 @@ Mode-aware: switching to a minor key (e.g. "A minor") changes the diatonic categ
 
 Each card has a quick-add **+** button on hover that pushes the chord to the Builder without opening the detail panel.
 
+**Keyboard shortcuts**: every card gets a key from the pool `1234567890qwertyuiopasdfghjklzxcvbnm` (~36 keys, covers all chords). Shown as a small badge in the card's bottom-left corner. Pressing the key plays that chord and flashes the card orange. Shortcuts fire only when Playground is the active view, ignored when focus is in an input/textarea/select or any modifier key (Cmd/Ctrl/Alt) is held. Mapping rebuilds on every `renderPlayground()` so it stays in sync with key/mode changes. State: `playgroundKeyMap` (key char → `{numeral, chord, card}`).
+
 ### Builder (bottom drawer)
 - Queue of chord chips with **rhythm subdivisions** (whole, dotted half, half, dotted quarter, quarter, dotted 8th, 8th, triplet 8th, 16th, triplet 16th)
 - Each chip has a rhythm dropdown that sets the chord's duration
-- **𝄽 Rest button** inserts a silent gap with the same rhythm options
+- **Drawer body controls**: **Play / Stop / Rest / Clear** in one row (Stop and the others all live here now — moved out of the playground/graph headers)
+- **Rest button** inserts a silent gap with the same rhythm options
 - **Drag chips left/right** to reorder
 - **× to remove**
 - Three drawer states: **collapsed** (40px tab) → **expanded** (320px) → **fullscreen** (75vh)
-- Tab summary shows queue preview, audio status, and Play button
+- Tab summary shows queue preview, audio status, and quick-Play button
 
 ### Songwriter (top shutter)
 - Slides down from below the header (cubic-bezier 0.32s)
@@ -308,6 +311,8 @@ bindModeButtons();         // legacy no-op
 
 ## Recent change history (newest first)
 
+- **Keyboard shortcuts on every Playground chord card**. Each card gets a key from `1234567890qwertyuiopasdfghjklzxcvbnm` shown as a bottom-left monospace badge. Pressing the key plays the chord and flashes the card orange. Listener gates on `state.genre.isPlayground` and ignores text-input focus + modifier keys. `playgroundKeyMap` rebuilds on each `renderPlayground()`.
+- **Stop button moved into Builder controls** alongside Play / Rest / Clear. Removed standalone Stop buttons from playground header and genre-graph header (Walk-the-graph stays in graph header).
 - **Drag-and-drop chords onto Path Finder**. Playground chord cards and graph chord nodes (SVG `<g>`) are now `draggable="true"`. Drop on `#path-from` or `#path-to` to set From/To. Drop target highlights with `.drop-target` class (orange border + glow). If the dropped numeral isn't already in the dropdown options, it's appended on the fly. Both selects listen for `dragover` / `dragleave` / `drop`.
 - **Custom Chord side panel** (header tool button + 460px right overlay). Pill-button rows for Root / Triad / 7th / 9th / 11th / 13th compose chords like `Cm7add9add11`. Live preview of name + notes. Play and Add-to-Builder. Mutually exclusive with Path Finder and Melody Mode.
 - **New queue item type**: `{chord, rhythm}` for custom absolute chords. `playProgression`'s `resolve` returns `item.chord` directly. Builder chips show `(custom)` suffix to distinguish from Roman numeral entries.
