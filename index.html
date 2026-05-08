@@ -269,6 +269,7 @@
   .chord-card-numeral { font-family: var(--font-mono); font-weight: 700; font-size: 15px; color: var(--accent); letter-spacing: 0.2px; }
   .chord-card-name { font-size: 13px; color: var(--text); font-weight: 500; }
   .chord-card-note { font-size: 10px; color: var(--muted); margin-top: 2px; font-style: italic; line-height: 1.35; max-width: 130px; }
+  .chord-card.dragging { opacity: 0.45; transform: translateY(-2px) scale(0.98); }
   /* Quick-add button — appears in top-right corner of each chord card */
   .chord-card-add {
     position: absolute;
@@ -466,7 +467,8 @@
 
   /* Path Finder */
   .path-finder-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-  .path-finder-controls select { flex: 1; min-width: 100px; font-size: 12.5px; }
+  .path-finder-controls select { flex: 1; min-width: 100px; font-size: 12.5px; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s; }
+  .path-finder-controls select.drop-target { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 2px rgba(245,165,36,0.45); }
   .path-finder-controls .arrow-text { color: var(--accent); font-size: 16px; font-weight: 700; padding: 0 2px; }
   .path-finder-controls button { padding: 7px 12px; background: var(--accent); color: #1a1a1a; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 12px; transition: all 0.15s; font-family: var(--font-sans); }
   .path-finder-controls button:hover { filter: brightness(1.08); transform: translateY(-1px); }
@@ -495,6 +497,20 @@
   .melody-finalize { width: 100%; margin-top: 10px; padding: 9px; background: var(--accent-2); color: #0a0a10; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 12.5px; transition: all 0.15s; font-family: var(--font-sans); }
   .melody-finalize:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
   .melody-finalize:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  /* Custom Chord builder */
+  .cc-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .cc-row > label { min-width: 48px; font-size: 11px; color: var(--text-2); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .cc-pills { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+  .cc-pill { padding: 5px 10px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text-2); border-radius: 6px; cursor: pointer; font-size: 11.5px; font-weight: 500; transition: all 0.15s; font-family: var(--font-sans); }
+  .cc-pill:hover { color: var(--text); border-color: var(--border-light); background: var(--panel-3); }
+  .cc-pill.active { background: var(--accent); border-color: var(--accent); color: #1a1a1a; font-weight: 700; }
+  .cc-pill.root { font-family: var(--font-mono); min-width: 36px; text-align: center; }
+  .cc-result { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-top: 14px; text-align: center; }
+  .cc-result-name { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); font-family: var(--font-sans); margin-bottom: 4px; }
+  .cc-result-notes { font-size: 13px; color: var(--accent); font-family: var(--font-mono); font-weight: 600; }
+  .cc-actions { display: flex; gap: 8px; margin-top: 12px; }
+  code { font-family: var(--font-mono); background: var(--panel-3); padding: 1px 5px; border-radius: 3px; font-size: 11px; color: var(--accent); }
 
   /* Songwriter */
   .songwriter-toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -535,6 +551,7 @@
         <button id="header-playground-btn" class="header-action-btn" title="Switch to Playground (every chord in the key)"><i class="ph-duotone ph-piano-keys"></i> Playground</button>
         <button id="header-pathfinder-btn" class="header-action-btn" title="Open Path Finder · A → B"><i class="ph-duotone ph-arrows-merge"></i> Path Finder</button>
         <button id="header-melody-btn" class="header-action-btn" title="Open Melody Mode · note-by-note"><i class="ph-duotone ph-music-note"></i> Melody Mode</button>
+        <button id="header-customchord-btn" class="header-action-btn" title="Build a custom chord (e.g. Cm7add9add11)"><i class="ph-duotone ph-pencil-line"></i> Custom Chord</button>
         <button id="header-songwriter-btn" class="header-action-btn" title="Open Songwriter shutter"><i class="ph-duotone ph-note-pencil"></i> Songwriter</button>
         <button id="header-sidebar-btn" class="header-action-btn active" title="Toggle reference sidebar (templates, chord detail, substitutions)"><i class="ph-duotone ph-sidebar-simple"></i> Sidebar</button>
       </div>
@@ -556,7 +573,7 @@
         <span id="builder-tempo-val" class="tempo-val">100</span>
       </div>
       <label class="builder-loop"><input type="checkbox" id="builder-loop"> Loop</label>
-      <button id="metronome-btn" class="metronome-btn"><i class="ph-duotone ph-metronome"></i><span id="metronome-label-text">Metronome</span><span class="metronome-pulse" id="metronome-pulse"></span></button>
+      <button id="metronome-btn" class="metronome-btn" title="Toggle metronome"><i class="ph-duotone ph-metronome"></i><span class="metronome-pulse" id="metronome-pulse"></span></button>
     </div>
     <div class="control-group">
       <label>Genre</label>
@@ -643,7 +660,7 @@
       <button class="side-panel-close" data-panel="path-finder-panel" title="Close"><i class="ph-duotone ph-x"></i></button>
     </div>
     <div class="side-panel-body">
-      <div class="help-text" style="margin-top:0;margin-bottom:10px;">Pick a starting chord and a destination — get different ways to connect them with V7 setups, ii–V approaches, tritone subs, and more.</div>
+      <div class="help-text" style="margin-top:0;margin-bottom:10px;">Pick a starting chord and a destination — get different ways to connect them with V7 setups, ii–V approaches, tritone subs, and more. <strong style="color:var(--text);">Tip:</strong> drag any chord card from Playground or node from the graph onto the From/To slots below.</div>
       <div class="path-finder-controls">
         <select id="path-from"></select>
         <span class="arrow-text">→</span>
@@ -667,6 +684,32 @@
       </div>
       <div id="melody-steps"></div>
       <button class="melody-finalize" id="melody-finalize" disabled>+ Add picked chords to Builder</button>
+    </div>
+  </aside>
+
+  <aside id="custom-chord-panel" class="side-panel">
+    <div class="side-panel-header">
+      <h2><i class="ph-duotone ph-pencil-line"></i> Custom Chord <small>· build your own</small></h2>
+      <button class="side-panel-close" data-panel="custom-chord-panel" title="Close"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div class="side-panel-body">
+      <div class="help-text" style="margin-top:0;margin-bottom:12px;">Stack any combination of triad + 7th + extensions. Try minor + 7 + add9 + add11 for <code>Cm7add9add11</code>.</div>
+
+      <div class="cc-row"><label>Root</label><div class="cc-pills" id="cc-root"></div></div>
+      <div class="cc-row"><label>Triad</label><div class="cc-pills" id="cc-triad"></div></div>
+      <div class="cc-row"><label>7th</label><div class="cc-pills" id="cc-seventh"></div></div>
+      <div class="cc-row"><label>9th</label><div class="cc-pills" id="cc-ninth"></div></div>
+      <div class="cc-row"><label>11th</label><div class="cc-pills" id="cc-eleventh"></div></div>
+      <div class="cc-row"><label>13th</label><div class="cc-pills" id="cc-thirteenth"></div></div>
+
+      <div class="cc-result">
+        <div class="cc-result-name" id="cc-name">C</div>
+        <div class="cc-result-notes" id="cc-notes">C · E · G</div>
+      </div>
+      <div class="cc-actions">
+        <button class="play-btn" id="cc-play"><i class="ph-duotone ph-play sz-sm"></i> Play chord</button>
+        <button class="secondary-btn" id="cc-add-builder"><i class="ph-duotone ph-plus sz-sm"></i> Add to Builder</button>
+      </div>
     </div>
   </aside>
 </main>
@@ -1216,11 +1259,12 @@ async function playProgression(items, key, bpm, options={}) {
   // Real-time delay before the first chord plays (used to align setTimeouts with audio)
   const initialWaitMs = Math.max(0, (startTime - Tone.now()) * 1000);
 
-  // Resolve any item type to a chord object: string numeral, {numeral, rhythm} queue item, or chord object
+  // Resolve any item type to a chord object: string numeral, {numeral, rhythm}, {chord, rhythm} (custom), or raw chord
   const resolve = (item) => {
     if (typeof item === 'string') return romanToChord(item, key, state.mode);
     if (item && item.numeral) return romanToChord(item.numeral, key, state.mode);
-    if (item && item.root) return item; // already a concrete chord
+    if (item && item.chord) return item.chord;          // custom chord queue item
+    if (item && item.root) return item;                  // already a concrete chord (Path Finder etc.)
     return null;
   };
   // Extract rhythm from queue item (default 'whole' for plain numerals or chord objects)
@@ -1908,10 +1952,11 @@ const RHYTHMS = {
   'trip_16':  { label: 'trip 1/16 (.17)', beats: 1/6 },
 };
 
-// Convert a queue item to {numeral, rhythm} or {rest, rhythm} form
+// Convert a queue item to {numeral, rhythm} or {rest, rhythm} or {chord, rhythm} (custom)
 function normalizeQueueItem(item) {
   if (typeof item === 'string') return { numeral: item, rhythm: 'whole' };
   if (item && item.rest) return { rest: true, rhythm: item.rhythm || 'whole' };
+  if (item && item.chord) return { chord: item.chord, rhythm: item.rhythm || 'whole' };
   return { numeral: item.numeral, rhythm: item.rhythm || 'whole' };
 }
 function normalizeQueue() {
@@ -2094,6 +2139,14 @@ function renderGraph() {
       g.appendChild(sub);
     }
 
+    // Make graph nodes drag sources too — drop onto Path Finder From/To
+    g.setAttribute('draggable', 'true');
+    g.addEventListener('dragstart', (e) => {
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('text/plain', c.numeral);
+      }
+    });
     g.addEventListener('mouseenter', () => {
       // Focus mode on hover (skip if a chord is locked-selected)
       if (!state.selectedChord) focusEdgesForChord(c.numeral);
@@ -2275,7 +2328,7 @@ function renderBuilder() {
     if (builderState.queue.length === 0) {
       summary.textContent = 'Queue empty · click chords or use + on a template card to add';
     } else {
-      const preview = builderState.queue.slice(0, 10).map(i => i.rest ? '𝄽' : i.numeral).join(' → ');
+      const preview = builderState.queue.slice(0, 10).map(i => i.rest ? '𝄽' : (i.chord ? i.chord.name : i.numeral)).join(' → ');
       const more = builderState.queue.length > 10 ? '…' : '';
       summary.textContent = `${builderState.queue.length} chord${builderState.queue.length===1?'':'s'}: ${preview}${more}`;
     }
@@ -2294,16 +2347,19 @@ function renderBuilder() {
 
   builderState.queue.forEach((item, idx) => {
     const isRest = !!item.rest;
+    const isCustom = !!item.chord;
     const numeral = item.numeral;
     const rhythm = item.rhythm || 'whole';
-    const chord = isRest ? null : romanToChord(numeral, state.key);
+    const chord = isRest ? null : (isCustom ? item.chord : romanToChord(numeral, state.key));
     const chip = document.createElement('div');
     chip.className = 'builder-chip' + (isRest ? ' rest-chip' : '');
     chip.dataset.index = idx;
     chip.draggable = true;
     const labelHtml = isRest
       ? `<span>𝄽 rest</span>`
-      : `<span>${numeral} <small style="opacity:.7">(${chord ? chord.name : '?'})</small></span>`;
+      : isCustom
+        ? `<span>${item.chord.name} <small style="opacity:.7">(custom)</small></span>`
+        : `<span>${numeral} <small style="opacity:.7">(${chord ? chord.name : '?'})</small></span>`;
     chip.innerHTML = labelHtml +
       `<select class="chip-rhythm" title="How long this ${isRest ? 'rest' : 'chord'} lasts">${rhythmOptions}</select>` +
       `<button class="chip-x" title="Remove">×</button>`;
@@ -2315,7 +2371,7 @@ function renderBuilder() {
       builderState.queue[idx].rhythm = e.target.value;
       // Re-render summary so it stays accurate (chip in place to preserve focus)
       const sum = document.getElementById('drawer-summary');
-      if (sum) sum.textContent = `${builderState.queue.length} chord${builderState.queue.length===1?'':'s'}: ${builderState.queue.slice(0,10).map(i => i.rest ? '𝄽' : i.numeral).join(' → ')}${builderState.queue.length>10?'…':''}`;
+      if (sum) sum.textContent = `${builderState.queue.length} chord${builderState.queue.length===1?'':'s'}: ${builderState.queue.slice(0,10).map(i => i.rest ? '𝄽' : (i.chord ? i.chord.name : i.numeral)).join(' → ')}${builderState.queue.length>10?'…':''}`;
     });
     // Prevent drag start when interacting with the rhythm select
     chip.querySelector('.chip-rhythm').addEventListener('mousedown', (e) => e.stopPropagation());
@@ -2437,6 +2493,8 @@ document.getElementById('builder-clear').onclick = () => {
   builderState.queue = [];
   renderBuilder();
   renderGraph();
+  // Also re-render Playground so the in-builder ✓ badges/cyan tints clear from cards
+  if (state.genre.isPlayground) renderPlayground();
 };
 document.getElementById('builder-add-rest').onclick = () => {
   builderState.queue.push({ rest: true, rhythm: 'whole' });
@@ -2905,6 +2963,33 @@ function setupPathFinder() {
   const toDefault = state.mode === 'minor' ? 'iv' : 'IV';
   fromSel.value = numerals.includes(prevFrom) ? prevFrom : fromDefault;
   toSel.value = numerals.includes(prevTo) ? prevTo : toDefault;
+  // Make the dropdowns drop targets — drag a chord card or graph node here
+  [fromSel, toSel].forEach(sel => {
+    sel.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      sel.classList.add('drop-target');
+    });
+    sel.addEventListener('dragleave', () => sel.classList.remove('drop-target'));
+    sel.addEventListener('drop', (e) => {
+      e.preventDefault();
+      sel.classList.remove('drop-target');
+      const droppedNumeral = e.dataTransfer.getData('text/plain');
+      if (!droppedNumeral) return;
+      // Add as new option if not already present (so dropped chords from outside the static list still work)
+      const exists = Array.from(sel.options).some(opt => opt.value === droppedNumeral);
+      if (!exists) {
+        const c = romanToChord(droppedNumeral, state.key, state.mode);
+        if (!c) return;
+        const opt = document.createElement('option');
+        opt.value = droppedNumeral;
+        opt.textContent = `${droppedNumeral} (${c.name})`;
+        sel.appendChild(opt);
+      }
+      sel.value = droppedNumeral;
+      sel.dispatchEvent(new Event('change'));
+    });
+  });
   document.getElementById('path-find-btn').onclick = renderPathList;
   fromSel.onchange = renderPathList;
   toSel.onchange = renderPathList;
@@ -3085,9 +3170,7 @@ function updateMetronomeButton() {
   const btn = document.getElementById('metronome-btn');
   if (!btn) return;
   btn.classList.toggle('active', metronomeState.active);
-  // Update only the inner label span, keep the icon + pulse intact
-  const labelEl = btn.querySelector('#metronome-label-text');
-  if (labelEl) labelEl.textContent = metronomeState.active ? 'Stop' : 'Metronome';
+  btn.title = metronomeState.active ? 'Stop metronome' : 'Start metronome';
 }
 
 async function toggleMetronome() {
@@ -3114,6 +3197,116 @@ function setupCollapsibles() {
   });
 }
 
+// === Custom Chord Builder (side panel) ===
+const TRIAD_INTERVALS = {
+  maj: [0, 4, 7],
+  min: [0, 3, 7],
+  dim: [0, 3, 6],
+  aug: [0, 4, 8],
+  sus2: [0, 2, 7],
+  sus4: [0, 5, 7],
+};
+const SEVENTH_INTERVAL = { 'none': null, 'dom7': 10, 'maj7': 11 };
+const NINTH_INTERVAL = { 'none': null, '9': 14, 'b9': 13, '#9': 15 };
+const ELEVENTH_INTERVAL = { 'none': null, '11': 17, '#11': 18 };
+const THIRTEENTH_INTERVAL = { 'none': null, '13': 21, 'b13': 20 };
+
+const customChordState = {
+  root: 'C',
+  triad: 'maj',
+  seventh: 'none',
+  ninth: 'none',
+  eleventh: 'none',
+  thirteenth: 'none',
+};
+
+const CC_OPTIONS = {
+  root: ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'],
+  triad: [['maj','major'],['min','minor'],['dim','dim'],['aug','aug'],['sus2','sus2'],['sus4','sus4']],
+  seventh: [['none','none'],['dom7','7'],['maj7','maj7']],
+  ninth: [['none','none'],['9','9'],['b9','♭9'],['#9','♯9']],
+  eleventh: [['none','none'],['11','11'],['#11','♯11']],
+  thirteenth: [['none','none'],['13','13'],['b13','♭13']],
+};
+
+function buildCustomChord() {
+  const s = customChordState;
+  const intervals = [...TRIAD_INTERVALS[s.triad]];
+  const add = (v) => { if (v != null) intervals.push(v); };
+  add(SEVENTH_INTERVAL[s.seventh]);
+  add(NINTH_INTERVAL[s.ninth]);
+  add(ELEVENTH_INTERVAL[s.eleventh]);
+  add(THIRTEENTH_INTERVAL[s.thirteenth]);
+  const root = s.root;
+  const rootIdx = noteIndex(root);
+  const useFlats = root.includes('b') || ['F','Bb','Eb','Ab','Db','Gb'].includes(root);
+  const notes = intervals.map(iv => indexToNote((rootIdx + iv) % 12, useFlats));
+  // Build a readable chord name (Cm7add9add11 style)
+  let name = root;
+  if (s.triad === 'min') name += 'm';
+  else if (s.triad === 'dim') name += '°';
+  else if (s.triad === 'aug') name += '+';
+  else if (s.triad === 'sus2') name += 'sus2';
+  else if (s.triad === 'sus4') name += 'sus4';
+  if (s.seventh === 'dom7') name += '7';
+  else if (s.seventh === 'maj7') name += 'maj7';
+  if (s.ninth !== 'none') name += 'add' + (s.ninth === '9' ? '9' : s.ninth === 'b9' ? '♭9' : '♯9');
+  if (s.eleventh !== 'none') name += 'add' + (s.eleventh === '11' ? '11' : '♯11');
+  if (s.thirteenth !== 'none') name += 'add' + (s.thirteenth === '13' ? '13' : '♭13');
+  return {
+    root, name, notes,
+    quality: 'custom',
+    type: { intervals, label: name.replace(root, ''), name: 'custom' }
+  };
+}
+
+function renderCustomChordResult() {
+  const chord = buildCustomChord();
+  const nameEl = document.getElementById('cc-name');
+  const notesEl = document.getElementById('cc-notes');
+  if (nameEl) nameEl.textContent = chord.name;
+  if (notesEl) notesEl.textContent = chord.notes.join(' · ');
+}
+
+function renderCustomChordPills() {
+  const groups = [
+    ['cc-root', 'root', CC_OPTIONS.root.map(r => [r, r])],
+    ['cc-triad', 'triad', CC_OPTIONS.triad],
+    ['cc-seventh', 'seventh', CC_OPTIONS.seventh],
+    ['cc-ninth', 'ninth', CC_OPTIONS.ninth],
+    ['cc-eleventh', 'eleventh', CC_OPTIONS.eleventh],
+    ['cc-thirteenth', 'thirteenth', CC_OPTIONS.thirteenth],
+  ];
+  groups.forEach(([containerId, stateKey, opts]) => {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    opts.forEach(([value, label]) => {
+      const btn = document.createElement('button');
+      btn.className = 'cc-pill' + (containerId === 'cc-root' ? ' root' : '') + (customChordState[stateKey] === value ? ' active' : '');
+      btn.textContent = label;
+      btn.onclick = () => {
+        customChordState[stateKey] = value;
+        renderCustomChordPills();
+        renderCustomChordResult();
+      };
+      container.appendChild(btn);
+    });
+  });
+}
+
+function setupCustomChordPanel() {
+  renderCustomChordPills();
+  renderCustomChordResult();
+  const playBtn = document.getElementById('cc-play');
+  const addBtn = document.getElementById('cc-add-builder');
+  if (playBtn) playBtn.onclick = () => playChord(buildCustomChord());
+  if (addBtn) addBtn.onclick = () => {
+    builderState.queue.push({ chord: buildCustomChord(), rhythm: 'whole' });
+    renderBuilder();
+  };
+}
+
 // === Header tool buttons & side panels (Path Finder, Melody Mode) ===
 function setupHeaderButtons() {
   // Playground button — switches the "current view" to playground (it's no longer a genre pill)
@@ -3136,6 +3329,7 @@ function setupHeaderButtons() {
   // Side panels (inline now — toggle classes only, no backdrop)
   setupSidePanelToggle('header-pathfinder-btn', 'path-finder-panel');
   setupSidePanelToggle('header-melody-btn', 'melody-mode-panel');
+  setupSidePanelToggle('header-customchord-btn', 'custom-chord-panel');
   // Reference sidebar toggle
   const sidebarBtn = document.getElementById('header-sidebar-btn');
   const sidebar = document.getElementById('info-sidebar');
@@ -3180,6 +3374,7 @@ function closeSidePanel(panelId) {
 const PANEL_TO_BTN = {
   'path-finder-panel': 'header-pathfinder-btn',
   'melody-mode-panel': 'header-melody-btn',
+  'custom-chord-panel': 'header-customchord-btn',
 };
 
 function syncBodyPanelState() {
@@ -3228,10 +3423,11 @@ function getDefaultSectionName() {
   return n < order.length ? order[n] : `Section ${n + 1}`;
 }
 
-// Extract a numeral string from a queue item (handles legacy strings, {numeral, rhythm} objects, and rests)
+// Extract a display label from a queue item (handles strings, {numeral, rhythm}, rests, and {chord} customs)
 function itemNumeral(item) {
   if (typeof item === 'string') return item;
   if (item && item.rest) return '𝄽';
+  if (item && item.chord) return item.chord.name;
   return (item && item.numeral) || '';
 }
 
@@ -3585,6 +3781,16 @@ function renderPlayground() {
       const card = document.createElement('button');
       card.className = 'chord-card';
       card.dataset.numeral = numeral;
+      // Make the card a drag source — drop it onto Path Finder's From/To
+      card.draggable = true;
+      card.addEventListener('dragstart', (e) => {
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.setData('text/plain', numeral);
+        }
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => card.classList.remove('dragging'));
       const _qNums = builderState.queue.map(it => typeof it === 'string' ? it : it.numeral);
       if (_qNums.includes(numeral)) card.classList.add('in-builder');
       if (state.selectedChord === numeral) card.classList.add('selected');
@@ -3623,6 +3829,7 @@ setupDrawer();
 setupMelodyMode();
 setupSongwriter();
 setupMetronome();
+setupCustomChordPanel();
 setupCollapsibles();
 setupHeaderButtons();
 bindModeButtons();

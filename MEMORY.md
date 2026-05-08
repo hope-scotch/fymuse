@@ -105,9 +105,10 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
 - Backdrop dimmer behind it, ESC / X / backdrop click closes
 
 ### Path Finder (right-side overlay panel)
-- Toggled from the header button (mutually exclusive with Melody Mode)
+- Toggled from the header button (mutually exclusive with Melody Mode and Custom Chord)
 - 460px fixed-position overlay sliding from the right
-- Pick chord A and chord B from dropdowns
+- Pick chord A and chord B from dropdowns — **OR drag any chord card / graph node onto the From/To dropdown** (drop target highlights orange when hovering with a drag)
+- If the dragged chord's numeral isn't in the static dropdown list, it's added as a new option on the fly via `romanToChord` lookup
 - Returns 6 path templates between them:
   1. **Direct** — A → B
   2. **V7 setup** — A → V7-of-B → B
@@ -119,7 +120,7 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
 - Adding to Builder converts each concrete chord back to a Roman numeral relative to the current key+mode (via `findRomanForChord`) so the queue retransposes if you change keys
 
 ### Melody Mode (right-side overlay panel)
-- Toggled from the header button (mutually exclusive with Path Finder)
+- Toggled from the header button (mutually exclusive with Path Finder and Custom Chord)
 - 460px fixed-position overlay sliding from the right
 - Type space-separated melody notes (e.g. `C D A B`)
 - For each note, get up to 7 chord candidates ranked by:
@@ -127,6 +128,16 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
   - **Voice leading** (shared notes with the previously picked chord)
   - **Chord type** (triads/7ths preferred over diminished)
 - Pick chords sequentially; finalize pushes them all to the Builder
+
+### Custom Chord (right-side overlay panel)
+- Toggled from the header button (mutually exclusive with Path Finder and Melody Mode)
+- 460px fixed-position overlay sliding from the right
+- Stack any combination of triad + 7th + 9th + 11th + 13th to build a chord like `Cm7add9add11`
+- Pill-button rows for: Root (12 notes), Triad (maj/min/dim/aug/sus2/sus4), 7th (none/dom7/maj7), 9th (none/9/♭9/♯9), 11th (none/11/♯11), 13th (none/13/♭13)
+- Live result panel shows the built chord name and the actual notes
+- **Play chord** auditions it through the current instrument
+- **+ Add to Builder** pushes it into the Builder queue as a concrete chord (`{chord, rhythm}` queue item — stays absolute, doesn't retranspose with key changes; that's intentional for hand-built chords)
+- Implementation uses `TRIAD_INTERVALS`, `SEVENTH_INTERVAL`, `NINTH_INTERVAL`, `ELEVENTH_INTERVAL`, `THIRTEENTH_INTERVAL` lookup tables plus `customChordState` and `buildCustomChord()`
 
 ### Info Sidebar (right-side inline column, toggleable)
 - Toggled from the "Sidebar" header button (visible by default)
@@ -211,11 +222,19 @@ MINOR_INTERVALS = [0,2,3,5,7,8,10]   // natural minor
 - Helper: `syncBodyPanelState()` reads any `.side-panel.open` and toggles the body class accordingly. Called from open/close/toggle paths.
 
 ### `builderState`
-- `queue`: array of `{ numeral: string, rhythm: string }` or `{ rest: true, rhythm: string }`
+- `queue`: array of `{ numeral, rhythm }` (Roman numeral) | `{ rest: true, rhythm }` (silent gap) | `{ chord, rhythm }` (custom absolute chord, e.g. from Custom Chord panel)
 - `bpm`: number (50..200)
 - `loop`: boolean
 - `playing`: boolean (set during active playback)
 - `clickMode`: legacy field (always 'inspect' now — mode toggle was removed)
+
+### `customChordState`
+- `root`: 'C' | 'C#' | … | 'B'
+- `triad`: 'maj' | 'min' | 'dim' | 'aug' | 'sus2' | 'sus4'
+- `seventh`: 'none' | 'dom7' | 'maj7'
+- `ninth`: 'none' | '9' | 'b9' | '#9'
+- `eleventh`: 'none' | '11' | '#11'
+- `thirteenth`: 'none' | '13' | 'b13'
 
 ### `songState`
 - `sections`: array of `{ id, name, chords: [...same as builder queue], lyrics: string }`
@@ -237,7 +256,7 @@ MINOR_INTERVALS = [0,2,3,5,7,8,10]   // natural minor
 ## Audio architecture
 
 `playProgression(items, key, bpm, options)` is the central audio function.
-- `items` accepts: array of Roman numeral strings, queue items `{numeral, rhythm}` or `{rest, rhythm}`, concrete chord objects (from Path Finder), or any mix
+- `items` accepts: array of Roman numeral strings, queue items `{numeral, rhythm}` / `{rest, rhythm}` / `{chord, rhythm}` (custom), concrete chord objects (from Path Finder), or any mix
 - Resolves each via `resolve(item)` to a chord object
 - Schedules audio with `Tone.now() + offset` for sample-accurate timing (cumulative `loopOffset`)
 - Schedules highlight callbacks via `setTimeout` (real time, NOT cumulative — each iteration's setTimeout is from its call time)
@@ -275,19 +294,25 @@ A chord's audio scheduling: `dur = rhythm.beats * beatSec`, plays once at `start
 
 ```
 renderAll();
-setupDrawer();        // bottom drawer toggle/expand/fullscreen
-setupMelodyMode();    // generate-button + finalize-button handlers
-setupSongwriter();    // shutter open/close + section action wiring
-setupMetronome();     // metronome button click handler
-setupCollapsibles();  // any .collapsible-section (currently unused after refactor)
-setupHeaderButtons(); // playground button + side panel toggles + ESC handler
-bindModeButtons();    // legacy no-op
+setupDrawer();             // bottom drawer toggle/expand/fullscreen
+setupMelodyMode();         // generate-button + finalize-button handlers
+setupSongwriter();         // shutter open/close + section action wiring
+setupMetronome();          // metronome button click handler
+setupCustomChordPanel();   // pill rendering + play/add handlers for Custom Chord panel
+setupCollapsibles();       // any .collapsible-section (currently unused after refactor)
+setupHeaderButtons();      // playground button + side panel toggles + ESC handler
+bindModeButtons();         // legacy no-op
 ```
 
 ---
 
 ## Recent change history (newest first)
 
+- **Drag-and-drop chords onto Path Finder**. Playground chord cards and graph chord nodes (SVG `<g>`) are now `draggable="true"`. Drop on `#path-from` or `#path-to` to set From/To. Drop target highlights with `.drop-target` class (orange border + glow). If the dropped numeral isn't already in the dropdown options, it's appended on the fly. Both selects listen for `dragover` / `dragleave` / `drop`.
+- **Custom Chord side panel** (header tool button + 460px right overlay). Pill-button rows for Root / Triad / 7th / 9th / 11th / 13th compose chords like `Cm7add9add11`. Live preview of name + notes. Play and Add-to-Builder. Mutually exclusive with Path Finder and Melody Mode.
+- **New queue item type**: `{chord, rhythm}` for custom absolute chords. `playProgression`'s `resolve` returns `item.chord` directly. Builder chips show `(custom)` suffix to distinguish from Roman numeral entries.
+- **Builder Clear now also re-renders Playground** so chord cards' in-builder ✓ badges and cyan tints clear too.
+- **Metronome button is icon-only** — removed the "Metronome" / "Stop" text label. Tooltip + active class indicate state.
 - **Project moved to `~/fymuse/`** with main file renamed to `index.html` (was `chord_progression_finder.html`). Page title: "FYMuse — Chord Progression Finder". Header brand: "FY" (white) + "Muse" (orange) with subtle "· chord progression finder" subtitle.
 - **Layout precedence rules**: side panels take width preference; main panel never shrinks because of side panels (they overlay); builder drawer's right edge shifts to `right: 460px` when any side panel is open via `body.side-panel-open` CSS class managed by `syncBodyPanelState()`. Smooth 0.32s cubic-bezier transition.
 - **Side panels reverted to fixed-position overlays** (briefly experimented with inline flex columns but the user wanted main untouched). Mutually exclusive — opening one closes the other via `closeAllSidePanels()` then `openSidePanel()`.
