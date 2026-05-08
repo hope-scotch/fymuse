@@ -6,7 +6,7 @@
 <title>FYMuse — Chord Progression Finder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
 <style>
   :root {
@@ -50,8 +50,21 @@
     background: linear-gradient(180deg, #14141d 0%, #0b0b12 100%);
   }
   .header-row { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
-  .header-row.top h1 { flex: 1; min-width: 200px; font-size: 18px; margin: 0; font-weight: 700; letter-spacing: -0.4px; display: flex; align-items: center; gap: 10px; }
+  .header-row.top h1 { flex: 1; min-width: 200px; font-size: 18px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 10px; }
   .header-row.top h1 i { color: var(--accent); font-size: 22px; }
+  .brand-mark {
+    font-family: 'Space Grotesk', var(--font-sans);
+    font-weight: 700;
+    font-size: 24px;
+    letter-spacing: -1.2px;
+    color: var(--text);
+    background: linear-gradient(135deg, #ffffff 0%, #ebebf2 50%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    padding-right: 2px;
+  }
   .header-row.middle { gap: 12px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.04); }
   .header-row.middle .control-group { flex: 0 0 auto; min-width: 0; }
   .header-row.middle .pill-group { flex: 1; min-width: 0; }
@@ -546,9 +559,16 @@
 
   /* Listener — full main view (mirrors Playground) */
   body.view-listener #info-sidebar { display: none; }
+  body.view-listener.has-chord-detail #info-sidebar { display: flex; }
+  body.view-listener.has-chord-detail #info-sidebar > .section:not(#chord-detail-panel) { display: none; }
   body.view-listener main > #graph-panel { flex: 1 1 100%; }
+  body.view-listener.has-chord-detail main > #graph-panel { flex: 1 1 700px; min-width: 0; }
+  body.view-listener .ls-card { cursor: pointer; }
+  body.view-listener .ls-card.is-active-detail { border-color: var(--accent); background: var(--panel); box-shadow: 0 0 0 2px var(--accent-soft); }
+  body.view-listener .listener-detected { cursor: pointer; }
+  body.view-listener .listener-detected.is-active-detail { box-shadow: 0 0 0 2px var(--accent), 0 4px 16px rgba(0,0,0,0.25); }
   #listener-view { display: flex; flex-direction: column; gap: 14px; }
-  .listener-view-header { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .listener-view-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
   .listener-view-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
   .listener-view-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.4px; display: flex; align-items: center; gap: 10px; color: var(--text); }
   .listener-view-title i { color: var(--accent-2); font-size: 26px; }
@@ -589,11 +609,11 @@
   .listener-detected-actions .secondary-btn:hover { border-color: var(--accent); color: var(--accent); }
 
   .listener-alternates { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-  .listener-alt-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-family: var(--font-mono); color: var(--muted); }
-  .listener-alt-name { width: 64px; color: var(--text-2); }
-  .listener-alt-bar { flex: 1; height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
-  .listener-alt-bar-fill { height: 100%; background: var(--accent-2); opacity: 0.6; }
-  .listener-alt-pct { width: 38px; text-align: right; font-size: 10.5px; }
+  .listener-alt-row { display: flex; align-items: center; gap: 10px; font-size: 11.5px; font-family: var(--font-mono); color: var(--muted); padding: 2px 0; }
+  .listener-alt-name { width: 70px; color: var(--text-2); font-weight: 600; }
+  .listener-alt-bar { flex: 1; height: 8px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; min-width: 40px; }
+  .listener-alt-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.18s ease-out; }
+  .listener-alt-pct { width: 42px; text-align: right; font-size: 11px; color: var(--text-2); font-weight: 500; }
 
   .listener-suggestions { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
   .listener-suggestions .lyrics-empty { grid-column: 1 / -1; padding: 20px; text-align: center; background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; }
@@ -624,7 +644,7 @@
 <body>
 <header>
   <div class="header-row top">
-    <h1><i class="ph-duotone ph-music-notes"></i> <span class="accent">FY</span>Muse <small style="font-weight:400;color:var(--muted);font-size:13px;letter-spacing:0;margin-left:4px;">· chord progression finder</small></h1>
+    <h1><i class="ph-duotone ph-music-notes"></i> <span class="brand-mark">FYmuse</span> <small style="font-weight:400;color:var(--muted);font-size:13px;letter-spacing:0;margin-left:6px;font-family:var(--font-sans);">· chord progression finder</small></h1>
     <div class="controls-right">
       <div class="header-tools">
         <button id="header-playground-btn" class="header-action-btn" title="Switch to Playground (every chord in the key)"><i class="ph-duotone ph-piano-keys"></i> Playground</button>
@@ -3755,6 +3775,10 @@ function renderAll() {
   if (typeof listenerState !== 'undefined' && listenerState.active && !(state.genre && state.genre.isListener)) {
     listenerStop();
   }
+  // Clear listener chord-detail state when leaving listener view
+  if (!(state.genre && state.genre.isListener) && document.body.classList.contains('has-chord-detail')) {
+    document.body.classList.remove('has-chord-detail');
+  }
   // Toggle body class so CSS can hide info-sidebar etc. while in listener view
   document.body.classList.toggle('view-listener', !!(state.genre && state.genre.isListener));
   renderGenrePicker();
@@ -4433,6 +4457,41 @@ function renderListenerChroma(chroma) {
   }
 }
 
+// Open or toggle the info-sidebar's chord-detail panel for an absolute chord object.
+// If the chord can't be analyzed in the current key (no Roman numeral), we still try
+// to derive one for any enharmonic spelling. Click the same card again to close.
+function openListenerChordDetail(chord) {
+  if (!chord) return;
+  const numeral = findRomanForChord(chord, state.key, state.mode);
+  if (!numeral) {
+    // Non-diatonic — flash a small note in the sub-text instead of opening detail
+    const sub = document.getElementById('listener-detected-sub');
+    if (sub) {
+      const orig = sub.innerHTML;
+      sub.innerHTML = '<span style="color:var(--accent-2);">' + chord.name + ' isn\'t diatonic in ' + state.key + (state.mode === 'minor' ? 'm' : '') + ' — change the Key to see voicings.</span>';
+      setTimeout(() => { if (sub.innerHTML.includes('isn\'t diatonic')) sub.innerHTML = orig; }, 2200);
+    }
+    return;
+  }
+  if (state.selectedChord === numeral && document.body.classList.contains('has-chord-detail')) {
+    // toggle off
+    state.selectedChord = null;
+    document.body.classList.remove('has-chord-detail');
+  } else {
+    state.selectedChord = numeral;
+    state.voicingIndex = 0;
+    document.body.classList.add('has-chord-detail');
+  }
+  renderChordDetail();
+  // Update active-card highlight
+  document.querySelectorAll('.ls-card.is-active-detail').forEach(el => el.classList.remove('is-active-detail'));
+  const wrap = document.getElementById('listener-detected');
+  if (wrap) wrap.classList.toggle('is-active-detail', !!state.selectedChord && listenerState.lastShown && listenerState.lastShown.chord && findRomanForChord(listenerState.lastShown.chord, state.key, state.mode) === state.selectedChord);
+  document.querySelectorAll('.ls-card[data-numeral]').forEach(el => {
+    if (el.dataset.numeral === state.selectedChord) el.classList.add('is-active-detail');
+  });
+}
+
 function renderListenerDetected(chord, topResults) {
   const nameEl = document.getElementById('listener-detected-name');
   const subEl = document.getElementById('listener-detected-sub');
@@ -4468,8 +4527,14 @@ function renderListenerDetected(chord, topResults) {
     ' <span style="color:var(--muted);">· ' + conf + '% match' + invLabel + '</span>';
   actionsEl.style.display = 'flex';
   wrap.classList.add('is-stable');
+  // Card body click → open chord detail (don't fire on action button clicks)
+  wrap.onclick = (e) => {
+    if (e.target.closest('.listener-detected-actions')) return;
+    openListenerChordDetail(chord);
+  };
   // Wire up action buttons
-  document.getElementById('listener-detected-play').onclick = async () => {
+  document.getElementById('listener-detected-play').onclick = async (e) => {
+    e.stopPropagation();
     if (!instrumentInstance) await setInstrument(currentInstrument);
     playProgression([chord], state.key, builderState.bpm || 100, {});
   };
@@ -4634,7 +4699,12 @@ function renderListenerSuggestions(detected) {
   }
   wrap.innerHTML = suggestions.map((s, idx) => {
     const notes = (s.chord.notes || []).join(' · ');
-    return '<div class="ls-card" data-idx="' + idx + '">' +
+    // Resolve a clean numeral for chord-detail lookup. Synthetic 'V7/X' forms are
+    // looked up via the actual chord; otherwise use the suggestion numeral directly.
+    const detailNumeral = (typeof s.numeral === 'string' && !s.numeral.includes('/')) ? s.numeral : (findRomanForChord(s.chord, state.key, state.mode) || '');
+    const dnAttr = detailNumeral ? ' data-numeral="' + detailNumeral + '"' : '';
+    const activeCls = (state.selectedChord && detailNumeral === state.selectedChord) ? ' is-active-detail' : '';
+    return '<div class="ls-card' + activeCls + '" data-idx="' + idx + '"' + dnAttr + '>' +
       '<div class="ls-card-flow">' +
         '<span class="ls-card-from">' + detected.name + '</span>' +
         '<span class="ls-card-arrow">→</span>' +
@@ -4654,15 +4724,23 @@ function renderListenerSuggestions(detected) {
   wrap.querySelectorAll('.ls-card').forEach(card => {
     const idx = parseInt(card.dataset.idx, 10);
     const s = suggestions[idx];
-    card.querySelector('[data-action="play"]').onclick = async () => {
+    // Card body click → open chord-detail panel (don't fire on action buttons)
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.ls-card-actions')) return;
+      openListenerChordDetail(s.chord);
+    });
+    card.querySelector('[data-action="play"]').onclick = async (e) => {
+      e.stopPropagation();
       if (!instrumentInstance) await setInstrument(currentInstrument);
       playProgression([s.chord], state.key, builderState.bpm || 100, {});
     };
-    card.querySelector('[data-action="follow"]').onclick = async () => {
+    card.querySelector('[data-action="follow"]').onclick = async (e) => {
+      e.stopPropagation();
       if (!instrumentInstance) await setInstrument(currentInstrument);
       playProgression([detected, s.chord], state.key, builderState.bpm || 100, {});
     };
-    card.querySelector('[data-action="add"]').onclick = () => {
+    card.querySelector('[data-action="add"]').onclick = (e) => {
+      e.stopPropagation();
       // Add detected chord (if not last in queue) + suggested
       const lastItem = builderState.queue[builderState.queue.length - 1];
       const lastName = lastItem && lastItem.chord ? lastItem.chord.name :
