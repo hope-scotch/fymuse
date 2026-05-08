@@ -168,8 +168,11 @@
   body.add-mode #graph-svg { cursor: copy; }
 
   /* Chord detail */
-  #chord-detail-panel { display: none; }
+  #chord-detail-panel { display: none; position: relative; }
   #chord-detail-panel.active { display: block; }
+  .cd-close { display: none; position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; padding: 0; background: var(--panel); border: 1px solid var(--border); color: var(--muted); border-radius: 5px; cursor: pointer; align-items: center; justify-content: center; transition: all 0.15s; z-index: 2; }
+  .cd-close:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  body.view-listener .cd-close { display: inline-flex; }
   .chord-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
   .chord-name { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
   .chord-roman { font-family: var(--font-mono); color: var(--accent); font-size: 16px; font-weight: 700; }
@@ -616,8 +619,8 @@
   .listener-alternates { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
   .listener-alt-row { display: flex; align-items: center; gap: 10px; font-size: 11.5px; font-family: var(--font-mono); color: var(--muted); padding: 2px 0; }
   .listener-alt-name { width: 70px; color: var(--text-2); font-weight: 600; }
-  .listener-alt-bar { flex: 1; height: 8px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; min-width: 40px; }
-  .listener-alt-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.18s ease-out; }
+  .listener-alt-bar { flex: 1; display: block; height: 8px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; min-width: 40px; position: relative; }
+  .listener-alt-bar-fill { display: block; height: 100%; min-width: 2px; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.18s ease-out; }
   .listener-alt-pct { width: 42px; text-align: right; font-size: 11px; color: var(--text-2); font-weight: 500; }
 
   .listener-suggestions { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
@@ -724,6 +727,7 @@
     </div>
 
     <div class="section" id="chord-detail-panel">
+      <button class="cd-close" id="cd-close" title="Close detail" aria-label="Close detail"><i class="ph-duotone ph-x sz-sm"></i></button>
       <div class="chord-header">
         <div>
           <div class="chord-name" id="cd-name">—</div>
@@ -4466,14 +4470,13 @@ function renderListenerChroma(chroma) {
   }
 }
 
-// Open or toggle the info-sidebar's chord-detail panel for an absolute chord object.
-// If the chord can't be analyzed in the current key (no Roman numeral), we still try
-// to derive one for any enharmonic spelling. Click the same card again to close.
+// Open or toggle the chord-detail panel for an absolute chord object. Clicking the
+// same card again closes it; clicking a different card swaps. Non-diatonic chords
+// show an inline tip instead of opening detail (the panel needs a Roman numeral).
 function openListenerChordDetail(chord) {
   if (!chord) return;
   const numeral = findRomanForChord(chord, state.key, state.mode);
   if (!numeral) {
-    // Non-diatonic — flash a small note in the sub-text instead of opening detail
     const sub = document.getElementById('listener-detected-sub');
     if (sub) {
       const orig = sub.innerHTML;
@@ -4482,23 +4485,40 @@ function openListenerChordDetail(chord) {
     }
     return;
   }
-  if (state.selectedChord === numeral && document.body.classList.contains('has-chord-detail')) {
-    // toggle off
-    state.selectedChord = null;
-    document.body.classList.remove('has-chord-detail');
-  } else {
-    state.selectedChord = numeral;
-    state.voicingIndex = 0;
-    document.body.classList.add('has-chord-detail');
+  // Toggle: same chord clicked while panel open → close
+  const isOpen = document.body.classList.contains('has-chord-detail');
+  if (isOpen && state.selectedChord === numeral) {
+    closeListenerChordDetail();
+    return;
   }
+  state.selectedChord = numeral;
+  state.voicingIndex = 0;
+  document.body.classList.add('has-chord-detail');
   renderChordDetail();
-  // Update active-card highlight
+  syncListenerActiveCard();
+}
+
+function closeListenerChordDetail() {
+  state.selectedChord = null;
+  document.body.classList.remove('has-chord-detail');
+  renderChordDetail();
+  syncListenerActiveCard();
+}
+
+function syncListenerActiveCard() {
   document.querySelectorAll('.ls-card.is-active-detail').forEach(el => el.classList.remove('is-active-detail'));
   const wrap = document.getElementById('listener-detected');
-  if (wrap) wrap.classList.toggle('is-active-detail', !!state.selectedChord && listenerState.lastShown && listenerState.lastShown.chord && findRomanForChord(listenerState.lastShown.chord, state.key, state.mode) === state.selectedChord);
-  document.querySelectorAll('.ls-card[data-numeral]').forEach(el => {
-    if (el.dataset.numeral === state.selectedChord) el.classList.add('is-active-detail');
-  });
+  if (wrap) {
+    const detectedNum = listenerState.lastShown && listenerState.lastShown.chord
+      ? findRomanForChord(listenerState.lastShown.chord, state.key, state.mode)
+      : null;
+    wrap.classList.toggle('is-active-detail', !!state.selectedChord && detectedNum === state.selectedChord);
+  }
+  if (state.selectedChord) {
+    document.querySelectorAll('.ls-card[data-numeral]').forEach(el => {
+      if (el.dataset.numeral === state.selectedChord) el.classList.add('is-active-detail');
+    });
+  }
 }
 
 function renderListenerDetected(chord, topResults) {
@@ -4863,6 +4883,14 @@ function renderListener() {
 }
 
 function setupListener() {
+  // X close button on chord-detail-panel — only acts when in listener view
+  const cdClose = document.getElementById('cd-close');
+  if (cdClose) {
+    cdClose.onclick = (e) => {
+      e.stopPropagation();
+      if (state.genre && state.genre.isListener) closeListenerChordDetail();
+    };
+  }
   // Re-render suggestions when key changes while listener view is up
   const keyPicker = document.getElementById('key-picker');
   if (keyPicker) {
