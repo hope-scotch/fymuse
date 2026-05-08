@@ -544,6 +544,74 @@
   .lyrics-textarea:focus { border-color: var(--accent); outline: none; }
   .lyrics-help { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
 
+  /* Listener — full main view (mirrors Playground) */
+  body.view-listener #info-sidebar { display: none; }
+  body.view-listener main > #graph-panel { flex: 1 1 100%; }
+  #listener-view { display: flex; flex-direction: column; gap: 14px; }
+  .listener-view-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .listener-view-title { margin: 0 0 4px 0; font-size: 22px; font-weight: 700; letter-spacing: -0.4px; display: flex; align-items: center; gap: 10px; color: var(--text); }
+  .listener-view-title i { color: var(--accent-2); font-size: 26px; }
+  .listener-view-sub { font-size: 12.5px; color: var(--muted); max-width: 640px; line-height: 1.5; }
+  .listener-view-controls { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .listener-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 22px; align-items: start; }
+  @media (max-width: 1100px) { .listener-grid { grid-template-columns: 1fr; } }
+  .listener-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+  .listener-controls { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .listener-view-controls .primary,
+  .listener-controls .primary { padding: 9px 16px; background: var(--accent); color: #1a1a1a; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: filter 0.15s; font-size: 13px; }
+  .listener-view-controls .primary:hover,
+  .listener-controls .primary:hover { filter: brightness(1.1); }
+  .listener-view-controls .primary.is-listening,
+  .listener-controls .primary.is-listening { background: var(--accent-2); }
+  .listener-status { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); }
+  .listener-status.is-active { color: var(--accent-2); }
+  .listener-status.is-error { color: #ff6b6b; }
+
+  .listener-meter-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .listener-meter { flex: 1; height: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; position: relative; }
+  .listener-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.08s linear; }
+  .listener-meter-label { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); width: 56px; text-align: right; }
+
+  .listener-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .listener-section:first-of-type { border-top: none; padding-top: 0; }
+
+  .listener-detected { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 22px 24px; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.15s, box-shadow 0.15s; }
+  .listener-detected.is-stable { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .listener-detected-name { font-size: 56px; font-weight: 800; letter-spacing: -1.5px; color: var(--text); font-family: var(--font-mono); line-height: 1; }
+  .listener-detected-name.is-empty { color: var(--muted); font-size: 28px; font-weight: 500; letter-spacing: -0.5px; }
+  .listener-detected-sub { font-size: 11.5px; color: var(--muted); }
+  .listener-detected-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .listener-detected-actions button { padding: 6px 12px; font-size: 11.5px; border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .listener-detected-actions .play-btn { background: var(--accent); color: #1a1a1a; border: none; font-weight: 600; }
+  .listener-detected-actions .secondary-btn { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+  .listener-detected-actions .secondary-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .listener-alternates { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .listener-alt-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-family: var(--font-mono); color: var(--muted); }
+  .listener-alt-name { width: 64px; color: var(--text-2); }
+  .listener-alt-bar { flex: 1; height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+  .listener-alt-bar-fill { height: 100%; background: var(--accent-2); opacity: 0.6; }
+  .listener-alt-pct { width: 38px; text-align: right; font-size: 10.5px; }
+
+  .listener-suggestions { display: flex; flex-direction: column; gap: 6px; }
+  .listener-suggest-card { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; transition: border-color 0.12s, background 0.12s; }
+  .listener-suggest-card:hover { border-color: var(--accent); background: var(--panel); }
+  .listener-suggest-name { flex: 1; font-family: var(--font-mono); font-size: 13.5px; color: var(--text); font-weight: 600; }
+  .listener-suggest-roman { font-family: var(--font-mono); font-size: 10.5px; color: var(--accent-2); padding: 2px 6px; background: var(--bg); border-radius: 3px; }
+  .listener-suggest-reason { font-size: 10.5px; color: var(--muted); flex-basis: 100%; margin-top: 2px; }
+  .listener-suggest-card .ls-row { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+  .listener-suggest-actions { display: flex; gap: 4px; }
+  .listener-suggest-actions button { padding: 4px 8px; font-size: 11px; background: var(--panel); border: 1px solid var(--border); color: var(--text-2); border-radius: 4px; cursor: pointer; transition: all 0.12s; }
+  .listener-suggest-actions button:hover { color: var(--accent); border-color: var(--accent); }
+
+  .listener-chroma { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; height: 120px; align-items: end; }
+  .listener-chroma-bar { background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px 3px 0 0; position: relative; min-height: 4px; transition: height 0.08s linear, background 0.12s; }
+  .listener-chroma-bar.is-active { background: var(--accent); border-color: var(--accent); }
+  .listener-chroma-bar.is-secondary { background: var(--accent-2); border-color: var(--accent-2); opacity: 0.7; }
+  .listener-chroma-bar-label { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-family: var(--font-mono); font-size: 9.5px; color: var(--muted); }
+  .listener-chroma-wrap { padding-bottom: 24px; }
+
 </style>
 </head>
 <body>
@@ -556,6 +624,7 @@
         <button id="header-pathfinder-btn" class="header-action-btn" title="Open Path Finder · A → B"><i class="ph-duotone ph-arrows-merge"></i> Path Finder</button>
         <button id="header-melody-btn" class="header-action-btn" title="Open Melody Mode · note-by-note"><i class="ph-duotone ph-music-note"></i> Melody Mode</button>
         <button id="header-customchord-btn" class="header-action-btn" title="Build a custom chord (e.g. Cm7add9add11)"><i class="ph-duotone ph-pencil-line"></i> Custom Chord</button>
+        <button id="header-listener-btn" class="header-action-btn" title="Listen to audio · detect chord · suggest next"><i class="ph-duotone ph-microphone"></i> Listener</button>
         <button id="header-songwriter-btn" class="header-action-btn" title="Open Songwriter shutter (Shift+S)"><i class="ph-duotone ph-note-pencil"></i> Songwriter</button>
         <button id="header-sidebar-btn" class="header-action-btn active" title="Toggle reference sidebar (templates, chord detail, substitutions)"><i class="ph-duotone ph-sidebar-simple"></i> Sidebar</button>
       </div>
@@ -715,6 +784,7 @@
       </div>
     </div>
   </aside>
+
 </main>
 
 <!-- Top shutter: Songwriter (slides down from below the header) -->
@@ -1426,6 +1496,19 @@ const GENRES = {
     ]
   },
 
+  listener: {
+    name: 'Listener',
+    iconHtml: '<i class="ph-duotone ph-microphone sz-sm"></i>',
+    isListener: true,
+    bpm: 100,
+    moods: [],
+    chords: [],
+    transitions: [],
+    progressions: [],
+    substitutions: [],
+    categories: [],
+  },
+
   pop: {
     name: 'Pop',
     moods: ['uplifting','nostalgic','sad','energetic','dreamy'],
@@ -1974,7 +2057,7 @@ function renderGenrePicker() {
   const el = document.getElementById('genre-picker');
   el.innerHTML = '';
   Object.entries(GENRES).forEach(([key, g]) => {
-    if (key === 'playground') return; // Playground has its own dedicated header button now
+    if (key === 'playground' || key === 'listener') return; // Both have their own dedicated header buttons
     const btn = document.createElement('button');
     btn.className = 'pill' + (state.genreKey === key ? ' active' : '');
     btn.innerHTML = (g.iconHtml ? g.iconHtml + ' ' : '') + g.name;
@@ -2234,9 +2317,9 @@ function clearHighlights() {
 // RENDER: MOOD CHIPS
 //==================================================================
 function renderMoods() {
-  // Hide the mood section entirely in playground mode (it's genre-specific)
+  // Hide the mood section entirely in playground / listener mode (it's genre-specific)
   const section = document.getElementById('mood-section');
-  if (section) section.style.display = state.genre.isPlayground ? 'none' : '';
+  if (section) section.style.display = (state.genre.isPlayground || state.genre.isListener) ? 'none' : '';
   const el = document.getElementById('mood-chips');
   el.innerHTML = '';
   state.genre.moods.forEach(m => {
@@ -3334,6 +3417,24 @@ function setupHeaderButtons() {
   setupSidePanelToggle('header-pathfinder-btn', 'path-finder-panel');
   setupSidePanelToggle('header-melody-btn', 'melody-mode-panel');
   setupSidePanelToggle('header-customchord-btn', 'custom-chord-panel');
+  // Listener: full main view (mirrors Playground), not a side panel
+  const listenerBtn = document.getElementById('header-listener-btn');
+  if (listenerBtn) {
+    listenerBtn.onclick = () => {
+      state.genreKey = 'listener';
+      state.genre = GENRES.listener;
+      state.selectedMoods = new Set();
+      state.selectedChord = null;
+      state.voicingIndex = 0;
+      builderState.bpm = state.genre.bpm;
+      const tempoEl = document.getElementById('builder-tempo');
+      const tempoVal = document.getElementById('builder-tempo-val');
+      if (tempoEl) tempoEl.value = state.genre.bpm;
+      if (tempoVal) tempoVal.textContent = state.genre.bpm;
+      closeAllSidePanels();
+      renderAll();
+    };
+  }
   // Reference sidebar toggle
   const sidebarBtn = document.getElementById('header-sidebar-btn');
   const sidebar = document.getElementById('info-sidebar');
@@ -3411,6 +3512,8 @@ function closeAllSidePanels() {
 function syncHeaderButtonStates() {
   const playgroundBtn = document.getElementById('header-playground-btn');
   if (playgroundBtn) playgroundBtn.classList.toggle('active', state.genreKey === 'playground');
+  const listenerBtn = document.getElementById('header-listener-btn');
+  if (listenerBtn) listenerBtn.classList.toggle('active', state.genreKey === 'listener');
 }
 
 // === Songwriter ===
@@ -3641,12 +3744,21 @@ function setupSongwriter() {
 }
 
 function renderAll() {
+  // Stop the mic if we're navigating away from listener view
+  if (typeof listenerState !== 'undefined' && listenerState.active && !(state.genre && state.genre.isListener)) {
+    listenerStop();
+  }
+  // Toggle body class so CSS can hide info-sidebar etc. while in listener view
+  document.body.classList.toggle('view-listener', !!(state.genre && state.genre.isListener));
   renderGenrePicker();
   renderKeyPicker();
   renderInstrumentPicker();
   syncHeaderButtonStates();
   setupPathFinder();
-  if (state.genre.isPlayground) {
+  if (state.genre.isListener) {
+    showListenerView();
+    renderListener();
+  } else if (state.genre.isPlayground) {
     showPlaygroundView();
     renderPlayground();
   } else {
@@ -3660,9 +3772,9 @@ function renderAll() {
   renderSubstitutions();
 }
 
-// View toggle: hide all graph-panel children except playground-view (or vice versa).
-// (Path Finder + Melody Mode are now side panels — no children need to stay visible across both modes)
+// View toggle: hide all graph-panel children except the active view child (playground / listener / graph).
 const ALWAYS_VISIBLE_CHILDREN = new Set();
+const SUBVIEW_CHILDREN = new Set(['playground-view', 'listener-view']);
 function showPlaygroundView() {
   const panel = document.getElementById('graph-panel');
   let pv = document.getElementById('playground-view');
@@ -3676,11 +3788,25 @@ function showPlaygroundView() {
     child.style.display = child.id === 'playground-view' ? 'block' : 'none';
   });
 }
+function showListenerView() {
+  const panel = document.getElementById('graph-panel');
+  let lv = document.getElementById('listener-view');
+  if (!lv) {
+    lv = document.createElement('div');
+    lv.id = 'listener-view';
+    panel.insertBefore(lv, panel.firstChild);
+    buildListenerViewSkeleton(lv);
+  }
+  Array.from(panel.children).forEach(child => {
+    if (ALWAYS_VISIBLE_CHILDREN.has(child.id)) { child.style.display = ''; return; }
+    child.style.display = child.id === 'listener-view' ? 'block' : 'none';
+  });
+}
 function showGraphView() {
   const panel = document.getElementById('graph-panel');
   Array.from(panel.children).forEach(child => {
     if (ALWAYS_VISIBLE_CHILDREN.has(child.id)) { child.style.display = ''; return; }
-    if (child.id === 'playground-view') {
+    if (SUBVIEW_CHILDREN.has(child.id)) {
       child.style.display = 'none';
     } else {
       child.style.display = '';
@@ -3895,6 +4021,640 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+//==================================================================
+// LISTENER — real-time chord detection + next-chord suggestions
+//==================================================================
+const listenerState = {
+  active: false,
+  audioCtx: null,
+  micStream: null,
+  source: null,
+  fftAnalyser: null,
+  timeAnalyser: null,
+  fftBuffer: null,
+  timeBuffer: null,
+  rafId: null,
+  smoothChroma: new Float32Array(12),
+  history: [],            // rolling window of {root, quality, score} per frame
+  HISTORY_SIZE: 14,
+  lastStable: null,       // {root, quality, name, chord, score, since}
+  lastShown: null,        // chord shown in UI (debounced)
+  lastSuggestUpdate: 0,
+  lastBuilt: 0,
+};
+
+// Chord templates as 12-bin pitch-class vectors. Weights bias toward common shapes.
+const LISTENER_TEMPLATES = [
+  { quality: '',     intervals: [0,4,7],     weight: 1.00 }, // major
+  { quality: 'm',    intervals: [0,3,7],     weight: 1.00 }, // minor
+  { quality: '7',    intervals: [0,4,7,10],  weight: 0.96 },
+  { quality: 'maj7', intervals: [0,4,7,11],  weight: 0.94 },
+  { quality: 'm7',   intervals: [0,3,7,10],  weight: 0.94 },
+  { quality: 'sus4', intervals: [0,5,7],     weight: 0.82 },
+  { quality: 'sus2', intervals: [0,2,7],     weight: 0.78 },
+  { quality: 'dim',  intervals: [0,3,6],     weight: 0.78 },
+  { quality: 'aug',  intervals: [0,4,8],     weight: 0.70 },
+  { quality: 'm7b5', intervals: [0,3,6,10],  weight: 0.74 },
+];
+
+// Pre-build templates as Float32 vectors for cosine similarity
+const LISTENER_TEMPLATE_VECS = LISTENER_TEMPLATES.map(t => {
+  const v = new Float32Array(12);
+  t.intervals.forEach(iv => { v[((iv % 12)+12)%12] = 1; });
+  return { ...t, vec: v };
+});
+
+function listenerCosine(a, b) {
+  let dot=0, na=0, nb=0;
+  for (let i=0; i<12; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+function listenerScoreChroma(chroma) {
+  // For every (root, template), rotate chroma so template's root aligns and compute weighted cosine sim.
+  const out = [];
+  for (let root = 0; root < 12; root++) {
+    const rotated = new Float32Array(12);
+    for (let i = 0; i < 12; i++) rotated[i] = chroma[(i + root) % 12];
+    for (const tpl of LISTENER_TEMPLATE_VECS) {
+      const sim = listenerCosine(rotated, tpl.vec) * tpl.weight;
+      if (sim > 0) out.push({ root, quality: tpl.quality, score: sim });
+    }
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out;
+}
+
+function listenerCandidateToChord(c) {
+  const useFlats = shouldUseFlats(state.key, state.mode);
+  const root = indexToNote(c.root, useFlats);
+  const type = CHORD_TYPES[c.quality] || CHORD_TYPES[''];
+  const notes = type.intervals.map(iv => indexToNote((c.root + iv) % 12, useFlats));
+  return { root, quality: c.quality, type, notes, name: root + type.label, score: c.score };
+}
+
+async function listenerStart() {
+  const btn = document.getElementById('listener-toggle');
+  const status = document.getElementById('listener-status');
+  if (listenerState.active) return;
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Microphone not supported in this browser');
+    }
+    status.textContent = 'requesting mic…';
+    status.className = 'listener-status';
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false, noiseSuppression: false,
+        autoGainControl: false, channelCount: 1,
+      }
+    });
+    // Use Tone's audio context if started, else create our own — we never connect to destination, no feedback risk
+    const ctx = (typeof Tone !== 'undefined' && Tone.context && Tone.context.rawContext)
+      ? Tone.context.rawContext
+      : new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    const source = ctx.createMediaStreamSource(stream);
+    const fftAnalyser = ctx.createAnalyser();
+    fftAnalyser.fftSize = 8192;
+    fftAnalyser.smoothingTimeConstant = 0.4;
+    const timeAnalyser = ctx.createAnalyser();
+    timeAnalyser.fftSize = 2048;
+    timeAnalyser.smoothingTimeConstant = 0;
+    source.connect(fftAnalyser);
+    source.connect(timeAnalyser);
+    // Note: NOT connected to destination — no monitor, no feedback
+    listenerState.audioCtx = ctx;
+    listenerState.micStream = stream;
+    listenerState.source = source;
+    listenerState.fftAnalyser = fftAnalyser;
+    listenerState.timeAnalyser = timeAnalyser;
+    listenerState.fftBuffer = new Float32Array(fftAnalyser.frequencyBinCount);
+    listenerState.timeBuffer = new Float32Array(timeAnalyser.fftSize);
+    listenerState.smoothChroma = new Float32Array(12);
+    listenerState.history = [];
+    listenerState.active = true;
+    btn.classList.add('is-listening');
+    btn.innerHTML = '<i class="ph-duotone ph-stop sz-sm"></i> Stop listening';
+    status.textContent = 'listening…';
+    status.className = 'listener-status is-active';
+    listenerLoop();
+  } catch (err) {
+    console.error('[Listener] mic error', err);
+    status.textContent = err && err.name === 'NotAllowedError' ? 'mic permission denied' : ('mic error: ' + (err.message || err));
+    status.className = 'listener-status is-error';
+    listenerStop();
+  }
+}
+
+function listenerStop() {
+  listenerState.active = false;
+  if (listenerState.rafId) { cancelAnimationFrame(listenerState.rafId); listenerState.rafId = null; }
+  if (listenerState.source) { try { listenerState.source.disconnect(); } catch(e) {} listenerState.source = null; }
+  if (listenerState.micStream) {
+    listenerState.micStream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
+    listenerState.micStream = null;
+  }
+  listenerState.fftAnalyser = null;
+  listenerState.timeAnalyser = null;
+  listenerState.history = [];
+  listenerState.lastStable = null;
+  listenerState.lastShown = null;
+  const btn = document.getElementById('listener-toggle');
+  const status = document.getElementById('listener-status');
+  if (btn) {
+    btn.classList.remove('is-listening');
+    btn.innerHTML = '<i class="ph-duotone ph-microphone sz-sm"></i> Start listening';
+  }
+  if (status) {
+    status.textContent = 'mic off';
+    status.className = 'listener-status';
+  }
+  // Reset meter + UI
+  const meter = document.getElementById('listener-meter-fill');
+  if (meter) meter.style.width = '0%';
+  const meterLbl = document.getElementById('listener-meter-label');
+  if (meterLbl) meterLbl.textContent = '—';
+  // Don't blow away last detected display — it's nice to keep visible after stop
+}
+
+function listenerLoop() {
+  if (!listenerState.active || !listenerState.fftAnalyser) return;
+  listenerState.fftAnalyser.getFloatFrequencyData(listenerState.fftBuffer);
+  listenerState.timeAnalyser.getFloatTimeDomainData(listenerState.timeBuffer);
+
+  // --- Level (RMS) ---
+  let sum = 0;
+  for (let i = 0; i < listenerState.timeBuffer.length; i++) {
+    const v = listenerState.timeBuffer[i];
+    sum += v*v;
+  }
+  const rms = Math.sqrt(sum / listenerState.timeBuffer.length);
+  const rmsDb = 20 * Math.log10(rms || 1e-7);
+  const level = Math.max(0, Math.min(1, (rmsDb + 60) / 60));
+  const meter = document.getElementById('listener-meter-fill');
+  const meterLbl = document.getElementById('listener-meter-label');
+  if (meter) meter.style.width = (level * 100).toFixed(1) + '%';
+  if (meterLbl) meterLbl.textContent = (rmsDb > -90 ? rmsDb.toFixed(0) : '-∞') + ' dB';
+
+  // --- Chroma ---
+  const sr = listenerState.audioCtx.sampleRate;
+  const N = listenerState.fftBuffer.length;
+  const binWidth = sr / (2 * N);
+  const chroma = new Float32Array(12);
+  const minBin = Math.max(1, Math.floor(70 / binWidth));
+  const maxBin = Math.min(N - 1, Math.floor(2200 / binWidth));
+  for (let i = minBin; i <= maxBin; i++) {
+    const db = listenerState.fftBuffer[i];
+    if (db < -75) continue;
+    const mag = Math.pow(10, db / 20);
+    const freq = i * binWidth;
+    const midi = 69 + 12 * Math.log2(freq / 440);
+    const pc = ((Math.round(midi) % 12) + 12) % 12;
+    chroma[pc] += mag;
+  }
+  // Normalize
+  let maxVal = 0;
+  for (let i = 0; i < 12; i++) if (chroma[i] > maxVal) maxVal = chroma[i];
+  if (maxVal > 0) for (let i = 0; i < 12; i++) chroma[i] /= maxVal;
+  // Temporal smoothing
+  const alpha = 0.55;
+  for (let i = 0; i < 12; i++) {
+    listenerState.smoothChroma[i] = alpha * chroma[i] + (1 - alpha) * listenerState.smoothChroma[i];
+  }
+  const sChroma = listenerState.smoothChroma;
+
+  // Render chroma bars
+  renderListenerChroma(sChroma);
+
+  // --- Detection ---
+  // If audio is too quiet, treat as silence — don't push to history
+  const silent = level < 0.04 || maxVal < 0.001;
+  let topResults = [];
+  if (!silent) {
+    topResults = listenerScoreChroma(sChroma).slice(0, 4);
+    listenerState.history.push(topResults[0]);
+    if (listenerState.history.length > listenerState.HISTORY_SIZE) listenerState.history.shift();
+  } else {
+    // bleed history slowly
+    if (listenerState.history.length > 0) listenerState.history.shift();
+  }
+
+  // Pick the most-frequent top1 from history (majority vote weighted by score)
+  let stable = null;
+  if (listenerState.history.length >= 4) {
+    const tally = new Map();
+    for (const h of listenerState.history) {
+      if (!h) continue;
+      const k = h.root + ':' + h.quality;
+      tally.set(k, (tally.get(k) || 0) + h.score);
+    }
+    let bestKey = null, bestVal = 0;
+    for (const [k, v] of tally) { if (v > bestVal) { bestVal = v; bestKey = k; } }
+    if (bestKey) {
+      const [r, q] = bestKey.split(':');
+      stable = { root: parseInt(r, 10), quality: q, score: bestVal / listenerState.history.length };
+    }
+  }
+
+  // Update UI for detection if stable changed (debounced)
+  const now = performance.now();
+  const top = topResults[0];
+  if (stable) {
+    const detectedChord = listenerCandidateToChord(stable);
+    const lastShownKey = listenerState.lastShown ? (listenerState.lastShown.root + ':' + listenerState.lastShown.quality) : null;
+    const stableKey = stable.root + ':' + stable.quality;
+    if (lastShownKey !== stableKey) {
+      listenerState.lastShown = { ...stable, chord: detectedChord, since: now };
+      renderListenerDetected(detectedChord, topResults);
+      renderListenerSuggestions(detectedChord);
+      listenerState.lastSuggestUpdate = now;
+    } else if (top) {
+      // Update alternates list periodically without rebuilding the main display
+      if (now - listenerState.lastBuilt > 200) {
+        renderListenerAlternates(topResults);
+        listenerState.lastBuilt = now;
+      }
+    }
+  } else if (silent && listenerState.lastShown) {
+    // Don't clear — keep the last detected visible. Just dim its sub-text.
+    const sub = document.getElementById('listener-detected-sub');
+    if (sub) sub.textContent = 'silence — last heard above';
+  } else if (!listenerState.lastShown) {
+    const sub = document.getElementById('listener-detected-sub');
+    if (sub) sub.textContent = silent ? 'waiting for audio…' : 'analyzing…';
+  }
+
+  listenerState.rafId = requestAnimationFrame(listenerLoop);
+}
+
+function renderListenerChroma(chroma) {
+  const wrap = document.getElementById('listener-chroma');
+  if (!wrap) return;
+  if (wrap.children.length !== 12) {
+    wrap.innerHTML = '';
+    for (let i = 0; i < 12; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'listener-chroma-bar';
+      const lbl = document.createElement('div');
+      lbl.className = 'listener-chroma-bar-label';
+      lbl.textContent = NOTES_SHARP[i].replace('#','♯');
+      bar.appendChild(lbl);
+      wrap.appendChild(bar);
+    }
+  }
+  // Find top-2 bins for highlight
+  let max = 0, secondMax = 0, maxIdx = -1, secondIdx = -1;
+  for (let i = 0; i < 12; i++) {
+    if (chroma[i] > max) { secondMax = max; secondIdx = maxIdx; max = chroma[i]; maxIdx = i; }
+    else if (chroma[i] > secondMax) { secondMax = chroma[i]; secondIdx = i; }
+  }
+  for (let i = 0; i < 12; i++) {
+    const bar = wrap.children[i];
+    const h = Math.max(4, chroma[i] * 120);
+    bar.style.height = h + 'px';
+    bar.classList.toggle('is-active', i === maxIdx && max > 0.15);
+    bar.classList.toggle('is-secondary', i === secondIdx && secondMax > 0.15 && i !== maxIdx);
+  }
+}
+
+function renderListenerDetected(chord, topResults) {
+  const nameEl = document.getElementById('listener-detected-name');
+  const subEl = document.getElementById('listener-detected-sub');
+  const actionsEl = document.getElementById('listener-detected-actions');
+  const wrap = document.getElementById('listener-detected');
+  if (!nameEl || !chord) return;
+  nameEl.textContent = chord.name;
+  nameEl.classList.remove('is-empty');
+  // Sub text: confidence + roman analysis if it fits the key
+  const numeral = findRomanForChord(chord, state.key, state.mode);
+  const conf = Math.max(0, Math.min(100, Math.round((chord.score || 0) * 100)));
+  const noteList = chord.notes.join(' · ');
+  subEl.innerHTML = noteList +
+    (numeral ? ' <span style="color:var(--accent-2);font-family:var(--font-mono);">[' + numeral + ' in ' + state.key + (state.mode === 'minor' ? 'm' : '') + ']</span>' : '') +
+    ' <span style="color:var(--muted);">· ' + conf + '% match</span>';
+  actionsEl.style.display = 'flex';
+  wrap.classList.add('is-stable');
+  // Wire up action buttons
+  document.getElementById('listener-detected-play').onclick = async () => {
+    if (!instrumentInstance) await setInstrument(currentInstrument);
+    playProgression([chord], state.key, builderState.bpm || 100, {});
+  };
+  document.getElementById('listener-detected-add').onclick = () => {
+    // Prefer pushing as roman numeral if it resolves cleanly so it retransposes; else push absolute chord
+    const num = findRomanForChord(chord, state.key, state.mode);
+    if (num) builderState.queue.push({ numeral: num, rhythm: 'quarter' });
+    else builderState.queue.push({ chord, rhythm: 'quarter' });
+    if (typeof renderBuilder === 'function') renderBuilder();
+    if (typeof renderPlayground === 'function') renderPlayground();
+    if (typeof renderGraph === 'function') renderGraph();
+  };
+  renderListenerAlternates(topResults);
+}
+
+function renderListenerAlternates(topResults) {
+  const altEl = document.getElementById('listener-alternates');
+  if (!altEl) return;
+  if (!Array.isArray(topResults) || topResults.length === 0) { altEl.innerHTML = ''; return; }
+  const max = topResults[0] && topResults[0].score ? topResults[0].score : 1;
+  // Skip the #1 (it's already the headline) — show #2..#4
+  const alts = topResults.slice(1, 4);
+  altEl.innerHTML = alts.map(c => {
+    const ch = listenerCandidateToChord(c);
+    const pct = max > 0 ? Math.round((c.score / max) * 100) : 0;
+    return '<div class="listener-alt-row">' +
+      '<span class="listener-alt-name">' + ch.name + '</span>' +
+      '<span class="listener-alt-bar"><span class="listener-alt-bar-fill" style="width:' + pct + '%;"></span></span>' +
+      '<span class="listener-alt-pct">' + pct + '%</span>' +
+      '</div>';
+  }).join('');
+}
+
+// ---- Suggestion engine ----
+function listenerNormalizeRoman(r) {
+  if (!r) return r;
+  return r.replace(/♭/g, 'b').replace(/♯/g, '#').trim();
+}
+
+const LISTENER_UNIVERSAL_MOVES = {
+  // Major-key Roman numerals → list of common destinations + reasons
+  'I':    [['IV','plagal departure'],['V','tonic→dominant'],['vi','pop deceptive'],['ii','setup ii–V–I'],['V7','add tension']],
+  'Imaj7':[['IV','plagal'],['V7','add tension'],['vim7','smooth'],['iim7','jazz move']],
+  'ii':   [['V','classic ii–V'],['V7','jazz ii–V7'],['I','plagal-ish']],
+  'iim7': [['V7','jazz ii–V7'],['Imaj7','resolve']],
+  'iii':  [['vi','third→submediant'],['IV','smooth descend']],
+  'iiim7':[['vim7','third→submediant'],['IVmaj7','smooth descend']],
+  'IV':   [['I','plagal cadence'],['V','subdominant→dominant'],['vi','soft turn'],['ii','jazz turn'],['iv','borrowed darkness']],
+  'IVmaj7':[['Imaj7','plagal'],['V7','toward dominant']],
+  'iv':   [['I','minor-plagal resolve'],['i','dark resolve'],['♭VII','rock turn']],
+  'V':    [['I','authentic cadence'],['vi','deceptive cadence'],['IV','step back']],
+  'V7':   [['I','authentic cadence'],['vi','deceptive cadence'],['Imaj7','jazz resolve']],
+  'vi':   [['IV','sad-pop turn'],['ii','setup ii–V'],['V','rebuild tension'],['iii','smooth move']],
+  'vim7': [['iim7','setup ii–V'],['IVmaj7','sad-pop turn']],
+  'vii°': [['I','leading-tone resolve']],
+  'iim7b5':[['V7','minor ii–V'],['v','minor resolve']],
+  // Minor-key Roman numerals
+  'i':    [['iv','minor plagal'],['V','dominant tension'],['VI','♭VI lift'],['VII','rock move'],['v','natural minor'],['♭VII','rock move']],
+  'v':    [['i','natural-minor resolve']],
+  // Borrowed
+  '♭VII': [['IV','rock turn'],['I','mixolydian resolve']],
+  '♭VI':  [['♭VII','rock'],['I','cinematic resolve'],['iv','dark']],
+  '♭III': [['IV','smooth'],['♭VI','dark']],
+  '♭II':  [['I','phrygian resolve'],['V7','tritone-ish']],
+};
+
+function suggestNextChords(detected) {
+  if (!detected) return [];
+  const useFlats = shouldUseFlats(state.key, state.mode);
+  const numeral = findRomanForChord(detected, state.key, state.mode);
+  const out = []; // {chord, numeral, weight, reason, source}
+
+  // 1) Genre-specific transitions (if a genre with transitions is selected)
+  if (numeral && state.genre && Array.isArray(state.genre.transitions) && state.genre.transitions.length > 0) {
+    const norm = listenerNormalizeRoman(numeral);
+    state.genre.transitions.forEach(([from, to, w]) => {
+      if (listenerNormalizeRoman(from) === norm) {
+        const c = romanToChord(to, state.key, state.mode);
+        if (c) out.push({ chord: c, numeral: to, weight: 0.5 + 0.5 * w, reason: state.genre.name + ' typical', source: 'genre' });
+      }
+    });
+  }
+
+  // 2) Universal moves table
+  if (numeral) {
+    const list = LISTENER_UNIVERSAL_MOVES[numeral] || LISTENER_UNIVERSAL_MOVES[listenerNormalizeRoman(numeral)];
+    if (list) {
+      list.forEach(([to, reason]) => {
+        const c = romanToChord(to, state.key, state.mode);
+        if (c) out.push({ chord: c, numeral: to, weight: 0.55, reason, source: 'theory' });
+      });
+    }
+  }
+
+  // 3) Setup chord: V7 of the detected — useful when chord is non-diatonic or you want to come back to it
+  const detectedRootIdx = noteIndex(detected.root);
+  if (detectedRootIdx >= 0) {
+    const fifthIdx = (detectedRootIdx + 7) % 12;
+    const fifthRoot = indexToNote(fifthIdx, useFlats);
+    const v7type = CHORD_TYPES['7'];
+    const v7chord = {
+      root: fifthRoot, quality: '7', type: v7type,
+      notes: v7type.intervals.map(iv => indexToNote((fifthIdx + iv) % 12, useFlats)),
+      name: fifthRoot + '7',
+    };
+    out.push({
+      chord: v7chord,
+      numeral: 'V7/' + (numeral || detected.name),
+      weight: 0.42,
+      reason: 'sets up returning to ' + detected.name,
+      source: 'theory',
+    });
+  }
+
+  // 4) Plagal predecessor — IV of the detected
+  if (detectedRootIdx >= 0) {
+    const fourthIdx = (detectedRootIdx + 5) % 12;
+    const fourthRoot = indexToNote(fourthIdx, useFlats);
+    const ivType = CHORD_TYPES[''];
+    const ivChord = {
+      root: fourthRoot, quality: '', type: ivType,
+      notes: ivType.intervals.map(iv => indexToNote((fourthIdx + iv) % 12, useFlats)),
+      name: fourthRoot + ivType.label,
+    };
+    out.push({
+      chord: ivChord, numeral: 'IV/' + (numeral || detected.name),
+      weight: 0.35, reason: 'plagal step toward ' + detected.name, source: 'theory',
+    });
+  }
+
+  // Dedupe by chord name, keep highest weight + best reason
+  const map = new Map();
+  for (const s of out) {
+    if (!s.chord || !s.chord.name) continue;
+    if (s.chord.name === detected.name) continue; // don't suggest the same chord
+    const existing = map.get(s.chord.name);
+    if (!existing || existing.weight < s.weight) map.set(s.chord.name, s);
+  }
+  const arr = Array.from(map.values());
+  arr.sort((a, b) => b.weight - a.weight);
+  return arr.slice(0, 6);
+}
+
+function renderListenerSuggestions(detected) {
+  const wrap = document.getElementById('listener-suggestions');
+  const ctx = document.getElementById('listener-suggest-context');
+  if (!wrap) return;
+  if (!detected) {
+    wrap.innerHTML = '<div class="lyrics-empty">Suggestions appear once a chord is detected.</div>';
+    if (ctx) ctx.textContent = '·';
+    return;
+  }
+  const suggestions = suggestNextChords(detected);
+  if (ctx) {
+    const numeral = findRomanForChord(detected, state.key, state.mode);
+    const ctxLabel = state.genre && state.genre.name ? state.genre.name : 'theory';
+    ctx.textContent = '· after ' + detected.name + (numeral ? ' (' + numeral + ')' : '') + ' · ' + ctxLabel;
+  }
+  if (suggestions.length === 0) {
+    wrap.innerHTML = '<div class="lyrics-empty">No common moves from ' + detected.name + ' in this key. Try changing key/genre.</div>';
+    return;
+  }
+  wrap.innerHTML = suggestions.map((s, idx) => {
+    return '<div class="listener-suggest-card" data-idx="' + idx + '">' +
+      '<div class="ls-row">' +
+        '<span class="listener-suggest-name">' + s.chord.name + '</span>' +
+        '<span class="listener-suggest-roman">' + s.numeral + '</span>' +
+        '<span class="listener-suggest-reason">' + s.reason + '</span>' +
+      '</div>' +
+      '<div class="listener-suggest-actions">' +
+        '<button data-action="play" title="Play this chord"><i class="ph-duotone ph-play sz-sm"></i></button>' +
+        '<button data-action="follow" title="Play detected → suggested"><i class="ph-duotone ph-arrow-right sz-sm"></i> Try</button>' +
+        '<button data-action="add" title="Add to Builder"><i class="ph-duotone ph-plus sz-sm"></i></button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  // Wire up
+  wrap.querySelectorAll('.listener-suggest-card').forEach(card => {
+    const idx = parseInt(card.dataset.idx, 10);
+    const s = suggestions[idx];
+    card.querySelector('[data-action="play"]').onclick = async () => {
+      if (!instrumentInstance) await setInstrument(currentInstrument);
+      playProgression([s.chord], state.key, builderState.bpm || 100, {});
+    };
+    card.querySelector('[data-action="follow"]').onclick = async () => {
+      if (!instrumentInstance) await setInstrument(currentInstrument);
+      playProgression([detected, s.chord], state.key, builderState.bpm || 100, {});
+    };
+    card.querySelector('[data-action="add"]').onclick = () => {
+      // Add detected chord (if not last in queue) + suggested
+      const lastItem = builderState.queue[builderState.queue.length - 1];
+      const lastName = lastItem && lastItem.chord ? lastItem.chord.name :
+                       lastItem && lastItem.numeral ? (romanToChord(lastItem.numeral, state.key, state.mode) || {}).name : null;
+      if (lastName !== detected.name) {
+        const dnum = findRomanForChord(detected, state.key, state.mode);
+        if (dnum) builderState.queue.push({ numeral: dnum, rhythm: 'quarter' });
+        else builderState.queue.push({ chord: detected, rhythm: 'quarter' });
+      }
+      // For suggestion: prefer numeral form if it doesn't include "/" (our synthetic V7/X notation)
+      if (typeof s.numeral === 'string' && !s.numeral.includes('/')) {
+        builderState.queue.push({ numeral: s.numeral, rhythm: 'quarter' });
+      } else {
+        builderState.queue.push({ chord: s.chord, rhythm: 'quarter' });
+      }
+      if (typeof renderBuilder === 'function') renderBuilder();
+      if (typeof renderPlayground === 'function') renderPlayground();
+      if (typeof renderGraph === 'function') renderGraph();
+    };
+  });
+}
+
+// Build the static skeleton of the Listener main section. Called lazily the first time
+// showListenerView() runs. All listener-* IDs live inside this skeleton.
+function buildListenerViewSkeleton(root) {
+  root.innerHTML = `
+    <div class="listener-view-header">
+      <div>
+        <h2 class="listener-view-title"><i class="ph-duotone ph-microphone"></i> Listener</h2>
+        <div class="listener-view-sub">Play a chord on any instrument near the mic — Listener identifies it and proposes likely next chords for your key &amp; genre.</div>
+      </div>
+      <div class="listener-view-controls">
+        <button class="primary" id="listener-toggle"><i class="ph-duotone ph-microphone sz-sm"></i> Start listening</button>
+        <span class="listener-status" id="listener-status">Mic off</span>
+      </div>
+    </div>
+
+    <div class="listener-meter-row">
+      <div class="listener-meter"><div class="listener-meter-fill" id="listener-meter-fill"></div></div>
+      <span class="listener-meter-label" id="listener-meter-label">—</span>
+    </div>
+
+    <div class="listener-grid">
+      <div class="listener-col listener-col-detect">
+        <div class="listener-section">
+          <div class="panel-title" style="margin-bottom:6px;">Detected chord</div>
+          <div class="listener-detected" id="listener-detected">
+            <div class="listener-detected-name is-empty" id="listener-detected-name">—</div>
+            <div class="listener-detected-sub" id="listener-detected-sub">click <strong style="color:var(--text);">Start listening</strong> to begin</div>
+            <div class="listener-detected-actions" id="listener-detected-actions" style="display:none;">
+              <button class="play-btn" id="listener-detected-play"><i class="ph-duotone ph-play sz-sm"></i> Play</button>
+              <button class="secondary-btn" id="listener-detected-add"><i class="ph-duotone ph-plus sz-sm"></i> Builder</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="listener-section">
+          <div class="panel-title" style="margin-bottom:6px;">Alternates <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">· next-best matches</span></div>
+          <div class="listener-alternates" id="listener-alternates"></div>
+        </div>
+
+        <div class="listener-section listener-chroma-wrap">
+          <div class="panel-title" style="margin-bottom:6px;">Live chroma <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">· pitch-class energy</span></div>
+          <div class="listener-chroma" id="listener-chroma"></div>
+        </div>
+      </div>
+
+      <div class="listener-col listener-col-suggest">
+        <div class="listener-section">
+          <div class="panel-title" style="margin-bottom:6px;">Suggested next chord <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;" id="listener-suggest-context">·</span></div>
+          <div class="listener-suggestions" id="listener-suggestions">
+            <div class="lyrics-empty">Suggestions appear once a chord is detected.</div>
+          </div>
+        </div>
+
+        <div class="listener-section">
+          <div class="help-text" style="margin-top:0;">
+            <strong style="color:var(--text);">Tips:</strong> hold the chord steady ~1 sec for a stable read · pick the right Key in the header so suggestions stay diatonic · pick a Genre for genre-specific transitions · Listener detects triads, m7, maj7, dom7, sus2/sus4 (extensions collapse to their nearest base shape).
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  // Wire the toggle button immediately (skeleton just got built)
+  const toggleBtn = root.querySelector('#listener-toggle');
+  if (toggleBtn) {
+    toggleBtn.onclick = () => {
+      if (listenerState.active) listenerStop();
+      else listenerStart();
+    };
+  }
+}
+
+// Called from renderAll when entering / refreshing listener view. Mainly resets transient UI bits;
+// the heavy lifting happens inside listenerLoop on each animation frame.
+function renderListener() {
+  // If we already have a stable detection from a previous session, keep showing it.
+  if (listenerState.lastShown && listenerState.lastShown.chord) {
+    renderListenerDetected(listenerState.lastShown.chord, []);
+    renderListenerSuggestions(listenerState.lastShown.chord);
+  } else {
+    const sub = document.getElementById('listener-detected-sub');
+    const actions = document.getElementById('listener-detected-actions');
+    const wrap = document.getElementById('listener-detected');
+    if (sub && !listenerState.active) sub.innerHTML = 'click <strong style="color:var(--text);">Start listening</strong> to begin';
+    if (actions) actions.style.display = 'none';
+    if (wrap) wrap.classList.remove('is-stable');
+    const ctx = document.getElementById('listener-suggest-context');
+    if (ctx) ctx.textContent = '·';
+  }
+}
+
+function setupListener() {
+  // Re-render suggestions when key changes while listener view is up
+  const keyPicker = document.getElementById('key-picker');
+  if (keyPicker) {
+    keyPicker.addEventListener('change', () => {
+      if (state.genre && state.genre.isListener && listenerState.lastShown) {
+        renderListenerSuggestions(listenerState.lastShown.chord);
+      }
+    });
+  }
+  // Stop mic on tab hide
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && listenerState.active) listenerStop();
+  });
+}
+
 renderAll();
 setupDrawer();
 setupMelodyMode();
@@ -3902,6 +4662,7 @@ setupSongwriter();
 setupMetronome();
 setupCustomChordPanel();
 setupCollapsibles();
+setupListener();
 setupHeaderButtons();
 bindModeButtons();
 document.getElementById('filter-weak').onchange = () => renderGraph();

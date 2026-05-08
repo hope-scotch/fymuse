@@ -47,7 +47,12 @@ Internet required on first load; thereafter the page works offline if cached.
 
 Three overlay panels (sit on top of the main layout, fixed-position):
 - **Songwriter shutter** slides down from below the header (top overlay)
-- **Path Finder** and **Melody Mode** slide in from the right edge as 460px-wide overlays — **mutually exclusive** (only one open at a time). They overlay the right side without shrinking the main panel.
+- **Path Finder**, **Melody Mode**, and **Custom Chord** slide in from the right edge as 460px-wide overlays — **mutually exclusive** (only one open at a time). They overlay the right side without shrinking the main panel.
+
+Main view modes (mutually exclusive — they swap children of `#graph-panel`):
+- **Genre graph** (default) — chord nodes + transition arrows for the selected genre
+- **Playground** — every musically useful chord in the current key, by category
+- **Listener** — real-time mic chord detection + suggestions (full-width, no info-sidebar)
 
 Toggleable layout columns:
 - **Info Sidebar** (right column, inline) — hidden/shown via the "Sidebar" header button. When hidden, main panel reflows wider.
@@ -132,8 +137,30 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
   - **Chord type** (triads/7ths preferred over diminished)
 - Pick chords sequentially; finalize pushes them all to the Builder
 
+### Listener (full main view — like Playground)
+- Toggled from the header "Listener" tool button. Like Playground, it's modeled as a special "genre" (`GENRES.listener`, `isListener:true`) that takes over `#graph-panel`. When active: `state.genreKey === 'listener'`, `body.view-listener` class is set, the info-sidebar is hidden via CSS, and `#graph-panel` reflows to full width.
+- **Two-column layout** (`.listener-grid`, `5fr | 7fr`, collapses to single column under 1100px): left column = detection (big detected chord, alternates, live chroma), right column = suggested next chords + tips.
+- Mutually exclusive with the chord graph + Playground (clicking any genre pill or the Playground button switches `state.genreKey` and renderAll exits Listener). Side panels (Path Finder / Melody Mode / Custom Chord) can still open over the top.
+- **Real-time chord detection from the mic** + suggestions for the next chord
+- "Start listening" button kicks off `getUserMedia({ audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false} })`. Mic is **never connected to destination** — no monitoring, no feedback risk.
+- Audio path: `MediaStreamSource → AnalyserNode (FFT 8192, smoothing 0.4)` and a parallel `AnalyserNode (time-domain, 2048)` for an RMS level meter. Reuses Tone's audio context if available (`Tone.context.rawContext`), else creates its own.
+- **Chroma extraction**: each FFT bin between ~70–2200 Hz is mapped to a pitch class via `MIDI = 69 + 12·log2(freq/440)` then `pc = round(MIDI) mod 12`, magnitudes summed (linear from dBFS, threshold –75 dB), normalized 0..1, low-passed across frames (alpha=0.55).
+- **Chord matching**: 12 root candidates × 10 quality templates (`'', m, 7, maj7, m7, sus4, sus2, dim, aug, m7b5`). For each candidate the chroma is rotated to align the root and compared against a binary template vector via cosine similarity, scaled by a per-template prior weight. Top results sorted by score.
+- **Smoothing**: rolling history of last 14 top-1 frames, weighted majority vote (sum of scores per `root:quality` key) decides the "stable" detection. Detection only updates when stable identity changes (debounce). Below ~–60 dB RMS or ~0.001 chroma max, frames count as silence and bleed history without pushing.
+- UI elements: live level meter (RMS dB), big detected chord name + Roman numeral analysis in the current key, top-3 alternates with confidence bars, live 12-bin chroma bar chart with the dominant + secondary pitch class highlighted, and a "Suggested next chord" list.
+- **Suggestion engine** (`suggestNextChords(detectedChord)`):
+  1. Genre transitions — if `state.genre.transitions` exists and the detected chord's Roman numeral matches a `from`, every matching `[from, to, weight]` row contributes a suggestion at weight `0.5 + 0.5·w`.
+  2. Universal moves — `LISTENER_UNIVERSAL_MOVES` table mapping common Roman numerals to canonical destinations (V→I, ii→V, IV→I, vi→IV, i→iv/V/VI/VII, ♭VII→IV, etc.) with theory-based reasons.
+  3. **V7 of detected** — synthesizes a dominant 7 a fifth above the detected chord, for "set up returning to X" moves even when the detected chord is non-diatonic.
+  4. **IV of detected** — plagal predecessor.
+  Suggestions deduped by chord name, sorted by weight, top 6 returned.
+- Suggestion cards have **Play** (just the suggestion), **Try** (detected → suggestion as a 2-chord preview), and **+ Builder** (auto-prepends the detected chord if it's not already last in the queue, then appends the suggestion). Roman numerals push as `{numeral, rhythm}` so they retranspose; synthetic `V7/X` notations push as absolute `{chord, rhythm}`.
+- Mic auto-stops on: leaving Listener view (any other genre pill / Playground / etc — handled inside `renderAll` by checking `listenerState.active && !state.genre.isListener`) and on tab hide (`visibilitychange`).
+- View skeleton is built lazily on first activation by `buildListenerViewSkeleton(root)`, which inserts a `<div id="listener-view">` inside `#graph-panel`. `showListenerView()` mirrors `showPlaygroundView()` — toggles sibling `#graph-panel` children to `display:none` while the listener view is active. `renderListener()` (called from `renderAll`) restores any prior detection if the user toggles in/out.
+- State: `listenerState` — `{active, audioCtx, micStream, source, fftAnalyser, timeAnalyser, fftBuffer, timeBuffer, rafId, smoothChroma, history, lastShown, …}`.
+
 ### Custom Chord (right-side overlay panel)
-- Toggled from the header button (mutually exclusive with Path Finder and Melody Mode)
+- Toggled from the header button (mutually exclusive with Path Finder, Melody Mode)
 - 460px fixed-position overlay sliding from the right
 - Stack any combination of triad + 7th + 9th + 11th + 13th to build a chord like `Cm7add9add11`
 - Pill-button rows for: Root (12 notes), Triad (maj/min/dim/aug/sus2/sus4), 7th (none/dom7/maj7), 9th (none/9/♭9/♯9), 11th (none/11/♯11), 13th (none/13/♭13)
@@ -243,6 +270,22 @@ MINOR_INTERVALS = [0,2,3,5,7,8,10]   // natural minor
 - `sections`: array of `{ id, name, chords: [...same as builder queue], lyrics: string }`
 - `nextId`: incrementing section ID
 
+### `listenerState`
+- `active`: boolean — whether mic + RAF loop are running
+- `audioCtx`: AudioContext (reuses Tone's `context.rawContext` if available, else fresh)
+- `micStream`: MediaStream from getUserMedia
+- `source`: MediaStreamAudioSourceNode
+- `fftAnalyser`: AnalyserNode (fftSize 8192, smoothing 0.4) — chroma source
+- `timeAnalyser`: AnalyserNode (fftSize 2048, smoothing 0) — RMS / level meter
+- `fftBuffer`: Float32Array of frequency-bin dB
+- `timeBuffer`: Float32Array of time-domain samples
+- `rafId`: requestAnimationFrame handle for the analysis loop
+- `smoothChroma`: Float32Array(12), low-passed pitch-class energies
+- `history`: rolling array of last N top-1 detection frames `{root, quality, score}`
+- `HISTORY_SIZE`: 14
+- `lastShown`: last stable chord pushed to UI `{root, quality, name, chord, score, since}`
+- `lastBuilt`, `lastSuggestUpdate`: timestamp gates so the alternates list / suggestions don't rebuild every frame
+
 ### `metronomeState`
 - `active`: boolean
 - `intervalId`: setInterval handle
@@ -311,6 +354,8 @@ bindModeButtons();         // legacy no-op
 
 ## Recent change history (newest first)
 
+- **Listener promoted from side panel to a full main view** (mirrors Playground). New `GENRES.listener` entry with `isListener:true`; `renderAll()` branches to `showListenerView()` + `renderListener()`. View skeleton is built lazily by `buildListenerViewSkeleton()` into `#listener-view` inside `#graph-panel`. `body.view-listener` CSS class hides the info-sidebar so the section spans full width. Two-column grid (`5fr | 7fr`, collapses under 1100px). The old `<aside id="listener-panel">` side panel and its PANEL_TO_BTN entry are gone; the header Listener button now switches `state.genreKey` like Playground does. Mic auto-stops via the renderAll guard whenever Listener is no longer the active genre.
+- **Listener — real-time chord detection from mic + next-chord suggestions** (originally added as a side panel; see above for the full-view promotion). `getUserMedia` audio runs through an FFT AnalyserNode, magnitudes are folded into a 12-bin chroma vector, and matched against 10 chord-quality templates × 12 roots via cosine similarity. Rolling-history majority vote stabilizes the call. Suggestions combine genre transition data + a universal moves table + synthetic V7/IV-of-detected. Mic never connects to destination (no feedback). Code: `listenerState`, `LISTENER_TEMPLATES`, `LISTENER_UNIVERSAL_MOVES`, `listenerStart/Stop/Loop`, `listenerScoreChroma`, `suggestNextChords`, render functions.
 - **Keyboard shortcuts on every Playground chord card**. Each card gets a key from `1234567890qwertyuiopasdfghjklzxcvbnm` shown as a bottom-left monospace badge. Pressing the key plays the chord and flashes the card orange. Listener gates on `state.genre.isPlayground` and ignores text-input focus + modifier keys. `playgroundKeyMap` rebuilds on each `renderPlayground()`.
 - **Stop button moved into Builder controls** alongside Play / Rest / Clear. Removed standalone Stop buttons from playground header and genre-graph header (Walk-the-graph stays in graph header).
 - **Drag-and-drop chords onto Path Finder**. Playground chord cards and graph chord nodes (SVG `<g>`) are now `draggable="true"`. Drop on `#path-from` or `#path-to` to set From/To. Drop target highlights with `.drop-target` class (orange border + glow). If the dropped numeral isn't already in the dropdown options, it's appended on the fly. Both selects listen for `dragover` / `dragleave` / `drop`.
