@@ -144,9 +144,11 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
 - **Real-time chord detection from the mic** + suggestions for the next chord
 - "Start listening" button kicks off `getUserMedia({ audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false} })`. Mic is **never connected to destination** — no monitoring, no feedback risk.
 - Audio path: `MediaStreamSource → AnalyserNode (FFT 8192, smoothing 0.4)` and a parallel `AnalyserNode (time-domain, 2048)` for an RMS level meter. Reuses Tone's audio context if available (`Tone.context.rawContext`), else creates its own.
-- **Chroma extraction**: each FFT bin between ~70–2200 Hz is mapped to a pitch class via `MIDI = 69 + 12·log2(freq/440)` then `pc = round(MIDI) mod 12`, magnitudes summed (linear from dBFS, threshold –75 dB), normalized 0..1, low-passed across frames (alpha=0.55).
-- **Chord matching**: 12 root candidates × 10 quality templates (`'', m, 7, maj7, m7, sus4, sus2, dim, aug, m7b5`). For each candidate the chroma is rotated to align the root and compared against a binary template vector via cosine similarity, scaled by a per-template prior weight. Top results sorted by score.
-- **Smoothing**: rolling history of last 14 top-1 frames, weighted majority vote (sum of scores per `root:quality` key) decides the "stable" detection. Detection only updates when stable identity changes (debounce). Below ~–60 dB RMS or ~0.001 chroma max, frames count as silence and bleed history without pushing.
+- **Chroma extraction**: each FFT bin between ~70–2200 Hz is mapped to a pitch class via `MIDI = 69 + 12·log2(freq/440)` then `pc = round(MIDI) mod 12`, magnitudes summed (linear from dBFS, threshold –75 dB), normalized 0..1. The raw chroma is then **median-smoothed across 3 frames** to kill transient spikes, and **EMA low-passed** (alpha=0.55) into the smoothed chroma used for matching.
+- **Bass detection**: same FFT pass also accumulates a separate low-band chroma (70–180 Hz). Argmax = bass pitch class, dropped if not clearly ahead of 2nd strongest in band. Used for slash-chord display + inversion labels + a 1.15× score boost for candidates whose root matches the bass.
+- **Onset detection**: spectral flux (sum of positive frame-to-frame magnitude deltas) tracked against an EMA baseline. When `flux > 2.5× baseline`, the rolling vote + locked key are reset so a newly-struck chord locks in within a few frames instead of fighting the previous one.
+- **Chord matching**: 12 root candidates × 10 quality templates (`'', m, 7, maj7, m7, sus4, sus2, dim, aug, m7b5`). Each template is built from a **harmonic series profile** (octaves + 5ths + maj3 + m7) summed at every chord tone, so the templates "expect" realistic overtone bleed. Score = cosine similarity × per-template prior weight × bass-bias (if applicable). Top results sorted by score.
+- **Smoothing + hysteresis**: rolling history of last 14 top-1 frames, weighted majority vote per `root:quality` key. Once a chord is locked, a new candidate must beat the locked one's tally by 10% to take over (`LISTENER_HYSTERESIS = 1.10`). Below ~–60 dB RMS or ~0.001 chroma max, frames count as silence and bleed history without pushing.
 - UI elements: live level meter (RMS dB), big detected chord name + Roman numeral analysis in the current key, top-3 alternates with confidence bars, live 12-bin chroma bar chart with the dominant + secondary pitch class highlighted, and a "Suggested next chord" list.
 - **Suggestion engine** (`suggestNextChords(detectedChord)`):
   1. Genre transitions — if `state.genre.transitions` exists and the detected chord's Roman numeral matches a `from`, every matching `[from, to, weight]` row contributes a suggestion at weight `0.5 + 0.5·w`.
@@ -281,6 +283,11 @@ MINOR_INTERVALS = [0,2,3,5,7,8,10]   // natural minor
 - `timeBuffer`: Float32Array of time-domain samples
 - `rafId`: requestAnimationFrame handle for the analysis loop
 - `smoothChroma`: Float32Array(12), low-passed pitch-class energies
+- `rawChromaHistory`: last 3 raw chroma frames (for median smoothing)
+- `prevSpectrum`: Float32Array of last frame's linear-magnitude spectrum (for spectral flux)
+- `fluxAvg`: EMA of spectral flux — onset detection baseline
+- `bassPc`: currently detected bass pitch class (or -1 if ambiguous/silent)
+- `lockedKey`: 'root:quality' of the currently locked chord (for hysteresis)
 - `history`: rolling array of last N top-1 detection frames `{root, quality, score}`
 - `HISTORY_SIZE`: 14
 - `lastShown`: last stable chord pushed to UI `{root, quality, name, chord, score, since}`
@@ -353,6 +360,15 @@ bindModeButtons();         // legacy no-op
 ---
 
 ## Recent change history (newest first)
+
+- **Listener accuracy upgrade — Tier 1**. Four orthogonal improvements bumped synthetic-test accuracy from 14/19 → 18/19 with much wider score margins:
+  1. **Harmonic-aware templates** — chord templates are now built by summing the harmonic series profile (`LISTENER_HARMONIC_PROFILE` — h1/h2/h4/h8 octaves, h3/h6 fifths, h5 maj3, h7 m7) at every chord tone. Real audio's overtone bleed now matches the templates instead of working against them. Built by `buildHarmonicTemplate(intervals)`.
+  2. **Bass-note detection** — a separate low-band chroma (70-180 Hz, computed in the same FFT pass) finds the dominant pitch class in the bass. Required to be clearly ahead of the second-strongest bass-band PC (>30% gap) or it's dropped as ambiguous. Used to (a) display slash-chord notation `C/E` when bass differs from root, (b) label inversion (1st / 2nd / 7th in bass / slash), (c) apply a `LISTENER_BASS_BOOST = 1.15` multiplier to candidates whose root matches the bass — disambiguates F#dim vs rootless D7 etc.
+  3. **Median smoothing on raw chroma** — element-wise median over the last 3 raw chroma frames before the EMA low-pass. Kills transient spikes from cymbal hits, vocal sibilance, etc.
+  4. **Onset detection + vote reset** — spectral flux (sum of positive frame-to-frame magnitude changes) tracked with an EMA baseline (`fluxAvg`). When this frame's flux exceeds 2.5× baseline (and an absolute floor), the rolling history + `lockedKey` are wiped so a newly-struck chord locks in fast instead of fighting the previous one.
+  5. **Decision hysteresis** — once a chord is locked in (`listenerState.lockedKey`), a new candidate must beat the locked one's tallied score by `LISTENER_HYSTERESIS = 1.10` to take over. Stops sus2/major/dom7 from flickering between each other on stable input.
+
+  Quality template weights also tuned: dim 0.78→0.86, aug 0.70→0.74, m7b5 0.74→0.78. New state fields on `listenerState`: `rawChromaHistory`, `bassPc`, `prevSpectrum`, `fluxAvg`, `lockedKey`. The chroma + bass + flux are computed in a single FFT-bin pass per frame for efficiency.
 
 - **Listener promoted from side panel to a full main view** (mirrors Playground). New `GENRES.listener` entry with `isListener:true`; `renderAll()` branches to `showListenerView()` + `renderListener()`. View skeleton is built lazily by `buildListenerViewSkeleton()` into `#listener-view` inside `#graph-panel`. `body.view-listener` CSS class hides the info-sidebar so the section spans full width. Two-column grid (`5fr | 7fr`, collapses under 1100px). The old `<aside id="listener-panel">` side panel and its PANEL_TO_BTN entry are gone; the header Listener button now switches `state.genreKey` like Playground does. Mic auto-stops via the renderAll guard whenever Listener is no longer the active genre.
 - **Listener — real-time chord detection from mic + next-chord suggestions** (originally added as a side panel; see above for the full-view promotion). `getUserMedia` audio runs through an FFT AnalyserNode, magnitudes are folded into a 12-bin chroma vector, and matched against 10 chord-quality templates × 12 roots via cosine similarity. Rolling-history majority vote stabilizes the call. Suggestions combine genre transition data + a universal moves table + synthetic V7/IV-of-detected. Mic never connects to destination (no feedback). Code: `listenerState`, `LISTENER_TEMPLATES`, `LISTENER_UNIVERSAL_MOVES`, `listenerStart/Stop/Loop`, `listenerScoreChroma`, `suggestNextChords`, render functions.

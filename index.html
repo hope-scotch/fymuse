@@ -4041,7 +4041,14 @@ const listenerState = {
   lastShown: null,        // chord shown in UI (debounced)
   lastSuggestUpdate: 0,
   lastBuilt: 0,
+  // Tier-1 upgrades:
+  rawChromaHistory: [],   // last 3 raw chroma frames for median smoothing
+  bassPc: -1,             // currently detected bass pitch class (or -1 if none)
+  prevSpectrum: null,     // previous frame's linear-magnitude spectrum (for spectral flux)
+  fluxAvg: 0,             // moving-avg spectral flux (onset baseline)
+  lockedKey: null,        // 'root:quality' of the currently locked chord (for hysteresis)
 };
+const LISTENER_HYSTERESIS = 1.10; // new candidate must beat locked one by 10% to switch
 
 // Chord templates as 12-bin pitch-class vectors. Weights bias toward common shapes.
 const LISTENER_TEMPLATES = [
@@ -4052,17 +4059,41 @@ const LISTENER_TEMPLATES = [
   { quality: 'm7',   intervals: [0,3,7,10],  weight: 0.94 },
   { quality: 'sus4', intervals: [0,5,7],     weight: 0.82 },
   { quality: 'sus2', intervals: [0,2,7],     weight: 0.78 },
-  { quality: 'dim',  intervals: [0,3,6],     weight: 0.78 },
-  { quality: 'aug',  intervals: [0,4,8],     weight: 0.70 },
-  { quality: 'm7b5', intervals: [0,3,6,10],  weight: 0.74 },
+  { quality: 'dim',  intervals: [0,3,6],     weight: 0.86 },
+  { quality: 'aug',  intervals: [0,4,8],     weight: 0.74 },
+  { quality: 'm7b5', intervals: [0,3,6,10],  weight: 0.78 },
 ];
 
-// Pre-build templates as Float32 vectors for cosine similarity
-const LISTENER_TEMPLATE_VECS = LISTENER_TEMPLATES.map(t => {
+// Harmonic series profile: when a fundamental at PC 0 is played on a real instrument,
+// energy spreads to its harmonics. Each [semitones-from-fundamental, weight] entry
+// folds into the 12-PC profile so the chord templates "expect" realistic overtone bleed.
+// h1 fund · h2 oct · h3 +5th · h4 2oct · h5 maj3 · h6 5th · h7 m7 (flat ~31c) · h8 3oct
+const LISTENER_HARMONICS = [
+  [0, 1.00], [12, 0.50], [19, 0.33], [24, 0.25],
+  [28, 0.20], [31, 0.17], [34, 0.10], [36, 0.13],
+];
+const LISTENER_HARMONIC_PROFILE = (() => {
   const v = new Float32Array(12);
-  t.intervals.forEach(iv => { v[((iv % 12)+12)%12] = 1; });
-  return { ...t, vec: v };
-});
+  for (const [iv, w] of LISTENER_HARMONICS) v[((iv % 12) + 12) % 12] += w;
+  return v;
+})();
+
+// Build a chord template by stacking the harmonic profile at each chord tone, then normalize.
+function buildHarmonicTemplate(intervals) {
+  const v = new Float32Array(12);
+  for (const interval of intervals) {
+    for (let pc = 0; pc < 12; pc++) v[(pc + interval) % 12] += LISTENER_HARMONIC_PROFILE[pc];
+  }
+  let max = 0;
+  for (let i = 0; i < 12; i++) if (v[i] > max) max = v[i];
+  if (max > 0) for (let i = 0; i < 12; i++) v[i] /= max;
+  return v;
+}
+
+const LISTENER_TEMPLATE_VECS = LISTENER_TEMPLATES.map(t => ({
+  ...t,
+  vec: buildHarmonicTemplate(t.intervals),
+}));
 
 function listenerCosine(a, b) {
   let dot=0, na=0, nb=0;
@@ -4071,14 +4102,18 @@ function listenerCosine(a, b) {
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-function listenerScoreChroma(chroma) {
-  // For every (root, template), rotate chroma so template's root aligns and compute weighted cosine sim.
+// Score chroma against every (root, template) pair. If bassPc is provided (>= 0),
+// give a small boost to candidates whose root matches the bass note — this disambiguates
+// shapes that overlap a lot in pitch-class content (e.g. F#dim vs rootless D7).
+const LISTENER_BASS_BOOST = 1.15;
+function listenerScoreChroma(chroma, bassPc = -1) {
   const out = [];
   for (let root = 0; root < 12; root++) {
     const rotated = new Float32Array(12);
     for (let i = 0; i < 12; i++) rotated[i] = chroma[(i + root) % 12];
     for (const tpl of LISTENER_TEMPLATE_VECS) {
-      const sim = listenerCosine(rotated, tpl.vec) * tpl.weight;
+      let sim = listenerCosine(rotated, tpl.vec) * tpl.weight;
+      if (bassPc >= 0 && bassPc === root) sim *= LISTENER_BASS_BOOST;
       if (sim > 0) out.push({ root, quality: tpl.quality, score: sim });
     }
   }
@@ -4134,6 +4169,11 @@ async function listenerStart() {
     listenerState.timeBuffer = new Float32Array(timeAnalyser.fftSize);
     listenerState.smoothChroma = new Float32Array(12);
     listenerState.history = [];
+    listenerState.rawChromaHistory = [];
+    listenerState.prevSpectrum = new Float32Array(fftAnalyser.frequencyBinCount);
+    listenerState.fluxAvg = 0;
+    listenerState.bassPc = -1;
+    listenerState.lockedKey = null;
     listenerState.active = true;
     btn.classList.add('is-listening');
     btn.innerHTML = '<i class="ph-duotone ph-stop sz-sm"></i> Stop listening';
@@ -4159,6 +4199,11 @@ function listenerStop() {
   listenerState.fftAnalyser = null;
   listenerState.timeAnalyser = null;
   listenerState.history = [];
+  listenerState.rawChromaHistory = [];
+  listenerState.prevSpectrum = null;
+  listenerState.fluxAvg = 0;
+  listenerState.bassPc = -1;
+  listenerState.lockedKey = null;
   listenerState.lastStable = null;
   listenerState.lastShown = null;
   const btn = document.getElementById('listener-toggle');
@@ -4198,30 +4243,82 @@ function listenerLoop() {
   if (meter) meter.style.width = (level * 100).toFixed(1) + '%';
   if (meterLbl) meterLbl.textContent = (rmsDb > -90 ? rmsDb.toFixed(0) : '-∞') + ' dB';
 
-  // --- Chroma ---
+  // --- Chroma + bass + onset (single pass over the FFT bins) ---
   const sr = listenerState.audioCtx.sampleRate;
   const N = listenerState.fftBuffer.length;
   const binWidth = sr / (2 * N);
   const chroma = new Float32Array(12);
+  const bassChroma = new Float32Array(12);
   const minBin = Math.max(1, Math.floor(70 / binWidth));
   const maxBin = Math.min(N - 1, Math.floor(2200 / binWidth));
+  const bassMaxBin = Math.min(maxBin, Math.floor(180 / binWidth));
+  let flux = 0;
   for (let i = minBin; i <= maxBin; i++) {
     const db = listenerState.fftBuffer[i];
-    if (db < -75) continue;
-    const mag = Math.pow(10, db / 20);
-    const freq = i * binWidth;
-    const midi = 69 + 12 * Math.log2(freq / 440);
-    const pc = ((Math.round(midi) % 12) + 12) % 12;
-    chroma[pc] += mag;
+    let mag = 0;
+    if (db >= -75) {
+      mag = Math.pow(10, db / 20);
+      const freq = i * binWidth;
+      const midi = 69 + 12 * Math.log2(freq / 440);
+      const pc = ((Math.round(midi) % 12) + 12) % 12;
+      chroma[pc] += mag;
+      if (i <= bassMaxBin) bassChroma[pc] += mag;
+    }
+    // Spectral flux (positive change vs previous frame)
+    const prev = listenerState.prevSpectrum[i] || 0;
+    if (mag > prev) flux += (mag - prev);
+    listenerState.prevSpectrum[i] = mag;
   }
-  // Normalize
+
+  // --- Onset detection: clear history when energy spikes (= new chord struck) ---
+  // EMA baseline; onset when this frame's flux is well above the moving average.
+  const fluxBaseline = listenerState.fluxAvg || 1e-6;
+  const onset = flux > Math.max(fluxBaseline * 2.5, 0.05);
+  listenerState.fluxAvg = 0.92 * listenerState.fluxAvg + 0.08 * flux;
+  if (onset && listenerState.history.length > 2) {
+    // Wipe rolling vote so the new chord locks in fast
+    listenerState.history = [];
+    listenerState.lockedKey = null;
+  }
+
+  // --- Bass note: dominant PC in the 70-180 Hz band ---
+  let bassMax = 0, bassPc = -1;
+  for (let i = 0; i < 12; i++) if (bassChroma[i] > bassMax) { bassMax = bassChroma[i]; bassPc = i; }
+  // Require the bass band to have meaningful energy AND the dominant PC to be clearly
+  // ahead of the 2nd-strongest in that band (otherwise it's just noise).
+  if (bassMax > 0) {
+    let secondMax = 0;
+    for (let i = 0; i < 12; i++) if (i !== bassPc && bassChroma[i] > secondMax) secondMax = bassChroma[i];
+    if (secondMax / bassMax > 0.7) bassPc = -1; // ambiguous — drop
+  } else {
+    bassPc = -1;
+  }
+  listenerState.bassPc = bassPc;
+
+  // Normalize chroma
   let maxVal = 0;
   for (let i = 0; i < 12; i++) if (chroma[i] > maxVal) maxVal = chroma[i];
   if (maxVal > 0) for (let i = 0; i < 12; i++) chroma[i] /= maxVal;
-  // Temporal smoothing
+
+  // --- Median smoothing over last 3 raw chroma frames (kills transient spikes) ---
+  listenerState.rawChromaHistory.push(chroma);
+  if (listenerState.rawChromaHistory.length > 3) listenerState.rawChromaHistory.shift();
+  const medChroma = new Float32Array(12);
+  if (listenerState.rawChromaHistory.length >= 3) {
+    for (let i = 0; i < 12; i++) {
+      const a = listenerState.rawChromaHistory[0][i];
+      const b = listenerState.rawChromaHistory[1][i];
+      const c = listenerState.rawChromaHistory[2][i];
+      medChroma[i] = (a > b) ? (b > c ? b : (a > c ? c : a)) : (a > c ? a : (b > c ? c : b));
+    }
+  } else {
+    medChroma.set(chroma);
+  }
+
+  // Temporal low-pass smoothing
   const alpha = 0.55;
   for (let i = 0; i < 12; i++) {
-    listenerState.smoothChroma[i] = alpha * chroma[i] + (1 - alpha) * listenerState.smoothChroma[i];
+    listenerState.smoothChroma[i] = alpha * medChroma[i] + (1 - alpha) * listenerState.smoothChroma[i];
   }
   const sChroma = listenerState.smoothChroma;
 
@@ -4229,19 +4326,19 @@ function listenerLoop() {
   renderListenerChroma(sChroma);
 
   // --- Detection ---
-  // If audio is too quiet, treat as silence — don't push to history
   const silent = level < 0.04 || maxVal < 0.001;
   let topResults = [];
   if (!silent) {
-    topResults = listenerScoreChroma(sChroma).slice(0, 4);
+    topResults = listenerScoreChroma(sChroma, bassPc).slice(0, 4);
     listenerState.history.push(topResults[0]);
     if (listenerState.history.length > listenerState.HISTORY_SIZE) listenerState.history.shift();
   } else {
-    // bleed history slowly
     if (listenerState.history.length > 0) listenerState.history.shift();
   }
 
-  // Pick the most-frequent top1 from history (majority vote weighted by score)
+  // --- Stable decision via weighted majority vote with hysteresis ---
+  // Hysteresis: when a chord is locked, only switch to a new candidate if it beats
+  // the locked one's tallied score by LISTENER_HYSTERESIS (10%). Prevents flicker.
   let stable = null;
   if (listenerState.history.length >= 4) {
     const tally = new Map();
@@ -4252,9 +4349,19 @@ function listenerLoop() {
     }
     let bestKey = null, bestVal = 0;
     for (const [k, v] of tally) { if (v > bestVal) { bestVal = v; bestKey = k; } }
+    // Apply hysteresis if we have a locked chord
+    const lockedKey = listenerState.lockedKey;
+    if (lockedKey && lockedKey !== bestKey && tally.has(lockedKey)) {
+      const lockedVal = tally.get(lockedKey);
+      if (bestVal < lockedVal * LISTENER_HYSTERESIS) {
+        bestKey = lockedKey;
+        bestVal = lockedVal;
+      }
+    }
     if (bestKey) {
       const [r, q] = bestKey.split(':');
       stable = { root: parseInt(r, 10), quality: q, score: bestVal / listenerState.history.length };
+      listenerState.lockedKey = bestKey;
     }
   }
 
@@ -4325,7 +4432,25 @@ function renderListenerDetected(chord, topResults) {
   const actionsEl = document.getElementById('listener-detected-actions');
   const wrap = document.getElementById('listener-detected');
   if (!nameEl || !chord) return;
-  nameEl.textContent = chord.name;
+  // Slash-chord notation when bass note is detected and differs from the root
+  const useFlats = shouldUseFlats(state.key, state.mode);
+  let displayName = chord.name;
+  let invLabel = '';
+  if (typeof listenerState !== 'undefined' && listenerState.bassPc >= 0) {
+    const bassNote = indexToNote(listenerState.bassPc, useFlats);
+    const rootIdx = noteIndex(chord.root);
+    if (rootIdx >= 0 && bassNote !== chord.root) {
+      displayName = chord.name + '/' + bassNote;
+      // Identify inversion: 1st (3rd in bass), 2nd (5th in bass)
+      const semFromRoot = (listenerState.bassPc - rootIdx + 12) % 12;
+      const ivIdx = chord.type.intervals.findIndex(iv => iv % 12 === semFromRoot);
+      if (ivIdx === 1) invLabel = ' · 1st inversion';
+      else if (ivIdx === 2) invLabel = ' · 2nd inversion';
+      else if (ivIdx === 3) invLabel = ' · 7th in bass';
+      else if (ivIdx < 0) invLabel = ' · slash chord';
+    }
+  }
+  nameEl.textContent = displayName;
   nameEl.classList.remove('is-empty');
   // Sub text: confidence + roman analysis if it fits the key
   const numeral = findRomanForChord(chord, state.key, state.mode);
@@ -4333,7 +4458,7 @@ function renderListenerDetected(chord, topResults) {
   const noteList = chord.notes.join(' · ');
   subEl.innerHTML = noteList +
     (numeral ? ' <span style="color:var(--accent-2);font-family:var(--font-mono);">[' + numeral + ' in ' + state.key + (state.mode === 'minor' ? 'm' : '') + ']</span>' : '') +
-    ' <span style="color:var(--muted);">· ' + conf + '% match</span>';
+    ' <span style="color:var(--muted);">· ' + conf + '% match' + invLabel + '</span>';
   actionsEl.style.display = 'flex';
   wrap.classList.add('is-stable');
   // Wire up action buttons
