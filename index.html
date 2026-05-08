@@ -50,25 +50,30 @@
     background: linear-gradient(180deg, #14141d 0%, #0b0b12 100%);
   }
   .header-row { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
-  .header-row.top h1 { flex: 1; min-width: 200px; font-size: 18px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 10px; }
-  .header-row.top h1 i { color: var(--accent); font-size: 22px; }
-  .brand-mark {
-    font-family: 'Space Grotesk', var(--font-sans);
-    font-weight: 700;
-    font-size: 24px;
-    letter-spacing: -1.2px;
-    color: var(--text);
-    background: linear-gradient(135deg, #ffffff 0%, #ebebf2 50%, var(--accent) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    line-height: 1;
-    padding-right: 2px;
+  .header-row.top h1 { flex: 1; min-width: 200px; font-size: 18px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+  .brand-link { display: inline-flex; align-items: center; line-height: 1; text-decoration: none; flex-shrink: 0; }
+  .brand-logo {
+    display: block;
+    height: 38px;
+    width: auto;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
   }
+  .brand-tagline {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 12.5px;
+    letter-spacing: 0;
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
+    align-self: center;
+  }
+  @media (max-width: 700px) { .brand-tagline { display: none; } }
   .header-row.middle { gap: 12px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.04); }
   .header-row.middle .control-group { flex: 0 0 auto; min-width: 0; }
   .header-row.middle .pill-group { flex: 1; min-width: 0; }
-  header h1 .accent { color: var(--accent); }
   .controls-right { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
   .transport-group { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 5px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; }
   .transport-group .control-group label { color: var(--text-2); font-size: 10.5px; }
@@ -585,12 +590,21 @@
   .listener-controls .primary:hover { filter: brightness(1.1); }
   .listener-view-controls .primary.is-listening,
   .listener-controls .primary.is-listening { background: var(--accent-2); }
-  .listener-status { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); }
+  .listener-status { font-size: 12px; color: var(--muted); font-family: var(--font-sans); display: inline-flex; align-items: center; gap: 6px; }
+  .listener-status::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
   .listener-status.is-active { color: var(--accent-2); }
+  .listener-status.is-active::before { background: var(--accent-2); box-shadow: 0 0 0 3px rgba(6,182,212,0.18); animation: listener-pulse 1.6s ease-in-out infinite; }
   .listener-status.is-error { color: #ff6b6b; }
+  .listener-status.is-error::before { background: #ff6b6b; }
+  @keyframes listener-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(6,182,212,0.18); }
+    50% { box-shadow: 0 0 0 6px rgba(6,182,212,0.06); }
+  }
 
-  .listener-meter-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-  .listener-meter { flex: 1; height: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; position: relative; }
+  /* Level meter — only visible while listening (toggled by .is-listening on the section) */
+  .listener-meter-row { display: none; align-items: center; gap: 10px; margin-bottom: 6px; }
+  #listener-view.is-listening .listener-meter-row { display: flex; }
+  .listener-meter { flex: 1; height: 6px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; position: relative; }
   .listener-meter-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.08s linear; }
   .listener-meter-label { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); width: 56px; text-align: right; }
 
@@ -644,7 +658,7 @@
 <body>
 <header>
   <div class="header-row top">
-    <h1><i class="ph-duotone ph-music-notes"></i> <span class="brand-mark">FYmuse</span> <small style="font-weight:400;color:var(--muted);font-size:13px;letter-spacing:0;margin-left:6px;font-family:var(--font-sans);">· chord progression finder</small></h1>
+    <h1><a href="#" class="brand-link" aria-label="FYmuse home"><img src="logo.png" alt="FYmuse" class="brand-logo"></a> <small class="brand-tagline">chord progression finder</small></h1>
     <div class="controls-right">
       <div class="header-tools">
         <button id="header-playground-btn" class="header-action-btn" title="Switch to Playground (every chord in the key)"><i class="ph-duotone ph-piano-keys"></i> Playground</button>
@@ -4210,6 +4224,8 @@ async function listenerStart() {
     btn.innerHTML = '<i class="ph-duotone ph-stop sz-sm"></i> Stop listening';
     status.textContent = 'listening…';
     status.className = 'listener-status is-active';
+    const lv = document.getElementById('listener-view');
+    if (lv) lv.classList.add('is-listening');
     listenerLoop();
   } catch (err) {
     console.error('[Listener] mic error', err);
@@ -4247,6 +4263,8 @@ function listenerStop() {
     status.textContent = 'mic off';
     status.className = 'listener-status';
   }
+  const lv = document.getElementById('listener-view');
+  if (lv) lv.classList.remove('is-listening');
   // Reset meter + UI
   const meter = document.getElementById('listener-meter-fill');
   if (meter) meter.style.width = '0%';
