@@ -4087,8 +4087,20 @@ const listenerState = {
   prevSpectrum: null,     // previous frame's linear-magnitude spectrum (for spectral flux)
   fluxAvg: 0,             // moving-avg spectral flux (onset baseline)
   lockedKey: null,        // 'root:quality' of the currently locked chord (for hysteresis)
+  // Tier-2/3 upgrades:
+  noteKernels: null,      // Precomputed log-frequency CQT-style kernels (per MIDI note)
+  noiseFloorEma: -60,     // Adaptive RMS noise floor in dB (EMA, capped)
+  tuningOffsetCents: 0,   // Estimated global tuning offset (cents); applied to PC mapping
+  tuningEma: 0,           // EMA for tuning offset before commit
+  tuningSamples: 0,       // Number of frames contributing to tuningEma (gates application)
+  topGap: 0,              // Last frame's top1 vs top2 score gap (0..1)
 };
 const LISTENER_HYSTERESIS = 1.10; // new candidate must beat locked one by 10% to switch
+const LISTENER_NOISE_MARGIN_DB = 6;       // dB above noise floor counts as "audio"
+const LISTENER_NOISE_FLOOR_MAX = -45;     // never let noise floor exceed this (dB)
+const LISTENER_NOISE_FLOOR_MIN = -90;     // floor for the floor
+const LISTENER_TUNING_MAX_CENTS = 50;     // cap tuning offset to +/- a quarter-tone
+const LISTENER_TUNING_MIN_FRAMES = 30;    // require this many frames before trusting tuning
 
 // Chord templates as 12-bin pitch-class vectors. Weights bias toward common shapes.
 const LISTENER_TEMPLATES = [
@@ -4214,6 +4226,12 @@ async function listenerStart() {
     listenerState.fluxAvg = 0;
     listenerState.bassPc = -1;
     listenerState.lockedKey = null;
+    listenerState.noiseFloorEma = -60;
+    listenerState.tuningOffsetCents = 0;
+    listenerState.tuningEma = 0;
+    listenerState.tuningSamples = 0;
+    listenerState.topGap = 0;
+    listenerState.noteKernels = buildListenerNoteKernels(ctx.sampleRate, fftAnalyser.fftSize);
     listenerState.active = true;
     btn.classList.add('is-listening');
     btn.innerHTML = '<i class="ph-duotone ph-stop sz-sm"></i> Stop listening';
@@ -4246,6 +4264,12 @@ function listenerStop() {
   listenerState.fluxAvg = 0;
   listenerState.bassPc = -1;
   listenerState.lockedKey = null;
+  listenerState.noteKernels = null;
+  listenerState.noiseFloorEma = -60;
+  listenerState.tuningOffsetCents = 0;
+  listenerState.tuningEma = 0;
+  listenerState.tuningSamples = 0;
+  listenerState.topGap = 0;
   listenerState.lastStable = null;
   listenerState.lastShown = null;
   const btn = document.getElementById('listener-toggle');
@@ -4268,6 +4292,35 @@ function listenerStop() {
   // Don't blow away last detected display — it's nice to keep visible after stop
 }
 
+// Pre-compute log-frequency kernels for each MIDI note in our detection band.
+// Each kernel is a list of (binIndex, weight) pairs; weight follows a triangular
+// profile centered on the note's frequency with ±50 cents half-width. This gives
+// us CQT-style log-frequency resolution (one slot per semitone) on top of the
+// linear FFT we already have, without a CPU-heavy DSP rewrite.
+const LISTENER_MIDI_LOW = 36;   // C2 (~65 Hz)
+const LISTENER_MIDI_HIGH = 84;  // C6 (~1046 Hz)
+function buildListenerNoteKernels(sampleRate, fftSize) {
+  const binWidth = sampleRate / fftSize;
+  const kernels = [];
+  for (let m = LISTENER_MIDI_LOW; m <= LISTENER_MIDI_HIGH; m++) {
+    const fCenter = 440 * Math.pow(2, (m - 69) / 12);
+    const fLow  = 440 * Math.pow(2, (m - 0.5 - 69) / 12);
+    const fHigh = 440 * Math.pow(2, (m + 0.5 - 69) / 12);
+    const binLow  = Math.max(1, Math.floor(fLow  / binWidth));
+    const binHigh = Math.min(fftSize / 2 - 1, Math.ceil(fHigh / binWidth));
+    const bins = [];
+    for (let i = binLow; i <= binHigh; i++) {
+      const fBin = i * binWidth;
+      if (fBin <= 0) continue;
+      const cents = 1200 * Math.log2(fBin / fCenter);
+      const w = Math.max(0, 1 - Math.abs(cents) / 50);
+      if (w > 0) bins.push([i, w]);
+    }
+    kernels.push({ midi: m, pc: ((m % 12) + 12) % 12, fCenter, bins });
+  }
+  return kernels;
+}
+
 function listenerLoop() {
   if (!listenerState.active || !listenerState.fftAnalyser) return;
   listenerState.fftAnalyser.getFloatFrequencyData(listenerState.fftBuffer);
@@ -4287,31 +4340,69 @@ function listenerLoop() {
   if (meter) meter.style.width = (level * 100).toFixed(1) + '%';
   if (meterLbl) meterLbl.textContent = (rmsDb > -90 ? rmsDb.toFixed(0) : '-∞') + ' dB';
 
-  // --- Chroma + bass + onset (single pass over the FFT bins) ---
+  // --- Spectral flux (single pass over FFT bins) ---
   const sr = listenerState.audioCtx.sampleRate;
   const N = listenerState.fftBuffer.length;
   const binWidth = sr / (2 * N);
-  const chroma = new Float32Array(12);
-  const bassChroma = new Float32Array(12);
   const minBin = Math.max(1, Math.floor(70 / binWidth));
   const maxBin = Math.min(N - 1, Math.floor(2200 / binWidth));
-  const bassMaxBin = Math.min(maxBin, Math.floor(180 / binWidth));
   let flux = 0;
+  let tuningWeightedCents = 0;
+  let tuningWeight = 0;
   for (let i = minBin; i <= maxBin; i++) {
     const db = listenerState.fftBuffer[i];
     let mag = 0;
     if (db >= -75) {
       mag = Math.pow(10, db / 20);
-      const freq = i * binWidth;
-      const midi = 69 + 12 * Math.log2(freq / 440);
-      const pc = ((Math.round(midi) % 12) + 12) % 12;
-      chroma[pc] += mag;
-      if (i <= bassMaxBin) bassChroma[pc] += mag;
+      // Tuning offset: how far this bin's frequency is from the nearest equal-tempered
+      // pitch, in cents. Weight by magnitude so loud peaks dominate.
+      if (mag > 0.01) {
+        const freq = i * binWidth;
+        const midiContinuous = 69 + 12 * Math.log2(freq / 440);
+        const cents = 100 * (midiContinuous - Math.round(midiContinuous));
+        tuningWeightedCents += cents * mag;
+        tuningWeight += mag;
+      }
     }
-    // Spectral flux (positive change vs previous frame)
     const prev = listenerState.prevSpectrum[i] || 0;
     if (mag > prev) flux += (mag - prev);
     listenerState.prevSpectrum[i] = mag;
+  }
+
+  // --- Tuning offset EMA (slow update, only on confident signal) ---
+  if (tuningWeight > 0.5) {
+    const frameOffset = tuningWeightedCents / tuningWeight;
+    listenerState.tuningEma = 0.96 * listenerState.tuningEma + 0.04 * frameOffset;
+    listenerState.tuningSamples = Math.min(200, listenerState.tuningSamples + 1);
+    if (listenerState.tuningSamples >= LISTENER_TUNING_MIN_FRAMES) {
+      let off = listenerState.tuningEma;
+      if (off > LISTENER_TUNING_MAX_CENTS) off = LISTENER_TUNING_MAX_CENTS;
+      else if (off < -LISTENER_TUNING_MAX_CENTS) off = -LISTENER_TUNING_MAX_CENTS;
+      listenerState.tuningOffsetCents = off;
+    }
+  }
+  const tuningOffsetSemis = listenerState.tuningOffsetCents / 100;
+
+  // --- Chroma + bass via log-frequency note kernels (CQT-style) ---
+  const chroma = new Float32Array(12);
+  const bassChroma = new Float32Array(12);
+  const kernels = listenerState.noteKernels;
+  if (kernels) {
+    for (const k of kernels) {
+      let energy = 0;
+      for (let j = 0; j < k.bins.length; j++) {
+        const bin = k.bins[j][0];
+        const w = k.bins[j][1];
+        const db = listenerState.fftBuffer[bin];
+        if (db < -75) continue;
+        energy += Math.pow(10, db / 20) * w;
+      }
+      if (energy <= 0) continue;
+      // Apply tuning offset by shifting which PC this kernel maps to
+      const pc = ((k.pc - Math.round(tuningOffsetSemis)) % 12 + 12) % 12;
+      chroma[pc] += energy;
+      if (k.fCenter <= 180) bassChroma[pc] += energy;
+    }
   }
 
   // --- Onset detection: clear history when energy spikes (= new chord struck) ---
@@ -4369,15 +4460,35 @@ function listenerLoop() {
   // Render chroma bars
   renderListenerChroma(sChroma);
 
+  // --- Adaptive noise floor: track the EMA of RMS during quiet frames so silence
+  // is judged relative to ambient room noise. Capped so it can never get pinned high.
+  if (rmsDb < listenerState.noiseFloorEma + 3) {
+    // Frame is near the floor → bleed the floor toward this RMS
+    listenerState.noiseFloorEma = 0.985 * listenerState.noiseFloorEma + 0.015 * rmsDb;
+  } else {
+    // Loud frame → very slow drift up so floor doesn't get pinned by sustained playing
+    listenerState.noiseFloorEma = 0.999 * listenerState.noiseFloorEma + 0.001 * Math.min(rmsDb, LISTENER_NOISE_FLOOR_MAX);
+  }
+  if (listenerState.noiseFloorEma > LISTENER_NOISE_FLOOR_MAX) listenerState.noiseFloorEma = LISTENER_NOISE_FLOOR_MAX;
+  if (listenerState.noiseFloorEma < LISTENER_NOISE_FLOOR_MIN) listenerState.noiseFloorEma = LISTENER_NOISE_FLOOR_MIN;
+  const silenceThreshDb = listenerState.noiseFloorEma + LISTENER_NOISE_MARGIN_DB;
+
   // --- Detection ---
-  const silent = level < 0.04 || maxVal < 0.001;
+  const silent = rmsDb < silenceThreshDb || maxVal < 0.001;
   let topResults = [];
   if (!silent) {
     topResults = listenerScoreChroma(sChroma, bassPc).slice(0, 4);
     listenerState.history.push(topResults[0]);
     if (listenerState.history.length > listenerState.HISTORY_SIZE) listenerState.history.shift();
+    // Honest confidence: gap between top-1 and top-2 (bigger gap = more locked-in)
+    if (topResults.length >= 2 && topResults[0].score > 0) {
+      listenerState.topGap = (topResults[0].score - topResults[1].score) / topResults[0].score;
+    } else {
+      listenerState.topGap = 0;
+    }
   } else {
     if (listenerState.history.length > 0) listenerState.history.shift();
+    listenerState.topGap = 0;
   }
 
   // --- Stable decision via weighted majority vote with hysteresis ---
@@ -4547,13 +4658,26 @@ function renderListenerDetected(chord, topResults) {
   }
   nameEl.textContent = displayName;
   nameEl.classList.remove('is-empty');
-  // Sub text: confidence + roman analysis if it fits the key
+  // Sub text: roman numeral + honest confidence label (based on top1 vs top2 gap)
   const numeral = findRomanForChord(chord, state.key, state.mode);
-  const conf = Math.max(0, Math.min(100, Math.round((chord.score || 0) * 100)));
+  const gap = (typeof listenerState !== 'undefined') ? listenerState.topGap : 0;
+  let confLabel, confColor;
+  if (gap >= 0.15)      { confLabel = 'locked in';  confColor = 'var(--success)'; }
+  else if (gap >= 0.05) { confLabel = 'stable';     confColor = 'var(--accent)'; }
+  else if (gap > 0)     { confLabel = 'ambiguous';  confColor = 'var(--dominant)'; }
+  else                  { confLabel = '—';           confColor = 'var(--muted)'; }
+  const gapPct = Math.round(gap * 100);
   const noteList = chord.notes.join(' · ');
+  // Optional tuning offset display (only shown when significant)
+  const tuningCents = (typeof listenerState !== 'undefined') ? listenerState.tuningOffsetCents : 0;
+  const tuningStr = (Math.abs(tuningCents) >= 8)
+    ? ' <span style="color:var(--muted);">· tuning ' + (tuningCents > 0 ? '+' : '') + Math.round(tuningCents) + '¢</span>'
+    : '';
   subEl.innerHTML = noteList +
     (numeral ? ' <span style="color:var(--accent-2);font-family:var(--font-mono);">[' + numeral + ' in ' + state.key + (state.mode === 'minor' ? 'm' : '') + ']</span>' : '') +
-    ' <span style="color:var(--muted);">· ' + conf + '% match' + invLabel + '</span>';
+    ' <span style="color:' + confColor + ';font-weight:600;">· ' + confLabel + (gap > 0 ? ' (Δ' + gapPct + '%)' : '') + '</span>' +
+    (invLabel ? ' <span style="color:var(--muted);">' + invLabel + '</span>' : '') +
+    tuningStr;
   actionsEl.style.display = 'flex';
   wrap.classList.add('is-stable');
   // Card body click → open chord detail (don't fire on action button clicks)
