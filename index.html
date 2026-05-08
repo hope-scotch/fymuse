@@ -60,17 +60,6 @@
     user-select: none;
     -webkit-user-drag: none;
   }
-  .brand-tagline {
-    font-family: var(--font-sans);
-    font-weight: 400;
-    color: var(--muted);
-    font-size: 12.5px;
-    letter-spacing: 0;
-    padding-left: 10px;
-    border-left: 1px solid var(--border);
-    align-self: center;
-  }
-  @media (max-width: 700px) { .brand-tagline { display: none; } }
   .header-row.middle { gap: 12px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.04); }
   .header-row.middle .control-group { flex: 0 0 auto; min-width: 0; }
   .header-row.middle .pill-group { flex: 1; min-width: 0; }
@@ -658,7 +647,7 @@
 <body>
 <header>
   <div class="header-row top">
-    <h1><a href="#" class="brand-link" aria-label="FYmuse home"><img src="logo.png" alt="FYmuse" class="brand-logo"></a> <small class="brand-tagline">chord progression finder</small></h1>
+    <h1><a href="#" class="brand-link" aria-label="FYmuse home"><img src="logo.png" alt="FYmuse" class="brand-logo"></a></h1>
     <div class="controls-right">
       <div class="header-tools">
         <button id="header-playground-btn" class="header-action-btn" title="Switch to Playground (every chord in the key)"><i class="ph-duotone ph-piano-keys"></i> Playground</button>
