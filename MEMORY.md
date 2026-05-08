@@ -1,0 +1,315 @@
+# FYMuse — Project Memory
+
+A single-file music theory and songwriting tool. Helps you explore chord progressions across genres, compose with rhythm subdivisions, write song sections with lyrics, and find connections between any two chords.
+
+Open `index.html` in any modern browser. No build step.
+
+---
+
+## File structure
+
+```
+FYMuse/
+├── index.html    # The whole app — single HTML file (~180KB)
+└── MEMORY.md     # This file
+```
+
+The HTML file contains everything: HTML structure, CSS, JS, music theory engine, audio synthesis, UI rendering. External dependencies are loaded from CDNs.
+
+---
+
+## External dependencies (CDN-loaded)
+
+- **Inter** + **JetBrains Mono** fonts → `fonts.googleapis.com`
+- **Phosphor Icons** (duotone style) → `unpkg.com/@phosphor-icons/web@2.1.1`
+- **Tone.js v14.8.49** → `cdnjs.cloudflare.com`
+- **Salamander piano samples** (only when "Piano" instrument selected) → `tonejs.github.io/audio/salamander/`
+
+Internet required on first load; thereafter the page works offline if cached.
+
+---
+
+## Top-level layout
+
+```
+┌─ HEADER ──────────────────────────────────────────────────┐
+│ Title │ [Playground][Path Finder][Melody Mode][Songwriter] │ Key │ Sound │
+│ Tempo Loop Metronome │ Genre pills (Pop, Rock, …)         │
+├─ MAIN ────────────────────────────────┬─ ASIDE ───────────┤
+│  GRAPH PANEL or PLAYGROUND VIEW       │  Mood filter      │
+│                                       │  Templates        │
+│  (depending on which view is active)  │  Chord detail     │
+│                                       │  Substitutions    │
+└────────────────────── BUILDER DRAWER ─┴───────────────────┘
+                                          │ Audio status
+```
+
+Plus three overlay panels:
+- **Songwriter shutter** slides down from below the header
+- **Path Finder** and **Melody Mode** slide in from the right edge as docked plugin-style side panels (mutually exclusive — opening one closes the other)
+
+---
+
+## Features
+
+### Genre Graph (default)
+10 genres: **Pop, Rock, Blues, Jazz, R&B/Soul, Country, EDM/House, Lo-fi/Hip-Hop, Bossa Nova, Gospel**.
+
+Each genre has:
+- **Chord nodes** positioned by harmonic function (tonic = orange, subdominant = cyan, dominant = red, borrowed = purple, passing/dim = grey)
+- **Weighted transition arrows** (thicker = more common move in this genre)
+- **Signature progressions** with example songs and mood tags
+- **Substitutions / modal interchange tips**
+
+Hover any chord → its outgoing arrows highlight orange, incoming cyan, unrelated arrows dim. Click → locks the focus and opens the chord detail panel in the right sidebar. Click empty space to unlock.
+
+"Walk the graph" button does a weighted random walk through 8 chords ending on tonic.
+
+### Playground (own header button — not a genre)
+Every musically useful chord in the current key, organized by category:
+- **Diatonic Triads / Diatonic 7ths / Extensions (9th-13th) / Suspended (sus2-sus4)**
+- **Borrowed from Parallel Minor** (or **Parallel Major** + **Harmonic Minor Color** if in minor mode)
+- **Secondary Dominants** (each labeled with its target chord)
+- **Chromatic / Advanced** (tritone subs, passing diminished)
+
+Mode-aware: switching to a minor key (e.g. "A minor") changes the diatonic categories to use natural-minor numerals (`i`, `ii°`, `III`, `iv`, `v`, `VI`, `VII`).
+
+Each card has a quick-add **+** button on hover that pushes the chord to the Builder without opening the detail panel.
+
+### Builder (bottom drawer)
+- Queue of chord chips with **rhythm subdivisions** (whole, dotted half, half, dotted quarter, quarter, dotted 8th, 8th, triplet 8th, 16th, triplet 16th)
+- Each chip has a rhythm dropdown that sets the chord's duration
+- **𝄽 Rest button** inserts a silent gap with the same rhythm options
+- **Drag chips left/right** to reorder
+- **× to remove**
+- Three drawer states: **collapsed** (40px tab) → **expanded** (320px) → **fullscreen** (75vh)
+- Tab summary shows queue preview, audio status, and Play button
+
+### Songwriter (top shutter)
+- Slides down from below the header (cubic-bezier 0.32s)
+- **+ Save current Builder as section** auto-names ("Verse 1", "Chorus", "Verse 2", "Chorus", "Bridge", …)
+- **+ Empty section** for blank slate
+- Each section has:
+  - Editable name input
+  - Chord progression display (chord names + rhythm in parens if non-default)
+  - **▶** play, **+ Append** Builder queue, **↑ Load** into Builder, **× Delete** buttons
+  - **Lyrics textarea** with `[ChordName]` markup
+  - **Live preview** showing chords above words (chord markers parsed via `romanToChord` so `[ii7]` in C major shows as `Dm7`)
+- Backdrop dimmer behind it, ESC / X / backdrop click closes
+
+### Path Finder (right side panel)
+- Pick chord A and chord B from dropdowns
+- Returns 6 path templates between them:
+  1. **Direct** — A → B
+  2. **V7 setup** — A → V7-of-B → B
+  3. **ii–V approach** — A → ii-of-B → V7-of-B → B
+  4. **Tritone substitution** — A → ♭II7-of-B → B
+  5. **Chromatic mediant** — A → major-third-up-of-A → B
+  6. **Diminished passing** — A → ♯IVdim7-of-B → B
+- Each card has Play / + Builder buttons
+- Adding to Builder converts each concrete chord back to a Roman numeral relative to the current key+mode (via `findRomanForChord`) so the queue retransposes if you change keys
+
+### Melody Mode (right side panel)
+- Type space-separated melody notes (e.g. `C D A B`)
+- For each note, get up to 7 chord candidates ranked by:
+  - **Diatonic-fit** (chord whose root is in the current scale scores higher)
+  - **Voice leading** (shared notes with the previously picked chord)
+  - **Chord type** (triads/7ths preferred over diminished)
+- Pick chords sequentially; finalize pushes them all to the Builder
+
+### Sound (8 instruments)
+| Name | Implementation |
+|------|----------------|
+| Synth (triangle) | `PolySynth(Synth)` triangle oscillator |
+| Piano (sampled) | `Sampler` with Salamander piano samples |
+| Electric Piano | `PolySynth(FMSynth)` bell-like envelope |
+| Acoustic Guitar | `PolySynth(Synth)` fatsawtooth + filter + light reverb (synth pluck simulation) |
+| Clean Electric Guitar | synth → light overdrive → cab filter → EQ → chorus → spring reverb |
+| Strings (ensemble) | 4 detuned saws → filter → chorus → hall reverb |
+| Organ | `PolySynth(Synth)` sine + sustained envelope |
+| Distorted Guitar (Muse/LP) | synth → heavy distortion → HP → cab sim → smile-curve EQ → compressor → plate reverb → limiter |
+
+Each factory disposes its own effect chain on instrument switch.
+
+### Transport (header)
+- **Tempo slider** 50–200 BPM (orange accent)
+- **Loop checkbox**
+- **Metronome button** with pulse indicator (red dot on downbeat / orange on other beats; high pitch C5 on beat 1, low pitch G4 on beats 2-3-4)
+
+### Metronome sync
+When the metronome is running and you hit Play (anywhere — Builder, signature progression card, song section, path finder card, walk-the-graph), playback waits for the metronome's next downbeat (the "1") so the progression locks to the click. If the metronome is off, playback starts immediately (Tone.now() + 100ms).
+
+Implementation: `metronomeState.startTime` records the Tone clock time at which the metronome's first beat fired; `nextDownbeatToneTime()` computes the next multiple-of-4 beat from there; `playProgression` uses it as `startTime` if no explicit `startAt` option is provided.
+
+---
+
+## Music theory engine
+
+### Constants
+```js
+NOTES_SHARP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+NOTES_FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B']
+MAJOR_INTERVALS = [0,2,4,5,7,9,11]
+MINOR_INTERVALS = [0,2,3,5,7,8,10]   // natural minor
+```
+
+### Chord types
+`CHORD_TYPES` map: '', 'm', 'dim', 'aug', '7', 'maj7', 'm7', 'm7b5', 'dim7', 'sus2', 'sus4', '7sus4', '9', 'maj9', 'm9', '13', '7alt' — each with `intervals` (semitones from root) and `label`.
+
+### Roman numeral parsing
+- `parseRoman(numeral)` → `{ degree, accidental, quality }`
+  - Handles `♭`/`b` and `♯`/`#` prefixes (multi-character supported)
+  - Roman match: `I`, `II`, `III`, `IV`, `V`, `VI`, `VII` (uppercase = major default, lowercase = minor default)
+  - Suffix patterns: `°`, `dim`, `dim7`, `°7`, `ø`, `m7b5`, `maj7`, `maj9`, `m7`, `m9`, `13`, `9`, `7sus4`, `7alt`, `7`, `sus2`, `sus4`
+- `romanToChord(numeral, key, mode)` → `{ root, quality, type, notes, name, numeral }`
+  - Picks `MAJOR_INTERVALS` or `MINOR_INTERVALS` based on `mode` (defaults to `state.mode`)
+  - Adds parsed accidental
+  - Resolves to absolute root note
+  - `shouldUseFlats(key, mode)` decides accidental spelling per key signature
+- `findRomanForChord(chord, key, mode)` reverse-engineers a numeral string from a concrete chord (used when adding Path Finder / Melody Mode chords to the Builder so they retranspose when key changes)
+
+### Voicings
+- **Piano**: `pianoVoicings(chord)` returns array of `{ name, notes: [midi] }`. Variants: root position, 1st inv, 2nd inv, open/spread (with bass an octave below), shell (R-3-7) for chords with a 7th, rootless (3-5-7-9) for 5-note chords, power chord (R-5-R)
+- **Guitar**: `guitarVoicings(chord)` uses CAGED-style shape library `GUITAR_SHAPES` keyed by chord quality. Shapes have `refRoot` + `pattern` (6 frets, low E to high e). Transposed via `transposeShape(shape, targetRoot)` which adds the offset. Power chord shapes always appended to output.
+- **Guitar diagram orientation**: horizontal flip — nut on the right, low E on top, frets count right-to-left (player's-eye view of own neck)
+
+---
+
+## State
+
+### `state` (top-level UI state)
+- `genreKey`: 'pop' | 'rock' | … | 'playground'
+- `genre`: reference to GENRES[genreKey]
+- `key`: 'C' | 'C#' | 'D' | … | 'B'
+- `mode`: 'major' | 'minor'
+- `selectedChord`: numeral string or null (for chord detail / graph focus)
+- `selectedMoods`: Set of mood tag strings
+- `voicingMode`: 'piano' | 'guitar'
+- `voicingIndex`: 0..N (which voicing variant is shown)
+
+### `builderState`
+- `queue`: array of `{ numeral: string, rhythm: string }` or `{ rest: true, rhythm: string }`
+- `bpm`: number (50..200)
+- `loop`: boolean
+- `playing`: boolean (set during active playback)
+- `clickMode`: legacy field (always 'inspect' now — mode toggle was removed)
+
+### `songState`
+- `sections`: array of `{ id, name, chords: [...same as builder queue], lyrics: string }`
+- `nextId`: incrementing section ID
+
+### `metronomeState`
+- `active`: boolean
+- `intervalId`: setInterval handle
+- `click`: Tone.MembraneSynth instance
+- `beat`: counter
+- `startTime`: Tone clock time of first beat (used for sync)
+
+### `melodyState`
+- `notes`: array of note name strings
+- `selections`: array of chord objects (one per note, null until picked)
+
+---
+
+## Audio architecture
+
+`playProgression(items, key, bpm, options)` is the central audio function.
+- `items` accepts: array of Roman numeral strings, queue items `{numeral, rhythm}` or `{rest, rhythm}`, concrete chord objects (from Path Finder), or any mix
+- Resolves each via `resolve(item)` to a chord object
+- Schedules audio with `Tone.now() + offset` for sample-accurate timing (cumulative `loopOffset`)
+- Schedules highlight callbacks via `setTimeout` (real time, NOT cumulative — each iteration's setTimeout is from its call time)
+- `options.startAt` overrides start time (used for metronome sync)
+- `options.loop` reschedules a new iteration when the cycle ends
+- `activeEvents` tracks all setTimeout IDs for cancellation via `stopAllAudio()`
+
+### Per-chord rhythm
+`RHYTHMS` map defines beat-duration per rhythm key:
+- `whole` (4 beats), `dot_half` (3), `half` (2), `dot_qtr` (1.5), `quarter` (1), `dot_8th` (0.75), `8th` (0.5), `trip_8th` (1/3), `16th` (0.25), `trip_16` (1/6)
+
+A chord's audio scheduling: `dur = rhythm.beats * beatSec`, plays once at `startTime + cumOffset` for `dur * 0.95` (slight gap for articulation).
+
+---
+
+## Render functions
+
+| Function | Purpose |
+|----------|---------|
+| `renderAll()` | Full re-render — called on most state changes. Cascades to all sub-renders. |
+| `renderGenrePicker()` | Header pills (skips 'playground') |
+| `renderKeyPicker()` | 24 entries: 12 keys × {major, minor} |
+| `renderInstrumentPicker()` | Sound dropdown |
+| `syncHeaderButtonStates()` | Toggle .active on Playground button |
+| `renderGraph()` | SVG chord graph for current genre |
+| `renderPlayground()` | Chord palette categories |
+| `renderMoods()` / `renderProgressions()` / `renderChordDetail()` / `renderSubstitutions()` | Sidebar sections |
+| `renderBuilder()` | Bottom drawer queue chips |
+| `renderSongwriter()` | Songwriter shutter sections |
+| `renderPathList()` / `renderMelodySteps()` | Side panel content |
+
+---
+
+## One-time setup functions (called at init)
+
+```
+renderAll();
+setupDrawer();        // bottom drawer toggle/expand/fullscreen
+setupMelodyMode();    // generate-button + finalize-button handlers
+setupSongwriter();    // shutter open/close + section action wiring
+setupMetronome();     // metronome button click handler
+setupCollapsibles();  // any .collapsible-section (currently unused after refactor)
+setupHeaderButtons(); // playground button + side panel toggles + ESC handler
+bindModeButtons();    // legacy no-op
+```
+
+---
+
+## Recent change history (newest first)
+
+- Removed yellow focus banner that appeared on chord hover/click
+- Playground extracted from genre picker into its own header tool button
+- Path Finder + Melody Mode became right slide-in panels (mutually exclusive, with backdrop + ESC)
+- Songwriter became a top shutter (was a bottom collapsible before)
+- Builder drawer now has fullscreen mode (75vh) in addition to collapsed/expanded
+- Tempo, Loop, Metronome moved from drawer to header transport bar
+- Removed Add-to-Builder mode toggle (always inspect on click; use + button on cards or detail panel to add)
+- Phosphor duotone icons replacing emojis throughout
+- Inter (display) + JetBrains Mono (code) typography upgrade with refined color palette
+- Custom thin scrollbars
+- Per-chord rhythm subdivisions — each chord has duration in beats, not internal repeats
+- Rest chip support — silent gaps with same rhythm options
+- "+ Append" button per song section (multiple builder queues per section)
+- Lyrics chord markers display as actual chord names (parsed via romanToChord)
+- Drag-to-reorder chips in Builder
+- Loop fix — sync timing was drifting due to cumulative setTimeout delays; setTimeouts are now per-iteration
+- Metronome sync — Play waits for next downbeat when metronome is running
+- Acoustic Guitar rebuilt without PluckSynth (which had compat issues in Tone v14)
+- setInstrument volume override removed (each factory sets its own headroom)
+- Minor key support — 12 minor keys + scale-aware roman numeral resolution
+- Guitar fretboard horizontally flipped — nut on right, low E on top
+- Path Finder + Melody Mode + Songwriter algorithms
+- Build-your-own progression with quick-add and drag-reorder
+- 8 instruments via Tone.js (synth + sampler + custom signal chains)
+- Chord graph hover-focus (dim unrelated edges)
+- 10 genres with full data (chords, transitions, progressions, substitutions, moods)
+
+---
+
+## Known limitations / future ideas
+
+- **No persistence** — everything in-memory per session. No save/load to disk or localStorage.
+- **No undo/redo** — destructive actions (Clear, Delete) are immediate.
+- **No MIDI export** — would be valuable for getting progressions into a DAW.
+- **Mobile not optimized** — works narrow but not ergonomic.
+- **Single open side panel** — Path Finder and Melody Mode are mutually exclusive.
+- **Genre Graph in minor mode** is "best effort" — genres are authored with major-key Roman numerals, so switching to minor reinterprets degrees with minor scale spacing; some chord choices look unusual.
+- **No tempo automation** — single BPM per progression.
+- **Loop drift in non-4-beat progressions** — if the cycle's total duration isn't a multiple of 4 beats, looping won't stay locked to the metronome across iterations.
+
+Reasonable next features:
+- localStorage persistence of song sections + builder state
+- MIDI export (`.mid` download)
+- Light theme toggle
+- Undo/redo stack
+- Mobile responsive tuning
+- Onboarding tour overlay
+- Save/load `.fymuse` JSON project files
