@@ -82,8 +82,10 @@
   select:hover { border-color: var(--border-light); }
   select.bold { border-color: var(--accent); font-weight: 600; }
 
-  main { flex: 1; display: grid; grid-template-columns: 1fr 410px; gap: 0; overflow: hidden; min-height: 0; }
-  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  main { flex: 1; display: flex; flex-direction: row; gap: 0; overflow-x: auto; overflow-y: hidden; min-height: 0; }
+  #graph-panel { flex: 1 1 700px; min-width: 600px; }
+  main > aside:not(.side-panel) { flex: 0 0 410px; }
+  @media (max-width: 1100px) { main { flex-direction: column; overflow-x: hidden; } main > aside:not(.side-panel) { flex: 0 0 auto; } }
 
   #graph-panel { padding: 24px 28px; overflow: auto; background: radial-gradient(ellipse at center top, #181822 0%, var(--bg) 60%); }
 
@@ -97,8 +99,9 @@
 
   .panel-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
 
-  main > aside { background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-  @media (max-width: 1100px) { main > aside { border-left: none; border-top: 1px solid var(--border); } }
+  main > aside:not(.side-panel) { background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; transition: flex-basis 0.32s cubic-bezier(0.4,0,0.2,1), padding 0.32s, border-left-width 0.32s; }
+  main > aside:not(.side-panel).collapsed { flex: 0 0 0 !important; padding: 18px 0; border-left-width: 0; overflow: hidden; }
+  @media (max-width: 1100px) { main > aside:not(.side-panel) { border-left: none; border-top: 1px solid var(--border); } }
 
   .section { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
 
@@ -333,17 +336,11 @@
   .header-tools .header-action-btn.active { background: var(--accent); color: #1a1a1a; }
   .header-tools .header-action-btn#header-songwriter-btn.active { background: var(--accent-2); color: #0a0a10; }
 
-  /* === Right side panels (Path Finder, Melody Mode) — slide in from right like IDE plugins === */
-  .side-panel-backdrop {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.4);
-    z-index: 90;
-    opacity: 0; pointer-events: none;
-    transition: opacity 0.25s ease;
-  }
-  .side-panel-backdrop.open { opacity: 1; pointer-events: auto; }
+  /* === Right side panels (Path Finder, Melody Mode) — fixed-position overlays from the right.
+        They do NOT shrink the main panel — they overlay the right side, mutually exclusive. */
   .side-panel {
-    position: fixed; top: 0; right: 0; bottom: 0;
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
     width: 460px;
     max-width: 92vw;
     background: var(--panel);
@@ -359,7 +356,7 @@
   .side-panel-header h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.3px; display: flex; align-items: center; gap: 10px; }
   .side-panel-header h2 i { color: var(--accent-2); font-size: 22px; }
   .side-panel-header h2 small { font-weight: 400; color: var(--muted); font-size: 12.5px; letter-spacing: 0; }
-  .side-panel-close { padding: 7px 9px; background: var(--panel); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+  .side-panel-close { padding: 7px 9px; background: var(--panel); border: 1px solid var(--border); color: var(--muted); border-radius: 6px; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
   .side-panel-close:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
   .side-panel-body { padding: 16px 18px; overflow-y: auto; flex: 1; }
 
@@ -405,10 +402,13 @@
     background: var(--panel);
     border-top: 1px solid var(--accent-2);
     z-index: 100;
-    transition: height 0.25s cubic-bezier(0.4,0,0.2,1);
+    transition: height 0.25s cubic-bezier(0.4,0,0.2,1), right 0.32s cubic-bezier(0.4,0,0.2,1);
     overflow: hidden;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.55);
   }
+  /* When a side panel is open, builder shrinks to leave room for it (side panels take width preference) */
+  body.side-panel-open #builder-drawer { right: 460px; }
+  @media (max-width: 600px) { body.side-panel-open #builder-drawer { right: 92vw; } }
   #builder-drawer.collapsed { height: 40px; }
   #builder-drawer:not(.collapsed):not(.fullscreen) { height: 320px; }
   #builder-drawer.fullscreen { height: 75vh; }
@@ -536,6 +536,7 @@
         <button id="header-pathfinder-btn" class="header-action-btn" title="Open Path Finder · A → B"><i class="ph-duotone ph-arrows-merge"></i> Path Finder</button>
         <button id="header-melody-btn" class="header-action-btn" title="Open Melody Mode · note-by-note"><i class="ph-duotone ph-music-note"></i> Melody Mode</button>
         <button id="header-songwriter-btn" class="header-action-btn" title="Open Songwriter shutter"><i class="ph-duotone ph-note-pencil"></i> Songwriter</button>
+        <button id="header-sidebar-btn" class="header-action-btn active" title="Toggle reference sidebar (templates, chord detail, substitutions)"><i class="ph-duotone ph-sidebar-simple"></i> Sidebar</button>
       </div>
       <div class="control-group">
         <label>Key</label>
@@ -589,7 +590,7 @@
 
   </section>
 
-  <aside>
+  <aside id="info-sidebar">
     <div class="section" id="mood-section">
       <div class="panel-title">Mood Filter</div>
       <div class="mood-chips" id="mood-chips"></div>
@@ -634,6 +635,40 @@
       <div class="sub-list" id="sub-list"></div>
     </div>
   </aside>
+
+  <!-- Side panels: now part of the main flex row (not overlays). Each takes its own column when open. -->
+  <aside id="path-finder-panel" class="side-panel">
+    <div class="side-panel-header">
+      <h2><i class="ph-duotone ph-arrows-merge"></i> Path Finder <small>· A → B</small></h2>
+      <button class="side-panel-close" data-panel="path-finder-panel" title="Close"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div class="side-panel-body">
+      <div class="help-text" style="margin-top:0;margin-bottom:10px;">Pick a starting chord and a destination — get different ways to connect them with V7 setups, ii–V approaches, tritone subs, and more.</div>
+      <div class="path-finder-controls">
+        <select id="path-from"></select>
+        <span class="arrow-text">→</span>
+        <select id="path-to"></select>
+        <button id="path-find-btn">Find</button>
+      </div>
+      <div id="path-list"></div>
+    </div>
+  </aside>
+
+  <aside id="melody-mode-panel" class="side-panel">
+    <div class="side-panel-header">
+      <h2><i class="ph-duotone ph-music-note"></i> Melody Mode <small>· note-by-note</small></h2>
+      <button class="side-panel-close" data-panel="melody-mode-panel" title="Close"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div class="side-panel-body">
+      <div class="help-text" style="margin-top:0;margin-bottom:10px;">Type your melody notes (space-separated). For each note, pick a chord — voice-leading suggestions update as you go.</div>
+      <div class="melody-input-row">
+        <input type="text" id="melody-input" placeholder="e.g., C D A B" value="C D A B">
+        <button id="melody-go-btn">Generate steps</button>
+      </div>
+      <div id="melody-steps"></div>
+      <button class="melody-finalize" id="melody-finalize" disabled>+ Add picked chords to Builder</button>
+    </div>
+  </aside>
 </main>
 
 <!-- Top shutter: Songwriter (slides down from below the header) -->
@@ -652,41 +687,6 @@
     <div id="song-sections"></div>
   </div>
 </div>
-
-<!-- Right side panels: Path Finder & Melody Mode (slide in from right like IDE plugins) -->
-<div id="side-panel-backdrop" class="side-panel-backdrop"></div>
-<aside id="path-finder-panel" class="side-panel">
-  <div class="side-panel-header">
-    <h2><i class="ph-duotone ph-arrows-merge"></i> Path Finder <small>· A → B</small></h2>
-    <button class="side-panel-close" data-panel="path-finder-panel" title="Close"><i class="ph-duotone ph-x"></i></button>
-  </div>
-  <div class="side-panel-body">
-    <div class="help-text" style="margin-top:0;margin-bottom:10px;">Pick a starting chord and a destination — get different ways to connect them with V7 setups, ii–V approaches, tritone subs, and more.</div>
-    <div class="path-finder-controls">
-      <select id="path-from"></select>
-      <span class="arrow-text">→</span>
-      <select id="path-to"></select>
-      <button id="path-find-btn">Find</button>
-    </div>
-    <div id="path-list"></div>
-  </div>
-</aside>
-
-<aside id="melody-mode-panel" class="side-panel">
-  <div class="side-panel-header">
-    <h2><i class="ph-duotone ph-music-note"></i> Melody Mode <small>· note-by-note</small></h2>
-    <button class="side-panel-close" data-panel="melody-mode-panel" title="Close"><i class="ph-duotone ph-x"></i></button>
-  </div>
-  <div class="side-panel-body">
-    <div class="help-text" style="margin-top:0;margin-bottom:10px;">Type your melody notes (space-separated). For each note, pick a chord — voice-leading suggestions update as you go.</div>
-    <div class="melody-input-row">
-      <input type="text" id="melody-input" placeholder="e.g., C D A B" value="C D A B">
-      <button id="melody-go-btn">Generate steps</button>
-    </div>
-    <div id="melody-steps"></div>
-    <button class="melody-finalize" id="melody-finalize" disabled>+ Add picked chords to Builder</button>
-  </div>
-</aside>
 
 <!-- Bottom drawer: Builder (toggleable like an IDE terminal) -->
 <div id="builder-drawer" class="collapsed">
@@ -3133,15 +3133,21 @@ function setupHeaderButtons() {
       renderAll();
     };
   }
-  // Side panels
+  // Side panels (inline now — toggle classes only, no backdrop)
   setupSidePanelToggle('header-pathfinder-btn', 'path-finder-panel');
   setupSidePanelToggle('header-melody-btn', 'melody-mode-panel');
-  // Backdrop dismisses
-  const backdrop = document.getElementById('side-panel-backdrop');
-  if (backdrop) backdrop.onclick = closeAllSidePanels;
-  // X buttons inside panels
+  // Reference sidebar toggle
+  const sidebarBtn = document.getElementById('header-sidebar-btn');
+  const sidebar = document.getElementById('info-sidebar');
+  if (sidebarBtn && sidebar) {
+    sidebarBtn.onclick = () => {
+      const collapsed = sidebar.classList.toggle('collapsed');
+      sidebarBtn.classList.toggle('active', !collapsed);
+    };
+  }
+  // X buttons inside panels close only that panel (each uses data-panel)
   document.querySelectorAll('.side-panel-close').forEach(btn => {
-    btn.onclick = () => closeAllSidePanels();
+    btn.onclick = () => closeSidePanel(btn.dataset.panel);
   });
   // ESC closes any open side panel
   document.addEventListener('keydown', (e) => {
@@ -3155,9 +3161,20 @@ function setupSidePanelToggle(btnId, panelId) {
   if (!btn || !panel) return;
   btn.onclick = () => {
     const isOpen = panel.classList.contains('open');
-    closeAllSidePanels();
+    closeAllSidePanels();        // mutually exclusive — close any other open panel first
     if (!isOpen) openSidePanel(panelId);
   };
+}
+
+function closeSidePanel(panelId) {
+  const panel = document.getElementById(panelId);
+  if (panel) panel.classList.remove('open');
+  const btnId = PANEL_TO_BTN[panelId];
+  if (btnId) {
+    const b = document.getElementById(btnId);
+    if (b) b.classList.remove('active');
+  }
+  syncBodyPanelState();
 }
 
 const PANEL_TO_BTN = {
@@ -3165,17 +3182,21 @@ const PANEL_TO_BTN = {
   'melody-mode-panel': 'header-melody-btn',
 };
 
+function syncBodyPanelState() {
+  // Mirror "any side panel is open" onto <body> so layout (e.g., builder width) can react via CSS
+  document.body.classList.toggle('side-panel-open', !!document.querySelector('.side-panel.open'));
+}
+
 function openSidePanel(panelId) {
   const panel = document.getElementById(panelId);
-  const backdrop = document.getElementById('side-panel-backdrop');
   if (!panel) return;
   panel.classList.add('open');
-  if (backdrop) backdrop.classList.add('open');
   const btnId = PANEL_TO_BTN[panelId];
   if (btnId) {
     const btn = document.getElementById(btnId);
     if (btn) btn.classList.add('active');
   }
+  syncBodyPanelState();
 }
 
 function closeAllSidePanels() {
@@ -3184,8 +3205,7 @@ function closeAllSidePanels() {
     const b = document.getElementById(btnId);
     if (b) b.classList.remove('active');
   });
-  const backdrop = document.getElementById('side-panel-backdrop');
-  if (backdrop) backdrop.classList.remove('open');
+  syncBodyPanelState();
 }
 
 // Reflects current view in the header button states

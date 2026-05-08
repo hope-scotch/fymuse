@@ -32,21 +32,28 @@ Internet required on first load; thereafter the page works offline if cached.
 ## Top-level layout
 
 ```
-┌─ HEADER ──────────────────────────────────────────────────┐
-│ Title │ [Playground][Path Finder][Melody Mode][Songwriter] │ Key │ Sound │
-│ Tempo Loop Metronome │ Genre pills (Pop, Rock, …)         │
-├─ MAIN ────────────────────────────────┬─ ASIDE ───────────┤
-│  GRAPH PANEL or PLAYGROUND VIEW       │  Mood filter      │
-│                                       │  Templates        │
-│  (depending on which view is active)  │  Chord detail     │
-│                                       │  Substitutions    │
-└────────────────────── BUILDER DRAWER ─┴───────────────────┘
-                                          │ Audio status
+┌─ HEADER ─────────────────────────────────────────────────────────────────────┐
+│ Title │ [Playground][Path Finder][Melody Mode][Songwriter][Sidebar] │ Key │ Sound │
+│ Tempo Loop Metronome │ Genre pills (Pop, Rock, …)                          │
+├─ MAIN ────────────────────────────────────────────────┬─ INFO SIDEBAR ──────┤
+│  GRAPH PANEL or PLAYGROUND VIEW                       │  Mood filter        │
+│  (main panel — does NOT shrink when side panels open) │  Signature progs    │
+│                                                       │  Chord detail       │
+│                                                       │  Substitutions      │
+├──────────── BUILDER DRAWER (right edge moves to 460px ┴──────────────┬──────┤
+│             when a side panel is open) ──────────────────────────────│      │
+└──────────────────────────────────────────────────────────────────────┴──────┘
 ```
 
-Plus three overlay panels:
-- **Songwriter shutter** slides down from below the header
-- **Path Finder** and **Melody Mode** slide in from the right edge as docked plugin-style side panels (mutually exclusive — opening one closes the other)
+Three overlay panels (sit on top of the main layout, fixed-position):
+- **Songwriter shutter** slides down from below the header (top overlay)
+- **Path Finder** and **Melody Mode** slide in from the right edge as 460px-wide overlays — **mutually exclusive** (only one open at a time). They overlay the right side without shrinking the main panel.
+
+Toggleable layout columns:
+- **Info Sidebar** (right column, inline) — hidden/shown via the "Sidebar" header button. When hidden, main panel reflows wider.
+- **Builder Drawer** (bottom, fixed) — collapsed (40px tab) → expanded (320px) → fullscreen (75vh). When a side panel is open, the builder's right edge shrinks to 460px so the side panel and builder don't overlap.
+
+Layout precedence: side panels (Path Finder / Melody Mode) > info sidebar > main panel > builder. Side panels keep their fixed 460px regardless. Main panel never shrinks because of side panels (they're overlays). Builder defers to side panels.
 
 ---
 
@@ -97,7 +104,9 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
   - **Live preview** showing chords above words (chord markers parsed via `romanToChord` so `[ii7]` in C major shows as `Dm7`)
 - Backdrop dimmer behind it, ESC / X / backdrop click closes
 
-### Path Finder (right side panel)
+### Path Finder (right-side overlay panel)
+- Toggled from the header button (mutually exclusive with Melody Mode)
+- 460px fixed-position overlay sliding from the right
 - Pick chord A and chord B from dropdowns
 - Returns 6 path templates between them:
   1. **Direct** — A → B
@@ -109,13 +118,21 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
 - Each card has Play / + Builder buttons
 - Adding to Builder converts each concrete chord back to a Roman numeral relative to the current key+mode (via `findRomanForChord`) so the queue retransposes if you change keys
 
-### Melody Mode (right side panel)
+### Melody Mode (right-side overlay panel)
+- Toggled from the header button (mutually exclusive with Path Finder)
+- 460px fixed-position overlay sliding from the right
 - Type space-separated melody notes (e.g. `C D A B`)
 - For each note, get up to 7 chord candidates ranked by:
   - **Diatonic-fit** (chord whose root is in the current scale scores higher)
   - **Voice leading** (shared notes with the previously picked chord)
   - **Chord type** (triads/7ths preferred over diminished)
 - Pick chords sequentially; finalize pushes them all to the Builder
+
+### Info Sidebar (right-side inline column, toggleable)
+- Toggled from the "Sidebar" header button (visible by default)
+- Contains: Mood Filter (genre views only) → Signature Progressions / Common Templates → Chord Detail (when a chord is selected) → Substitutions & Modal Interchange
+- When hidden via toggle, `main > aside:not(.side-panel).collapsed` collapses to `flex-basis: 0`, animated, and the main panel reflows to fill the freed space
+- Independent from Path Finder / Melody Mode — they can all be visible simultaneously (side panels overlay on top of the sidebar in that case; toggle the sidebar off to see only the side panel)
 
 ### Sound (8 instruments)
 | Name | Implementation |
@@ -186,6 +203,12 @@ MINOR_INTERVALS = [0,2,3,5,7,8,10]   // natural minor
 - `selectedMoods`: Set of mood tag strings
 - `voicingMode`: 'piano' | 'guitar'
 - `voicingIndex`: 0..N (which voicing variant is shown)
+
+### Layout state (DOM-driven, not in a JS object)
+- `body.side-panel-open` class — set when any `.side-panel` has the `.open` class. Controls builder shrinking via CSS.
+- `#info-sidebar.collapsed` class — set when user clicks the Sidebar header button. Triggers `flex-basis: 0` collapse.
+- `.side-panel.open` class — set per-panel when opened. CSS uses this for the slide-in transform.
+- Helper: `syncBodyPanelState()` reads any `.side-panel.open` and toggles the body class accordingly. Called from open/close/toggle paths.
 
 ### `builderState`
 - `queue`: array of `{ numeral: string, rhythm: string }` or `{ rest: true, rhythm: string }`
@@ -265,9 +288,16 @@ bindModeButtons();    // legacy no-op
 
 ## Recent change history (newest first)
 
+- **Project moved to `~/fymuse/`** with main file renamed to `index.html` (was `chord_progression_finder.html`). Page title: "FYMuse — Chord Progression Finder". Header brand: "FY" (white) + "Muse" (orange) with subtle "· chord progression finder" subtitle.
+- **Layout precedence rules**: side panels take width preference; main panel never shrinks because of side panels (they overlay); builder drawer's right edge shifts to `right: 460px` when any side panel is open via `body.side-panel-open` CSS class managed by `syncBodyPanelState()`. Smooth 0.32s cubic-bezier transition.
+- **Side panels reverted to fixed-position overlays** (briefly experimented with inline flex columns but the user wanted main untouched). Mutually exclusive — opening one closes the other via `closeAllSidePanels()` then `openSidePanel()`.
+- **Info Sidebar is now toggleable** via a "Sidebar" header button (default visible). Uses `.collapsed` class on `#info-sidebar` to animate `flex-basis: 0`. Main panel reflows when sidebar collapses/expands.
+- **Header tools group** consolidated: `[Playground][Path Finder][Melody Mode][Songwriter][Sidebar]` in a unified pill bar. Each toggles its respective panel/view.
+- **CSS scope fix**: `aside` selector was matching both the info sidebar AND side panels (since they're all `<aside>` elements), giving them unwanted padding/border. Fixed by scoping to `main > aside:not(.side-panel)`.
+- **No more backdrop on side panels** — main panel stays interactive while a side panel is open.
 - Removed yellow focus banner that appeared on chord hover/click
 - Playground extracted from genre picker into its own header tool button
-- Path Finder + Melody Mode became right slide-in panels (mutually exclusive, with backdrop + ESC)
+- Path Finder + Melody Mode became right slide-in panels (mutually exclusive, with backdrop + ESC) — later removed backdrop
 - Songwriter became a top shutter (was a bottom collapsible before)
 - Builder drawer now has fullscreen mode (75vh) in addition to collapsed/expanded
 - Tempo, Loop, Metronome moved from drawer to header transport bar
@@ -300,7 +330,7 @@ bindModeButtons();    // legacy no-op
 - **No undo/redo** — destructive actions (Clear, Delete) are immediate.
 - **No MIDI export** — would be valuable for getting progressions into a DAW.
 - **Mobile not optimized** — works narrow but not ergonomic.
-- **Single open side panel** — Path Finder and Melody Mode are mutually exclusive.
+- **Single open side panel** — Path Finder and Melody Mode are mutually exclusive (opening one closes the other). Info Sidebar is independent.
 - **Genre Graph in minor mode** is "best effort" — genres are authored with major-key Roman numerals, so switching to minor reinterprets degrees with minor scale spacing; some chord choices look unusual.
 - **No tempo automation** — single BPM per progression.
 - **Loop drift in non-4-beat progressions** — if the cycle's total duration isn't a multiple of 4 beats, looping won't stay locked to the metronome across iterations.
