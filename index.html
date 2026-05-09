@@ -600,6 +600,20 @@
   /* Drag-drop highlight on the splitter view */
   #splitter-view.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); border-radius: 8px; }
 
+  /* Quality mode toggle */
+  .splitter-mode-row { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+  .splitter-mode-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .splitter-mode-btn { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 10px 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); cursor: pointer; transition: all 0.15s; text-align: left; }
+  .splitter-mode-btn:hover { border-color: var(--accent); background: var(--panel); }
+  .splitter-mode-btn.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  .splitter-mode-btn .mode-name { font-size: 13px; font-weight: 700; }
+  .splitter-mode-btn.is-active .mode-name { color: var(--accent); }
+  .splitter-mode-btn .mode-meta { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+  .splitter-mode-warn { padding: 10px 14px; background: var(--panel-2); border: 1px solid var(--accent-2); border-left: 3px solid var(--accent-2); border-radius: 6px; font-size: 12px; color: var(--text-2); line-height: 1.5; }
+  .splitter-mode-warn[hidden] { display: none; }
+  .splitter-mode-warn strong { color: var(--accent-2); }
+  .splitter-mode-warn code { font-family: var(--font-mono); font-size: 11.5px; padding: 1px 5px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); }
+
   /* Master transport row — once a song is loaded */
   .splitter-transport { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
   .splitter-transport[hidden] { display: none; }
@@ -5487,12 +5501,38 @@ function renderListener() {
 // SPLITTER — upload a song, run HPSS-based DSP separation,
 // play back stems with per-stem volume/mute/solo
 //==================================================================
-const SPLITTER_STEMS = [
-  { id: 'original',   name: 'Original',   sub: 'full mix',    icon: 'ph-vinyl-record' },
+// Two stem layouts depending on Quality mode:
+//   DSP (Fast)    — HPSS-based: original / harmonic / bass / percussive
+//   ML (Accurate) — Demucs ONNX: original / vocals / drums / bass / other
+const SPLITTER_STEMS_DSP = [
+  { id: 'original',   name: 'Original',   sub: 'full mix',       icon: 'ph-vinyl-record' },
   { id: 'harmonic',   name: 'Harmonic',   sub: 'chords / leads', icon: 'ph-piano-keys' },
-  { id: 'bass',       name: 'Bass',       sub: 'low end',     icon: 'ph-waveform' },
-  { id: 'percussive', name: 'Drums',      sub: 'transients',  icon: 'ph-drum' },
+  { id: 'bass',       name: 'Bass',       sub: 'low end',        icon: 'ph-waveform' },
+  { id: 'percussive', name: 'Drums',      sub: 'transients',     icon: 'ph-drum' },
 ];
+const SPLITTER_STEMS_ML = [
+  { id: 'original',   name: 'Original',   sub: 'full mix',  icon: 'ph-vinyl-record' },
+  { id: 'vocals',     name: 'Vocals',     sub: 'lead voice',icon: 'ph-microphone' },
+  { id: 'drums',      name: 'Drums',      sub: 'percussion',icon: 'ph-drum' },
+  { id: 'bass',       name: 'Bass',       sub: 'low end',   icon: 'ph-waveform' },
+  { id: 'other',      name: 'Other',      sub: 'guitars / keys / pads', icon: 'ph-piano-keys' },
+];
+function splitterStems() {
+  return splitterState.mode === 'ml' ? SPLITTER_STEMS_ML : SPLITTER_STEMS_DSP;
+}
+// Back-compat: many existing functions reference SPLITTER_STEMS — keep it pointing
+// at the active layout via a getter so legacy code reads the correct list.
+const SPLITTER_STEMS = new Proxy([], {
+  get(_, prop) {
+    const arr = splitterStems();
+    if (prop === 'length') return arr.length;
+    if (prop === Symbol.iterator) return arr[Symbol.iterator].bind(arr);
+    if (prop === 'map' || prop === 'forEach' || prop === 'some' || prop === 'find' || prop === 'filter') {
+      return arr[prop].bind(arr);
+    }
+    return arr[prop];
+  }
+});
 
 const splitterState = {
   audioCtx: null,
@@ -5507,6 +5547,15 @@ const splitterState = {
   pausedAt: 0,
   duration: 0,
   rafId: null,
+  // Quality mode — 'dsp' = HPSS (fast, on-device, free, approximate),
+  //                'ml'  = Demucs ONNX (slow, ~172MB model, ~3-5 min per song,
+  //                        much cleaner separation; needs HTTP server with
+  //                        COOP/COEP headers for multi-thread, otherwise falls
+  //                        back to single-thread WASM which is slower)
+  mode: 'dsp',
+  mlReady: false,        // ONNX Runtime + demucs-web library loaded
+  mlProcessor: null,     // DemucsProcessor instance
+  mlModelLoaded: false,  // ONNX model loaded into the runtime
 };
 
 function buildSplitterViewSkeleton(root) {
@@ -5524,7 +5573,20 @@ function buildSplitterViewSkeleton(root) {
           </div>
         </div>
       </div>
-      <div class="splitter-sub">Drop an MP3/WAV/etc. and Splitter pulls the song apart into 4 rough stems using on-device DSP (no server, no cost). Quality is approximate — drums vs harmonic content separates well; isolating individual instruments from the harmonic bucket is not free-ML achievable. Each stem gets its own volume, mute, and solo. Take note: separation runs offline on your CPU and may take 10–60 seconds for a 3-minute song.</div>
+      <div class="splitter-sub">Drop an MP3/WAV/etc. and Splitter pulls the song apart into stems using on-device processing — no server, no API key, no cost. Each stem gets its own volume, mute, and solo. Two quality modes:</div>
+      <div class="splitter-mode-row">
+        <div class="splitter-mode-toggle" role="group" aria-label="Separation quality">
+          <button class="splitter-mode-btn is-active" data-mode="dsp" id="splitter-mode-dsp">
+            <span class="mode-name">Fast (DSP)</span>
+            <span class="mode-meta">~30 sec · approximate · 4 stems · ready now</span>
+          </button>
+          <button class="splitter-mode-btn" data-mode="ml" id="splitter-mode-ml">
+            <span class="mode-name">Accurate (ML — Demucs)</span>
+            <span class="mode-meta">~3–5 min · clean stems · 5 stems · 172 MB one-time download</span>
+          </button>
+        </div>
+        <div class="splitter-mode-warn" id="splitter-mode-warn" hidden></div>
+      </div>
     </div>
 
     <div class="splitter-transport" id="splitter-transport" hidden>
@@ -5605,7 +5667,84 @@ function buildSplitterViewSkeleton(root) {
     slider.oninput = () => splitterSetVolume(slider.dataset.stem, parseFloat(slider.value));
   });
 
+  // Quality mode toggle (Fast DSP vs Accurate ML)
+  root.querySelectorAll('.splitter-mode-btn').forEach(btn => {
+    btn.onclick = () => splitterSetMode(btn.dataset.mode);
+  });
+  // Build the mixer rows for the initial mode + show any environment warnings
+  splitterRebuildMixerSkeleton();
+  splitterUpdateModeWarning();
+
   // Click on transport bar = (future: seek). For now, nothing wired.
+}
+
+function splitterSetMode(newMode) {
+  if (newMode === splitterState.mode) return;
+  // If a song is loaded, stop + clear stems so the user re-processes with the new mode
+  if (splitterState.fileBuffer) {
+    splitterStopAll();
+    splitterCloseStems();
+    splitterSetStatus('Mode changed — re-upload (or click the song again) to process with ' + (newMode === 'ml' ? 'ML' : 'DSP'), 'idle');
+  }
+  splitterState.mode = newMode;
+  document.querySelectorAll('.splitter-mode-btn').forEach(b => {
+    b.classList.toggle('is-active', b.dataset.mode === newMode);
+  });
+  splitterRebuildMixerSkeleton();
+  splitterUpdateModeWarning();
+}
+
+function splitterUpdateModeWarning() {
+  const warn = document.getElementById('splitter-mode-warn');
+  if (!warn) return;
+  if (splitterState.mode === 'dsp') {
+    warn.hidden = true;
+    return;
+  }
+  // ML mode — surface environment caveats up front so users know what to expect
+  const hasSAB = typeof SharedArrayBuffer !== 'undefined';
+  const hasWebGPU = (typeof navigator !== 'undefined' && 'gpu' in navigator);
+  const isFile = location.protocol === 'file:';
+  let msg = '';
+  if (isFile) {
+    msg = '<strong>Heads-up:</strong> you opened this from <code>file://</code>. ML mode will run but in slow single-thread WASM (~15–25 min per song). For full speed (3–5 min), serve the folder over HTTP with COOP/COEP headers — easiest is <code>python3 server.py</code> from this directory. ';
+  } else if (!hasSAB) {
+    msg = '<strong>Slow mode active:</strong> COOP/COEP headers not detected — running single-thread WASM (~15–25 min per song). Add the headers to enable multi-threading. ';
+  } else if (hasWebGPU) {
+    msg = '<strong>WebGPU detected.</strong> Inference will use GPU acceleration (~2–4 min per song). ';
+  } else {
+    msg = '<strong>WASM multi-thread ready.</strong> Inference ~3–5 min per song. ';
+  }
+  msg += 'First run downloads the 172 MB Demucs model and caches it in your browser; subsequent runs start instantly.';
+  warn.innerHTML = msg;
+  warn.hidden = false;
+}
+
+// Rebuild the mixer rows from the current stem layout. Called on mode switch
+// so the UI reflects the active stem set (4 for DSP, 5 for ML).
+function splitterRebuildMixerSkeleton() {
+  const mixer = document.getElementById('splitter-mixer');
+  if (!mixer) return;
+  const stems = splitterStems();
+  mixer.innerHTML = stems.map(s => `
+    <div class="stem-track" data-stem="${s.id}" id="stem-track-${s.id}">
+      <div class="stem-name"><i class="ph-duotone ${s.icon}"></i> ${s.name} <small>${s.sub}</small></div>
+      <div class="stem-toggle-group">
+        <button class="stem-toggle" data-stem="${s.id}" data-action="mute" title="Mute">M</button>
+        <button class="stem-toggle" data-stem="${s.id}" data-action="solo" title="Solo">S</button>
+      </div>
+      <div class="stem-volume-wrap">
+        <input type="range" class="stem-volume" data-stem="${s.id}" min="0" max="100" value="80" title="Volume">
+      </div>
+      <span class="stem-vu" id="stem-vu-${s.id}">80%</span>
+    </div>
+  `).join('');
+  mixer.querySelectorAll('.stem-toggle').forEach(btn => {
+    btn.onclick = () => splitterToggleStem(btn.dataset.stem, btn.dataset.action);
+  });
+  mixer.querySelectorAll('.stem-volume').forEach(slider => {
+    slider.oninput = () => splitterSetVolume(slider.dataset.stem, parseFloat(slider.value));
+  });
 }
 
 // Called from renderAll when entering / refreshing splitter view. Currently a no-op
@@ -5646,6 +5785,142 @@ function splitterUpdateStatusUI() {
   if (mixer) mixer.hidden = !ready;
   const trackName = document.getElementById('splitter-track-name');
   if (trackName) trackName.textContent = splitterState.fileName || '—';
+}
+
+// ---- ML mode (Demucs ONNX via demucs-web library) -----------------------
+// Lazy-loads ONNX Runtime Web (UMD via script tag) and the demucs-web npm
+// library (ES module via esm.sh). Caches a single DemucsProcessor instance
+// so repeat songs don't re-load the model. Model fetch + IndexedDB cache is
+// handled inside the demucs-web library + browser HTTP cache.
+const SPLITTER_ML_MODEL_URL = 'https://huggingface.co/timcsy/demucs-web-onnx/resolve/main/htdemucs_embedded.onnx';
+const SPLITTER_ORT_CDN = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
+const SPLITTER_DEMUCS_ESM = 'https://esm.sh/demucs-web';
+
+async function splitterEnsureMLLibsLoaded() {
+  if (splitterState.mlReady) return;
+  // Load ONNX Runtime Web (UMD) via <script> tag — exposes window.ort
+  if (!window.ort) {
+    await new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = SPLITTER_ORT_CDN + 'ort.min.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('failed to load onnxruntime-web from CDN'));
+      document.head.appendChild(script);
+    });
+  }
+  const ort = window.ort;
+  if (!ort) throw new Error('onnxruntime-web did not register on window');
+  // Tell ort where its WASM blobs live (same CDN)
+  ort.env.wasm.wasmPaths = SPLITTER_ORT_CDN;
+  // Multi-thread requires SharedArrayBuffer (which requires COOP/COEP). Fall back to 1 thread otherwise.
+  ort.env.wasm.numThreads = (typeof SharedArrayBuffer !== 'undefined')
+    ? Math.min(4, navigator.hardwareConcurrency || 2)
+    : 1;
+  ort.env.wasm.simd = true;
+  // Load demucs-web ES module
+  let demucsModule;
+  try {
+    demucsModule = await import(/* @vite-ignore */ SPLITTER_DEMUCS_ESM);
+  } catch (err) {
+    throw new Error('failed to load demucs-web library: ' + (err.message || err));
+  }
+  if (!demucsModule || !demucsModule.DemucsProcessor) {
+    throw new Error('demucs-web module did not export DemucsProcessor');
+  }
+  splitterState.ort = ort;
+  splitterState.demucsModule = demucsModule;
+  splitterState.mlReady = true;
+}
+
+async function splitterEnsureMLProcessor(setStatus) {
+  await splitterEnsureMLLibsLoaded();
+  if (splitterState.mlProcessor && splitterState.mlModelLoaded) return splitterState.mlProcessor;
+  const { ort, demucsModule } = splitterState;
+  const { DemucsProcessor } = demucsModule;
+  // Pick the best execution provider available
+  let executionProviders = ['wasm'];
+  if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) executionProviders = ['webgpu', 'wasm'];
+    } catch (e) { /* WebGPU adapter request failed — stay on WASM */ }
+  }
+  const processor = new DemucsProcessor({
+    ort,
+    sessionOptions: {
+      executionProviders,
+      enableCpuMemArena: false,
+      enableMemPattern: false,
+    },
+    onProgress: ({ progress, currentSegment, totalSegments }) => {
+      setStatus('inference · segment ' + currentSegment + '/' + totalSegments, 'busy', 0.20 + 0.78 * progress);
+    },
+    onDownloadProgress: (loaded, total) => {
+      const mb = (loaded / 1048576).toFixed(1);
+      const totalMb = total > 0 ? (total / 1048576).toFixed(1) : '?';
+      const pct = total > 0 ? (loaded / total) : 0;
+      setStatus('downloading Demucs model · ' + mb + ' / ' + totalMb + ' MB', 'busy', 0.05 + 0.10 * pct);
+    },
+  });
+  setStatus('loading ONNX model…', 'busy', 0.04);
+  await processor.loadModel(SPLITTER_ML_MODEL_URL);
+  splitterState.mlProcessor = processor;
+  splitterState.mlModelLoaded = true;
+  return processor;
+}
+
+async function splitterProcessML() {
+  const buffer = splitterState.fileBuffer;
+  const ctx = splitterState.audioCtx;
+  if (!buffer || !ctx) return;
+  splitterCloseStems();
+  const setSubStatus = (msg, state, prog) => splitterSetStatus('processing · ' + msg, state || 'busy', prog);
+  setSubStatus('preparing ML pipeline…', 'busy', 0.01);
+  await splitterYield();
+  const processor = await splitterEnsureMLProcessor(setSubStatus);
+
+  setSubStatus('preparing audio…', 'busy', 0.18);
+  await splitterYield();
+  // Demucs expects stereo at 44.1 kHz. Use the original channels as-is and let
+  // the library handle resampling internally if needed.
+  const left = buffer.getChannelData(0);
+  const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
+
+  const result = await processor.separate(left, right);
+
+  setSubStatus('finalising stems…', 'busy', 0.99);
+  await splitterYield();
+  const sr = buffer.sampleRate;
+  const stemAudio = {
+    original: buffer,
+    vocals: splitterStereoChannelsToBuffer(result.vocals, ctx, sr),
+    drums:  splitterStereoChannelsToBuffer(result.drums,  ctx, sr),
+    bass:   splitterStereoChannelsToBuffer(result.bass,   ctx, sr),
+    other:  splitterStereoChannelsToBuffer(result.other,  ctx, sr),
+  };
+  const defaultVolumes = { original: 0.0, vocals: 0.8, drums: 0.7, bass: 0.7, other: 0.7 };
+  for (const def of splitterStems()) {
+    splitterState.stems[def.id] = {
+      buffer: stemAudio[def.id],
+      source: null, gain: null,
+      muted: false, solo: false,
+      volume: defaultVolumes[def.id] != null ? defaultVolumes[def.id] : 0.7,
+    };
+  }
+  for (const def of splitterStems()) {
+    const slider = document.querySelector('.stem-volume[data-stem="' + def.id + '"]');
+    if (slider) slider.value = Math.round(splitterState.stems[def.id].volume * 100);
+  }
+  splitterUpdateMixerUI();
+}
+
+function splitterStereoChannelsToBuffer(channels, ctx, sampleRate) {
+  // channels = { left: Float32Array, right: Float32Array } from demucs-web
+  const len = channels.left.length;
+  const buf = ctx.createBuffer(2, len, sampleRate);
+  buf.copyToChannel(channels.left, 0);
+  buf.copyToChannel(channels.right, 1);
+  return buf;
 }
 
 // ---- DSP primitives (FFT / STFT / iSTFT / median filter) -----------------
@@ -5948,9 +6223,14 @@ async function splitterLoadFile(file) {
     splitterState.fileBuffer = buffer;
     splitterState.fileName = file.name;
     splitterState.duration = buffer.duration;
-    // For now (scaffold), build identical stems — actual DSP separation lands next commit.
-    splitterSetStatus('processing (placeholder — same audio for all stems)…', 'busy');
-    await splitterProcess();
+    // Dispatch to the active mode's processing pipeline
+    if (splitterState.mode === 'ml') {
+      splitterSetStatus('processing with ML — this will take a while…', 'busy', 0);
+      await splitterProcessML();
+    } else {
+      splitterSetStatus('processing with DSP…', 'busy', 0);
+      await splitterProcess();
+    }
     splitterSetStatus('ready · ' + splitterFormatTime(buffer.duration), 'ready');
     splitterUpdateStatusUI();
   } catch (err) {
