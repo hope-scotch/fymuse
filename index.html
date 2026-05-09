@@ -5276,7 +5276,9 @@ function buildListenerViewSkeleton(root) {
       </div>
     </div>
   `;
-  // Wire the toggle button immediately (skeleton just got built)
+  // Wire dynamic controls now that the skeleton exists in the DOM.
+  // (These elements don't exist until showListenerView builds the skeleton,
+  // so we can't wire them in setupListener — that runs at page init.)
   const toggleBtn = root.querySelector('#listener-toggle');
   if (toggleBtn) {
     toggleBtn.onclick = () => {
@@ -5284,6 +5286,47 @@ function buildListenerViewSkeleton(root) {
       else listenerStart();
     };
   }
+  // File upload
+  const fileInput = root.querySelector('#listener-file-input');
+  const uploadBtn = root.querySelector('#listener-upload-btn');
+  if (uploadBtn && fileInput) {
+    uploadBtn.onclick = (e) => { e.preventDefault(); fileInput.click(); };
+    fileInput.onchange = (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) listenerLoadFile(f);
+      fileInput.value = ''; // allow re-selecting the same file
+    };
+  }
+  // File player controls (play/pause + close)
+  const filePlay = root.querySelector('#listener-file-play');
+  if (filePlay) filePlay.onclick = () => listenerToggleFilePlay();
+  const fileClose = root.querySelector('#listener-file-close');
+  if (fileClose) fileClose.onclick = () => listenerCloseFile();
+  // Drag-drop on the listener view itself — accepts any audio file
+  const isAudioDrag = (dt) => {
+    if (!dt) return false;
+    if (dt.items && dt.items.length) {
+      return Array.from(dt.items).some(i => i.kind === 'file' && (i.type || '').startsWith('audio/'));
+    }
+    if (dt.types && Array.from(dt.types).includes('Files')) return true;
+    return false;
+  };
+  root.addEventListener('dragover', (e) => {
+    if (!isAudioDrag(e.dataTransfer)) return;
+    e.preventDefault();
+    root.classList.add('is-drop-target');
+  });
+  root.addEventListener('dragleave', (e) => {
+    if (e.target === root) root.classList.remove('is-drop-target');
+  });
+  root.addEventListener('drop', (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+    const f = Array.from(e.dataTransfer.files).find(file => (file.type || '').startsWith('audio/'));
+    if (!f) return;
+    e.preventDefault();
+    root.classList.remove('is-drop-target');
+    listenerLoadFile(f);
+  });
 }
 
 // Called from renderAll when entering / refreshing listener view. Mainly resets transient UI bits;
@@ -5323,42 +5366,8 @@ function setupListener() {
       }
     });
   }
-  // --- Audio file upload wiring ---
-  const fileInput = document.getElementById('listener-file-input');
-  const uploadBtn = document.getElementById('listener-upload-btn');
-  if (uploadBtn && fileInput) {
-    uploadBtn.onclick = () => fileInput.click();
-    fileInput.onchange = (e) => {
-      const f = e.target.files && e.target.files[0];
-      if (f) listenerLoadFile(f);
-      fileInput.value = ''; // allow re-selecting the same file
-    };
-  }
-  const filePlay = document.getElementById('listener-file-play');
-  if (filePlay) filePlay.onclick = () => listenerToggleFilePlay();
-  const fileClose = document.getElementById('listener-file-close');
-  if (fileClose) fileClose.onclick = () => listenerCloseFile();
-  // Drag-drop on the listener view itself — accepts any audio file
-  const lv = document.getElementById('listener-view');
-  if (lv) {
-    const isAudioDrag = (dt) => dt && (Array.from(dt.items || []).some(i => i.kind === 'file' && (i.type || '').startsWith('audio/')) || (dt.types && Array.from(dt.types).includes('Files')));
-    lv.addEventListener('dragover', (e) => {
-      if (!isAudioDrag(e.dataTransfer)) return;
-      e.preventDefault();
-      lv.classList.add('is-drop-target');
-    });
-    lv.addEventListener('dragleave', (e) => {
-      if (e.target === lv) lv.classList.remove('is-drop-target');
-    });
-    lv.addEventListener('drop', (e) => {
-      if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
-      const f = Array.from(e.dataTransfer.files).find(file => (file.type || '').startsWith('audio/'));
-      if (!f) return;
-      e.preventDefault();
-      lv.classList.remove('is-drop-target');
-      listenerLoadFile(f);
-    });
-  }
+  // (File-upload + drag-drop handlers are wired in buildListenerViewSkeleton —
+  // those elements don't exist at page-init time.)
   // Stop on tab hide (mic) — file mode is fine to keep paused via Web Audio's natural behavior
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && listenerState.mode === 'mic') listenerStop();
