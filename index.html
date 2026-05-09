@@ -5612,6 +5612,266 @@ function splitterUpdateStatusUI() {
   if (trackName) trackName.textContent = splitterState.fileName || '—';
 }
 
+// ---- DSP primitives (FFT / STFT / iSTFT / median filter) -----------------
+// Radix-2 Cooley-Tukey FFT, in place. re + im are Float32Arrays of length n
+// (must be a power of 2). After return, re + im hold the frequency-domain
+// representation of the time-domain input.
+function splitterFFT(re, im) {
+  const n = re.length;
+  // Bit-reverse permutation
+  let j = 0;
+  for (let i = 1; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  // Butterflies
+  for (let len = 2; len <= n; len <<= 1) {
+    const halfLen = len >> 1;
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let k = 0; k < halfLen; k++) {
+        const aRe = re[i + k];
+        const aIm = im[i + k];
+        const bRe = re[i + k + halfLen] * curRe - im[i + k + halfLen] * curIm;
+        const bIm = re[i + k + halfLen] * curIm + im[i + k + halfLen] * curRe;
+        re[i + k]            = aRe + bRe;
+        im[i + k]            = aIm + bIm;
+        re[i + k + halfLen]  = aRe - bRe;
+        im[i + k + halfLen]  = aIm - bIm;
+        const nextRe = curRe * wRe - curIm * wIm;
+        curIm = curRe * wIm + curIm * wRe;
+        curRe = nextRe;
+      }
+    }
+  }
+}
+
+// Inverse FFT: conjugate, FFT, conjugate, scale.
+function splitterIFFT(re, im) {
+  for (let i = 0; i < im.length; i++) im[i] = -im[i];
+  splitterFFT(re, im);
+  const n = re.length;
+  const inv = 1 / n;
+  for (let i = 0; i < n; i++) {
+    re[i] *= inv;
+    im[i] = -im[i] * inv;
+  }
+}
+
+function splitterHannWindow(n) {
+  const w = new Float32Array(n);
+  for (let i = 0; i < n; i++) w[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (n - 1)));
+  return w;
+}
+
+// Forward STFT: returns magnitudes + phases as flat Float32Arrays of length
+// numFrames * numBins. Magnitudes get filtered by HPSS; phases are preserved
+// from the original signal so the inverse can resynthesize.
+function splitterSTFT(audio, fftSize, hopSize) {
+  const numBins = fftSize / 2 + 1;
+  const numFrames = Math.max(0, Math.floor((audio.length - fftSize) / hopSize) + 1);
+  const window = splitterHannWindow(fftSize);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const mags = new Float32Array(numFrames * numBins);
+  const phases = new Float32Array(numFrames * numBins);
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * hopSize;
+    for (let i = 0; i < fftSize; i++) {
+      re[i] = audio[start + i] * window[i];
+      im[i] = 0;
+    }
+    splitterFFT(re, im);
+    const off = f * numBins;
+    for (let b = 0; b < numBins; b++) {
+      const r = re[b], ii = im[b];
+      mags[off + b] = Math.sqrt(r * r + ii * ii);
+      phases[off + b] = Math.atan2(ii, r);
+    }
+  }
+  return { mags, phases, numFrames, numBins, fftSize, hopSize };
+}
+
+// Inverse STFT with overlap-add. magsToUse is a Float32Array(numFrames*numBins)
+// holding the magnitudes we want to resynthesize (so HPSS just hands us the
+// masked magnitudes). Phases come from the stored original-signal phases.
+function splitterISTFT(stft, magsToUse, totalSamples) {
+  const { phases, numFrames, numBins, fftSize, hopSize } = stft;
+  const window = splitterHannWindow(fftSize);
+  const out = new Float32Array(totalSamples);
+  const norm = new Float32Array(totalSamples);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  for (let f = 0; f < numFrames; f++) {
+    const off = f * numBins;
+    // Reconstruct positive-frequency half from magnitudes + phases
+    for (let b = 0; b < numBins; b++) {
+      const m = magsToUse[off + b];
+      const p = phases[off + b];
+      re[b] = m * Math.cos(p);
+      im[b] = m * Math.sin(p);
+    }
+    // Mirror for negative frequencies (Hermitian symmetry of real signals)
+    for (let b = 1; b < numBins - 1; b++) {
+      re[fftSize - b] =  re[b];
+      im[fftSize - b] = -im[b];
+    }
+    splitterIFFT(re, im);
+    const start = f * hopSize;
+    for (let i = 0; i < fftSize; i++) {
+      const idx = start + i;
+      if (idx >= 0 && idx < totalSamples) {
+        out[idx]  += re[i] * window[i];
+        norm[idx] += window[i] * window[i];
+      }
+    }
+  }
+  for (let i = 0; i < totalSamples; i++) {
+    if (norm[i] > 1e-10) out[i] /= norm[i];
+  }
+  return out;
+}
+
+// Sliding-window median over a 2D magnitude array stored as Float32Array of
+// length numFrames*numBins. axis=0 → median along frames per bin (harmonic
+// estimate, captures sustained pitches). axis=1 → median along bins per frame
+// (percussive estimate, captures vertical transient strokes).
+function splitterMedianFilter2D(mags, numFrames, numBins, kernelSize, axis) {
+  const out = new Float32Array(mags.length);
+  const half = kernelSize >> 1;
+  const buf = new Float32Array(kernelSize);
+  if (axis === 0) {
+    for (let b = 0; b < numBins; b++) {
+      for (let f = 0; f < numFrames; f++) {
+        let count = 0;
+        for (let k = -half; k <= half; k++) {
+          const ff = f + k;
+          if (ff >= 0 && ff < numFrames) buf[count++] = mags[ff * numBins + b];
+        }
+        // Sort the sub-buffer (small, so plain sort is fine)
+        const sub = Array.prototype.slice.call(buf, 0, count).sort((x, y) => x - y);
+        out[f * numBins + b] = sub[count >> 1];
+      }
+    }
+  } else {
+    for (let f = 0; f < numFrames; f++) {
+      const off = f * numBins;
+      for (let b = 0; b < numBins; b++) {
+        let count = 0;
+        for (let k = -half; k <= half; k++) {
+          const bb = b + k;
+          if (bb >= 0 && bb < numBins) buf[count++] = mags[off + bb];
+        }
+        const sub = Array.prototype.slice.call(buf, 0, count).sort((x, y) => x - y);
+        out[off + b] = sub[count >> 1];
+      }
+    }
+  }
+  return out;
+}
+
+function splitterMixToMono(buffer) {
+  const len = buffer.length;
+  if (buffer.numberOfChannels === 1) {
+    const out = new Float32Array(len);
+    out.set(buffer.getChannelData(0));
+    return out;
+  }
+  const out = new Float32Array(len);
+  const inv = 1 / buffer.numberOfChannels;
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const ch = buffer.getChannelData(c);
+    for (let i = 0; i < len; i++) out[i] += ch[i] * inv;
+  }
+  return out;
+}
+
+function splitterFloat32ToBuffer(audio, ctx, sampleRate) {
+  const buf = ctx.createBuffer(1, audio.length, sampleRate);
+  buf.copyToChannel(audio, 0);
+  return buf;
+}
+
+async function splitterYield() {
+  return new Promise(r => setTimeout(r, 0));
+}
+
+// ---- HPSS pipeline -------------------------------------------------------
+// Driedger-Müller harmonic / percussive source separation:
+//   1. STFT the input (mono)
+//   2. Median filter the magnitude spectrogram along time → harmonic estimate
+//   3. Median filter the magnitude spectrogram along freq → percussive estimate
+//   4. Soft Wiener-style masks: H = h^p / (h^p + p^p), P = p^p / (h^p + p^p)
+//   5. Apply masks to original magnitudes, iSTFT each → harmonic + percussive audio
+async function splitterHPSS(buffer, opts) {
+  opts = Object.assign({ fftSize: 2048, hopSize: 512, kernelTime: 17, kernelFreq: 17, power: 2 }, opts || {});
+  const setStatus = opts.setStatus || (() => {});
+  setStatus('mixing to mono…');
+  await splitterYield();
+  const audio = splitterMixToMono(buffer);
+  setStatus('forward STFT…');
+  await splitterYield();
+  const stft = splitterSTFT(audio, opts.fftSize, opts.hopSize);
+  setStatus('median-filter (harmonic)…');
+  await splitterYield();
+  const harmRef = splitterMedianFilter2D(stft.mags, stft.numFrames, stft.numBins, opts.kernelTime, 0);
+  setStatus('median-filter (percussive)…');
+  await splitterYield();
+  const percRef = splitterMedianFilter2D(stft.mags, stft.numFrames, stft.numBins, opts.kernelFreq, 1);
+  setStatus('computing soft masks…');
+  await splitterYield();
+  const total = stft.mags.length;
+  const harmMags = new Float32Array(total);
+  const percMags = new Float32Array(total);
+  const p = opts.power;
+  for (let i = 0; i < total; i++) {
+    const h = Math.pow(harmRef[i], p);
+    const r = Math.pow(percRef[i], p);
+    const sum = h + r + 1e-12;
+    const hRatio = h / sum;
+    const pRatio = r / sum;
+    harmMags[i] = stft.mags[i] * hRatio;
+    percMags[i] = stft.mags[i] * pRatio;
+  }
+  setStatus('inverse STFT (harmonic)…');
+  await splitterYield();
+  const harmonic = splitterISTFT(stft, harmMags, audio.length);
+  setStatus('inverse STFT (percussive)…');
+  await splitterYield();
+  const percussive = splitterISTFT(stft, percMags, audio.length);
+  return { harmonic, percussive, sampleRate: buffer.sampleRate, length: audio.length };
+}
+
+// Lowpass via OfflineAudioContext — used to derive a "Bass" stem from the
+// harmonic stem (low-end harmonic content with the drums removed).
+async function splitterLowpass(audioFloat32, sampleRate, cutoffHz) {
+  if (typeof OfflineAudioContext === 'undefined' && typeof webkitOfflineAudioContext === 'undefined') {
+    return audioFloat32; // graceful degradation
+  }
+  const Ctor = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const offline = new Ctor(1, audioFloat32.length, sampleRate);
+  const buf = offline.createBuffer(1, audioFloat32.length, sampleRate);
+  buf.copyToChannel(audioFloat32, 0);
+  const source = offline.createBufferSource();
+  source.buffer = buf;
+  const filter = offline.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = cutoffHz;
+  filter.Q.value = 0.707;
+  source.connect(filter);
+  filter.connect(offline.destination);
+  source.start();
+  const rendered = await offline.startRendering();
+  return rendered.getChannelData(0).slice();
+}
+
 async function splitterLoadFile(file) {
   if (!file) return;
   // Stop any current playback + tear down sources
@@ -5645,22 +5905,49 @@ async function splitterLoadFile(file) {
   }
 }
 
-// Placeholder processing for v0 scaffold: every stem is just the original buffer.
-// Real HPSS separation lands in a follow-up commit.
+// Real DSP processing: HPSS separation + bass extraction.
+// Produces 4 stems: original (full mix), harmonic (chords/leads),
+// bass (low end of the harmonic stem), percussive (drums/transients).
 async function splitterProcess() {
   const buffer = splitterState.fileBuffer;
-  if (!buffer) return;
+  const ctx = splitterState.audioCtx;
+  if (!buffer || !ctx) return;
   splitterCloseStems();
+  const sr = buffer.sampleRate;
+  const setSubStatus = (msg) => splitterSetStatus('processing · ' + msg, 'busy');
+  // Run HPSS (heavy, async-yielding so the UI stays responsive)
+  const { harmonic, percussive } = await splitterHPSS(buffer, { setStatus: setSubStatus });
+  setSubStatus('extracting bass…');
+  await splitterYield();
+  const bass = await splitterLowpass(harmonic, sr, 220);
+  // Build AudioBuffers and stem records
+  const harmBuf = splitterFloat32ToBuffer(harmonic, ctx, sr);
+  const bassBuf = splitterFloat32ToBuffer(bass, ctx, sr);
+  const percBuf = splitterFloat32ToBuffer(percussive, ctx, sr);
+  const stemBuffers = {
+    original:   buffer,
+    harmonic:   harmBuf,
+    bass:       bassBuf,
+    percussive: percBuf,
+  };
+  // Default volumes — quieter than 0.8 for HPSS stems since they sum back to ~original
+  const defaultVolumes = { original: 0.0, harmonic: 0.7, bass: 0.7, percussive: 0.7 };
   for (const def of SPLITTER_STEMS) {
     splitterState.stems[def.id] = {
-      buffer: buffer, // TODO: replace with HPSS output
+      buffer: stemBuffers[def.id],
       source: null,
       gain: null,
       muted: false,
       solo: false,
-      volume: 0.8,
+      volume: defaultVolumes[def.id] != null ? defaultVolumes[def.id] : 0.7,
     };
   }
+  // Reflect the new default volumes in the slider UI
+  for (const def of SPLITTER_STEMS) {
+    const slider = document.querySelector('.stem-volume[data-stem="' + def.id + '"]');
+    if (slider) slider.value = Math.round(splitterState.stems[def.id].volume * 100);
+  }
+  splitterUpdateMixerUI();
 }
 
 function splitterCloseStems() {
