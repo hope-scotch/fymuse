@@ -5846,24 +5846,30 @@ async function splitterYield() {
 //   3. Median filter the magnitude spectrogram along freq → percussive estimate
 //   4. Soft Wiener-style masks: H = h^p / (h^p + p^p), P = p^p / (h^p + p^p)
 //   5. Apply masks to original magnitudes, iSTFT each → harmonic + percussive audio
-async function splitterHPSS(buffer, opts) {
-  opts = Object.assign({ fftSize: 2048, hopSize: 512, kernelTime: 17, kernelFreq: 17, power: 2 }, opts || {});
-  const setStatus = opts.setStatus || (() => {});
-  // Phase progress checkpoints (rough, calibrated against typical run times):
-  //   mix 2% · STFT 25% · median-h 50% · median-p 72% · masks 76% · iSTFT-h 88% · iSTFT-p 99%
-  setStatus('mixing to mono…', 0.02);
-  await splitterYield();
-  const audio = splitterMixToMono(buffer);
-  setStatus('forward STFT…', 0.05);
+// Core HPSS over a mono Float32. Larger kernels + higher mask power = harder
+// separation (less bleed, more potential artifacts). progStart/progEnd let the
+// caller carve out a slice of the overall progress bar for this pass.
+async function splitterHPSSFloat(audio, sampleRate, opts) {
+  opts = Object.assign({
+    fftSize: 2048, hopSize: 512,
+    kernelTime: 31, kernelFreq: 31, power: 3,
+    setStatus: () => {}, statusPrefix: '',
+    progStart: 0, progEnd: 1,
+  }, opts || {});
+  const { setStatus, statusPrefix, progStart, progEnd } = opts;
+  const range = progEnd - progStart;
+  const lerp = (t) => progStart + range * t;
+
+  setStatus(statusPrefix + 'forward STFT…', lerp(0.05));
   await splitterYield();
   const stft = splitterSTFT(audio, opts.fftSize, opts.hopSize);
-  setStatus('median-filter (harmonic)…', 0.28);
+  setStatus(statusPrefix + 'median-filter (harmonic)…', lerp(0.30));
   await splitterYield();
   const harmRef = splitterMedianFilter2D(stft.mags, stft.numFrames, stft.numBins, opts.kernelTime, 0);
-  setStatus('median-filter (percussive)…', 0.52);
+  setStatus(statusPrefix + 'median-filter (percussive)…', lerp(0.55));
   await splitterYield();
   const percRef = splitterMedianFilter2D(stft.mags, stft.numFrames, stft.numBins, opts.kernelFreq, 1);
-  setStatus('computing soft masks…', 0.74);
+  setStatus(statusPrefix + 'soft masks…', lerp(0.65));
   await splitterYield();
   const total = stft.mags.length;
   const harmMags = new Float32Array(total);
@@ -5873,18 +5879,28 @@ async function splitterHPSS(buffer, opts) {
     const h = Math.pow(harmRef[i], p);
     const r = Math.pow(percRef[i], p);
     const sum = h + r + 1e-12;
-    const hRatio = h / sum;
-    const pRatio = r / sum;
-    harmMags[i] = stft.mags[i] * hRatio;
-    percMags[i] = stft.mags[i] * pRatio;
+    harmMags[i] = stft.mags[i] * (h / sum);
+    percMags[i] = stft.mags[i] * (r / sum);
   }
-  setStatus('inverse STFT (harmonic)…', 0.78);
+  setStatus(statusPrefix + 'inverse STFT (harmonic)…', lerp(0.78));
   await splitterYield();
   const harmonic = splitterISTFT(stft, harmMags, audio.length);
-  setStatus('inverse STFT (percussive)…', 0.90);
+  setStatus(statusPrefix + 'inverse STFT (percussive)…', lerp(0.95));
   await splitterYield();
   const percussive = splitterISTFT(stft, percMags, audio.length);
-  return { harmonic, percussive, sampleRate: buffer.sampleRate, length: audio.length };
+  return { harmonic, percussive, length: audio.length };
+}
+
+// Backward-compat wrapper that accepts an AudioBuffer (mixes to mono first).
+async function splitterHPSS(buffer, opts) {
+  const setStatus = (opts && opts.setStatus) || (() => {});
+  setStatus('mixing to mono…', 0.02);
+  await splitterYield();
+  const audio = splitterMixToMono(buffer);
+  return Object.assign(
+    await splitterHPSSFloat(audio, buffer.sampleRate, Object.assign({ progStart: 0.02, progEnd: 0.99 }, opts || {})),
+    { sampleRate: buffer.sampleRate }
+  );
 }
 
 // Lowpass via OfflineAudioContext — used to derive a "Bass" stem from the
@@ -5943,9 +5959,19 @@ async function splitterLoadFile(file) {
   }
 }
 
-// Real DSP processing: HPSS separation + bass extraction.
-// Produces 4 stems: original (full mix), harmonic (chords/leads),
-// bass (low end of the harmonic stem), percussive (drums/transients).
+// Real DSP processing: 2-pass HPSS + dedicated bass HPSS pass.
+// Pipeline:
+//   1. Mix to mono.
+//   2. HPSS pass 1 → harmonic₁ + percussive₁.
+//   3. HPSS pass 2 on percussive₁ → recovers any sustained content that leaked
+//      into the percussive bucket. Final harmonic = harmonic₁ + harmonic₂;
+//      final percussive = percussive₂ (a tighter drum stem).
+//   4. Bass: lowpass the original mix at 280 Hz, then run HPSS on that low
+//      band → take the harmonic output. This way "Bass" = bass-band harmonic
+//      content (the actual bass guitar / sub) instead of just lowpass-of-
+//      harmonic, which helped kicks leak through.
+//
+// Produces 4 stems: original / harmonic / bass / percussive.
 async function splitterProcess() {
   const buffer = splitterState.fileBuffer;
   const ctx = splitterState.audioCtx;
@@ -5953,11 +5979,41 @@ async function splitterProcess() {
   splitterCloseStems();
   const sr = buffer.sampleRate;
   const setSubStatus = (msg, prog) => splitterSetStatus('processing · ' + msg, 'busy', prog);
-  // Run HPSS (heavy, async-yielding so the UI stays responsive)
-  const { harmonic, percussive } = await splitterHPSS(buffer, { setStatus: setSubStatus });
-  setSubStatus('extracting bass…', 0.99);
+
+  setSubStatus('mixing to mono…', 0.01);
   await splitterYield();
-  const bass = await splitterLowpass(harmonic, sr, 220);
+  const audio = splitterMixToMono(buffer);
+
+  // ---- HPSS pass 1 ----
+  const p1 = await splitterHPSSFloat(audio, sr, {
+    setStatus: setSubStatus, statusPrefix: 'pass 1 · ',
+    progStart: 0.02, progEnd: 0.50,
+  });
+  // ---- HPSS pass 2 (refines the percussive output) ----
+  setSubStatus('pass 2 · running HPSS on percussive residual…', 0.50);
+  await splitterYield();
+  const p2 = await splitterHPSSFloat(p1.percussive, sr, {
+    setStatus: setSubStatus, statusPrefix: 'pass 2 · ',
+    progStart: 0.52, progEnd: 0.88,
+  });
+  // Combine: any sustained content recovered in pass 2 goes back to harmonic.
+  const harmonic = new Float32Array(audio.length);
+  for (let i = 0; i < audio.length; i++) {
+    harmonic[i] = p1.harmonic[i] + p2.harmonic[i];
+  }
+  const percussive = p2.percussive;
+
+  // ---- Bass extraction: HPSS on the low-band of the original mix ----
+  setSubStatus('extracting bass · lowpass…', 0.89);
+  await splitterYield();
+  const lowband = await splitterLowpass(audio, sr, 280);
+  const bassPass = await splitterHPSSFloat(lowband, sr, {
+    setStatus: setSubStatus, statusPrefix: 'bass · ',
+    progStart: 0.90, progEnd: 0.99,
+    // Bass needs less freq-axis filtering since it lives in a narrow band
+    kernelTime: 31, kernelFreq: 11,
+  });
+  const bass = bassPass.harmonic;
   // Build AudioBuffers and stem records
   const harmBuf = splitterFloat32ToBuffer(harmonic, ctx, sr);
   const bassBuf = splitterFloat32ToBuffer(bass, ctx, sr);
