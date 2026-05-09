@@ -4436,7 +4436,14 @@ function listenerLoop() {
     listenerState.prevSpectrum[i] = mag;
   }
 
-  // --- Tuning offset EMA (slow update, only on confident signal) ---
+  // --- Tuning offset EMA — INFORMATIONAL ONLY ---
+  // We track how off the input is from equal temperament, but we deliberately do NOT
+  // apply this as a correction to the PC mapping. The previous approach used
+  // Math.round(offsetSemis) which was a step function: 0 below 50¢, +1 semitone above
+  // — i.e. any estimate near the cap caused a guaranteed wrong-note shift. A correct
+  // continuous correction would require rebuilding the note kernels at sub-semitone
+  // offsets, which is expensive and still risky on detuned instruments / vibrato.
+  // For now we just show the estimate so the user can decide to retune their gear.
   if (tuningWeight > 0.5) {
     const frameOffset = tuningWeightedCents / tuningWeight;
     listenerState.tuningEma = 0.96 * listenerState.tuningEma + 0.04 * frameOffset;
@@ -4448,7 +4455,6 @@ function listenerLoop() {
       listenerState.tuningOffsetCents = off;
     }
   }
-  const tuningOffsetSemis = listenerState.tuningOffsetCents / 100;
 
   // --- Chroma + bass via log-frequency note kernels (CQT-style) ---
   const chroma = new Float32Array(12);
@@ -4465,10 +4471,8 @@ function listenerLoop() {
         energy += Math.pow(10, db / 20) * w;
       }
       if (energy <= 0) continue;
-      // Apply tuning offset by shifting which PC this kernel maps to
-      const pc = ((k.pc - Math.round(tuningOffsetSemis)) % 12 + 12) % 12;
-      chroma[pc] += energy;
-      if (k.fCenter <= 180) bassChroma[pc] += energy;
+      chroma[k.pc] += energy;
+      if (k.fCenter <= 180) bassChroma[k.pc] += energy;
     }
   }
 
@@ -4735,10 +4739,11 @@ function renderListenerDetected(chord, topResults) {
   else                  { confLabel = '—';           confColor = 'var(--muted)'; }
   const gapPct = Math.round(gap * 100);
   const noteList = chord.notes.join(' · ');
-  // Optional tuning offset display (only shown when significant)
+  // Tuning offset readout — informational only (not auto-applied to chord matching).
+  // Shown when |offset| >= 12¢ so trivial drift doesn't clutter the UI.
   const tuningCents = (typeof listenerState !== 'undefined') ? listenerState.tuningOffsetCents : 0;
-  const tuningStr = (Math.abs(tuningCents) >= 8)
-    ? ' <span style="color:var(--muted);">· tuning ' + (tuningCents > 0 ? '+' : '') + Math.round(tuningCents) + '¢</span>'
+  const tuningStr = (Math.abs(tuningCents) >= 12)
+    ? ' <span style="color:var(--muted);" title="Informational — your input is this far from equal temperament. Re-tune your instrument if you want.">· input ' + (tuningCents > 0 ? '+' : '') + Math.round(tuningCents) + '¢</span>'
     : '';
   subEl.innerHTML = noteList +
     (numeral ? ' <span style="color:var(--accent-2);font-family:var(--font-mono);">[' + numeral + ' in ' + state.key + (state.mode === 'minor' ? 'm' : '') + ']</span>' : '') +
