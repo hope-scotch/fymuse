@@ -1,0 +1,15 @@
+# Cloudflare Pages response headers.
+# https://developers.cloudflare.com/pages/configuration/headers/
+#
+# COOP/COEP enables cross-origin isolation, which is required for
+# SharedArrayBuffer. Without it, ONNX Runtime Web in the Splitter's
+# ML mode falls back to single-thread WASM (~15-25 min/song instead
+# of ~3-5 min). Other browser-side ML usage benefits the same way.
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+# Long cache for the static brand asset
+/logo.png
+  Cache-Control: public, max-age=31536000, immutable
