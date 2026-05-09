@@ -643,6 +643,37 @@
   .stem-timeline-events { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
   .stem-timeline-events .event { position: absolute; top: 50%; transform: translateY(-50%); font-size: 10.5px; font-family: var(--font-mono); color: var(--text); padding: 1px 5px; background: rgba(20,20,30,0.85); border: 1px solid var(--border); border-radius: 3px; white-space: nowrap; letter-spacing: -0.2px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
   .stem-timeline-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; left: 0; box-shadow: 0 0 8px rgba(245,165,36,0.65); transition: left 0.05s linear; }
+  .stem-track .stem-name { cursor: pointer; }
+  .stem-track:hover .stem-name { color: var(--accent); }
+
+  /* Notes modal — full-event timeline for one stem */
+  .notes-modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; }
+  .notes-modal[hidden] { display: none; }
+  .notes-modal-backdrop { position: absolute; inset: 0; background: rgba(8,8,15,0.72); backdrop-filter: blur(6px); }
+  .notes-modal-panel { position: relative; width: min(1280px, 94vw); max-height: 84vh; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; }
+  .notes-modal-header { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--panel-2); }
+  .notes-modal-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
+  .notes-modal-title i { color: var(--accent-2); font-size: 22px; }
+  .notes-modal-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+  .notes-modal-zoom-group { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 3px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
+  .notes-modal-zoom { width: 28px; height: 26px; padding: 0; background: transparent; border: none; color: var(--text-2); font-size: 16px; font-weight: 700; cursor: pointer; border-radius: 5px; transition: all 0.12s; }
+  .notes-modal-zoom:hover { color: var(--accent); background: var(--accent-soft); }
+  .notes-modal-zoom-level { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); min-width: 42px; text-align: center; }
+  .notes-modal-close { width: 32px; height: 32px; padding: 0; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .notes-modal-close:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .notes-modal-help { padding: 8px 20px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .notes-modal-track-wrap { flex: 1; overflow-x: auto; overflow-y: auto; padding: 16px 20px 24px; min-height: 200px; }
+  .notes-modal-track { position: relative; min-width: 100%; min-height: 80px; }
+  .notes-modal-events { position: relative; }
+  .notes-modal-event { position: absolute; font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; color: var(--text); padding: 5px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; white-space: nowrap; transition: all 0.12s; box-sizing: border-box; line-height: 1.2; }
+  .notes-modal-event:hover { border-color: var(--accent); color: var(--accent); background: var(--panel); }
+  .notes-modal-event.is-current { border-color: var(--accent); background: var(--accent); color: #1a1a1a; box-shadow: 0 0 12px rgba(245,165,36,0.4); }
+  .notes-modal-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; left: 0; box-shadow: 0 0 10px rgba(245,165,36,0.7); }
+  .notes-modal-axis { position: relative; height: 22px; margin-top: 8px; border-top: 1px solid var(--border); }
+  .notes-modal-axis .axis-tick { position: absolute; top: 0; }
+  .notes-modal-axis .axis-tick-line { width: 1px; height: 6px; background: var(--border-light); }
+  .notes-modal-axis .axis-tick-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 2px; transform: translateX(-50%); white-space: nowrap; }
+  .notes-modal-empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
   .stem-name { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
   .stem-name i { color: var(--accent-2); font-size: 18px; }
   .stem-name small { display: block; font-family: var(--font-sans); font-weight: 400; color: var(--muted); font-size: 10.5px; letter-spacing: 0; text-transform: none; line-height: 1.2; }
@@ -982,6 +1013,31 @@
       <button id="builder-clear"><i class="ph-duotone ph-trash sz-sm"></i> Clear</button>
     </div>
     <div class="help-text">Drag chips left/right to reorder · click × to remove · click any chord on the graph or in Playground to inspect, click the + on a card to add to this queue.</div>
+  </div>
+</div>
+
+<!-- Splitter notes modal — opens when user clicks a stem to view all detected events -->
+<div class="notes-modal" id="notes-modal" hidden>
+  <div class="notes-modal-backdrop" id="notes-modal-backdrop"></div>
+  <div class="notes-modal-panel" role="dialog" aria-labelledby="notes-modal-title">
+    <div class="notes-modal-header">
+      <h3 class="notes-modal-title" id="notes-modal-title">Notes</h3>
+      <span class="notes-modal-meta" id="notes-modal-meta"></span>
+      <div class="notes-modal-zoom-group">
+        <button class="notes-modal-zoom" data-zoom="-" title="Zoom out">−</button>
+        <span class="notes-modal-zoom-level" id="notes-modal-zoom-level">100%</span>
+        <button class="notes-modal-zoom" data-zoom="+" title="Zoom in">+</button>
+      </div>
+      <button class="notes-modal-close" id="notes-modal-close" title="Close (Esc)"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div class="notes-modal-help">Click an event to jump to that moment · scroll horizontally · zoom to spread out dense sections</div>
+    <div class="notes-modal-track-wrap" id="notes-modal-track-wrap">
+      <div class="notes-modal-track" id="notes-modal-track">
+        <div class="notes-modal-events" id="notes-modal-events"></div>
+        <div class="notes-modal-cursor" id="notes-modal-cursor"></div>
+        <div class="notes-modal-axis" id="notes-modal-axis"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5716,6 +5772,217 @@ function splitterCurrentTime() {
   return splitterState.pausedAt || 0;
 }
 
+// ---- Notes modal — full per-stem event timeline with vertical stacking ---
+const splitterModalState = {
+  open: false,
+  stemId: null,
+  pxPerSec: 60,        // zoom level
+  rafId: null,
+};
+const SPLITTER_MODAL_ROW_H = 30;       // px per stacked row
+const SPLITTER_MODAL_EVENT_PAD = 4;    // px gap between events on same row
+
+function splitterOpenNotesModal(stemId) {
+  const stem = splitterState.stems[stemId];
+  if (!stem) return;
+  splitterModalState.open = true;
+  splitterModalState.stemId = stemId;
+  // Reset zoom to fit the full song nicely on first open per stem
+  const dur = splitterState.duration || 1;
+  const wrap = document.getElementById('notes-modal-track-wrap');
+  const visibleW = wrap ? Math.max(600, wrap.clientWidth - 40) : 1200;
+  splitterModalState.pxPerSec = Math.max(30, Math.min(200, visibleW / dur));
+
+  const def = splitterStems().find(s => s.id === stemId);
+  const isMono = (stemId === 'bass' || stemId === 'vocals');
+  const titleEl = document.getElementById('notes-modal-title');
+  const metaEl = document.getElementById('notes-modal-meta');
+  if (titleEl && def) {
+    titleEl.innerHTML = '<i class="ph-duotone ' + def.icon + '"></i> ' + def.name + ' — Detected ' + (isMono ? 'notes' : 'chords');
+  }
+  if (metaEl) {
+    const n = (stem.events && stem.events.length) | 0;
+    metaEl.textContent = n + ' event' + (n !== 1 ? 's' : '') + ' · ' + splitterFormatTime(splitterState.duration || 0);
+  }
+  const modal = document.getElementById('notes-modal');
+  if (modal) modal.hidden = false;
+  splitterRenderNotesModal();
+  splitterStartModalCursor();
+}
+
+function splitterCloseNotesModal() {
+  splitterModalState.open = false;
+  splitterModalState.stemId = null;
+  if (splitterModalState.rafId) {
+    cancelAnimationFrame(splitterModalState.rafId);
+    splitterModalState.rafId = null;
+  }
+  const modal = document.getElementById('notes-modal');
+  if (modal) modal.hidden = true;
+}
+
+function splitterModalZoom(direction) {
+  const factor = direction === '+' ? 1.5 : 1 / 1.5;
+  let newZoom = splitterModalState.pxPerSec * factor;
+  newZoom = Math.max(20, Math.min(600, newZoom));
+  splitterModalState.pxPerSec = newZoom;
+  splitterRenderNotesModal();
+}
+
+// Pack events into vertical rows so dense regions stack instead of overlapping.
+// Each event picks the first row whose last-rendered right edge is <= this
+// event's left edge (with a small padding). Time order is preserved because
+// we walk events left-to-right.
+function splitterPackEventRows(events, pxPerSec) {
+  const minWidthPx = 50; // min width per event card — keeps labels readable
+  const rows = []; // rows[i] = right-edge px of last event placed on row i
+  return events.map(ev => {
+    const leftPx = ev.start * pxPerSec;
+    const w = Math.max(minWidthPx, (ev.end - ev.start) * pxPerSec);
+    let rowIdx = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i] + SPLITTER_MODAL_EVENT_PAD <= leftPx) { rowIdx = i; break; }
+    }
+    if (rowIdx === -1) {
+      rowIdx = rows.length;
+      rows.push(0);
+    }
+    rows[rowIdx] = leftPx + w;
+    return { ev, leftPx, widthPx: w, rowIdx };
+  });
+}
+
+function splitterRenderNotesModal() {
+  if (!splitterModalState.open) return;
+  const stem = splitterState.stems[splitterModalState.stemId];
+  if (!stem) return;
+  const events = stem.events || [];
+  const dur = splitterState.duration || 1;
+  const pxPerSec = splitterModalState.pxPerSec;
+  const totalWidth = Math.max(600, dur * pxPerSec);
+
+  const eventsEl = document.getElementById('notes-modal-events');
+  const cursorEl = document.getElementById('notes-modal-cursor');
+  const trackEl = document.getElementById('notes-modal-track');
+
+  if (events.length === 0) {
+    if (eventsEl) eventsEl.innerHTML = '<div class="notes-modal-empty">No events detected for this stem.</div>';
+    if (trackEl) trackEl.style.minWidth = totalWidth + 'px';
+    splitterRenderModalAxis(totalWidth, pxPerSec);
+    return;
+  }
+
+  // Pack into rows — vertical stacking when close in time
+  const placed = splitterPackEventRows(events, pxPerSec);
+  const numRows = placed.reduce((m, p) => Math.max(m, p.rowIdx + 1), 1);
+  const eventsHeight = numRows * SPLITTER_MODAL_ROW_H + 6;
+
+  if (eventsEl) {
+    eventsEl.style.width = totalWidth + 'px';
+    eventsEl.style.height = eventsHeight + 'px';
+    eventsEl.innerHTML = placed.map(p => {
+      const safe = String(p.ev.label).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
+      const top = p.rowIdx * SPLITTER_MODAL_ROW_H + 4;
+      return '<div class="notes-modal-event" data-time="' + p.ev.start.toFixed(3) + '" '
+        + 'style="left:' + p.leftPx.toFixed(1) + 'px;top:' + top + 'px;min-width:' + (p.widthPx - 6).toFixed(1) + 'px;" '
+        + 'title="' + safe + ' · ' + splitterFormatTime(p.ev.start) + ' → ' + splitterFormatTime(p.ev.end) + '">'
+        + safe + '</div>';
+    }).join('');
+    eventsEl.querySelectorAll('.notes-modal-event').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        const t = parseFloat(el.dataset.time);
+        if (!isNaN(t)) splitterSeek(t);
+      };
+    });
+  }
+  if (trackEl) trackEl.style.minWidth = totalWidth + 'px';
+  if (cursorEl) cursorEl.style.height = (eventsHeight + 28) + 'px';
+
+  // Time-axis ticks
+  splitterRenderModalAxis(totalWidth, pxPerSec);
+
+  // Update zoom level readout
+  const zoomEl = document.getElementById('notes-modal-zoom-level');
+  if (zoomEl) zoomEl.textContent = Math.round((pxPerSec / 60) * 100) + '%';
+}
+
+function splitterRenderModalAxis(totalWidth, pxPerSec) {
+  const axis = document.getElementById('notes-modal-axis');
+  if (!axis) return;
+  // Pick a tick interval that gives ~80px between ticks
+  const targetPx = 80;
+  const rawSec = targetPx / pxPerSec;
+  // Snap to a "nice" interval (1, 2, 5, 10, 15, 30, 60, 120, …)
+  const niceSteps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
+  let secPerTick = niceSteps[niceSteps.length - 1];
+  for (const s of niceSteps) { if (s >= rawSec) { secPerTick = s; break; } }
+  const dur = splitterState.duration || 1;
+  const ticks = [];
+  for (let t = 0; t <= dur + 0.001; t += secPerTick) {
+    const x = t * pxPerSec;
+    ticks.push(
+      '<div class="axis-tick" style="left:' + x.toFixed(1) + 'px;">'
+      + '<div class="axis-tick-line"></div>'
+      + '<div class="axis-tick-label">' + splitterFormatTime(t) + '</div>'
+      + '</div>'
+    );
+  }
+  axis.style.width = totalWidth + 'px';
+  axis.innerHTML = ticks.join('');
+}
+
+function splitterStartModalCursor() {
+  if (splitterModalState.rafId) cancelAnimationFrame(splitterModalState.rafId);
+  function tick() {
+    if (!splitterModalState.open) return;
+    const cursor = document.getElementById('notes-modal-cursor');
+    if (cursor) {
+      const t = splitterCurrentTime();
+      const px = t * splitterModalState.pxPerSec;
+      cursor.style.left = px.toFixed(1) + 'px';
+    }
+    // Highlight whichever event the playhead is currently inside
+    const stem = splitterState.stems[splitterModalState.stemId];
+    if (stem && stem.events) {
+      const t = splitterCurrentTime();
+      const events = document.querySelectorAll('.notes-modal-event');
+      events.forEach(el => {
+        const evStart = parseFloat(el.dataset.time);
+        // Look up the event end via stem.events (matched by start time)
+        const ev = stem.events.find(e => Math.abs(e.start - evStart) < 0.01);
+        const inside = ev && t >= ev.start && t < ev.end;
+        el.classList.toggle('is-current', !!inside);
+      });
+    }
+    // Auto-scroll to keep cursor visible (1/3 from left)
+    const wrap = document.getElementById('notes-modal-track-wrap');
+    if (wrap && splitterState.playing) {
+      const cursorLeft = parseFloat(document.getElementById('notes-modal-cursor').style.left) || 0;
+      const visW = wrap.clientWidth;
+      if (cursorLeft < wrap.scrollLeft + 40 || cursorLeft > wrap.scrollLeft + visW - 40) {
+        wrap.scrollLeft = Math.max(0, cursorLeft - visW / 3);
+      }
+    }
+    splitterModalState.rafId = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+function splitterSetupNotesModal() {
+  // Wire close button + backdrop click + ESC + zoom buttons. Idempotent.
+  const closeBtn = document.getElementById('notes-modal-close');
+  if (closeBtn) closeBtn.onclick = () => splitterCloseNotesModal();
+  const backdrop = document.getElementById('notes-modal-backdrop');
+  if (backdrop) backdrop.onclick = () => splitterCloseNotesModal();
+  document.querySelectorAll('.notes-modal-zoom').forEach(btn => {
+    btn.onclick = () => splitterModalZoom(btn.dataset.zoom);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && splitterModalState.open) splitterCloseNotesModal();
+  });
+}
+
 function splitterSetMode(newMode) {
   if (newMode === splitterState.mode) return;
   // If a song is loaded, stop + clear stems so the user re-processes with the new mode
@@ -5790,13 +6057,25 @@ function splitterRebuildMixerSkeleton() {
   mixer.querySelectorAll('.stem-volume').forEach(slider => {
     slider.oninput = () => splitterSetVolume(slider.dataset.stem, parseFloat(slider.value));
   });
-  // Click anywhere on a stem timeline = jump global playhead to that point
+  // Click anywhere on a stem timeline = jump global playhead to that point.
+  // stopPropagation prevents the click from bubbling up to the stem tile,
+  // which has its own click handler for opening the notes modal.
   mixer.querySelectorAll('.stem-timeline').forEach(tl => {
     tl.onclick = (e) => {
+      e.stopPropagation();
       if (!splitterState.duration) return;
       const rect = tl.getBoundingClientRect();
       const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       splitterSeek(frac * splitterState.duration);
+    };
+  });
+  // Click anywhere on the stem tile (except interactive bits) opens the
+  // notes modal showing all detected chords/notes for that stem.
+  mixer.querySelectorAll('.stem-track').forEach(track => {
+    track.onclick = (e) => {
+      // Ignore clicks on interactive children — they have their own handlers
+      if (e.target.closest('.stem-toggle, .stem-volume, .stem-timeline, .stem-vu')) return;
+      splitterOpenNotesModal(track.dataset.stem);
     };
   });
   // If we already have analysed stems, re-render their waveforms + events
@@ -5846,30 +6125,18 @@ function splitterRenderWaveform(stemId) {
 }
 
 function splitterRenderTimelineEvents(stemId) {
-  const stem = splitterState.stems[stemId];
+  // Inline labels are intentionally NOT drawn on the stem timeline — the
+  // strip stays clean (waveform + cursor only). Click the stem itself to
+  // open the modal where every event is visible with vertical stacking +
+  // horizontal scroll.
   const wrap = document.getElementById('stem-events-' + stemId);
-  if (!wrap) return;
-  if (!stem || !stem.events || !splitterState.duration) { wrap.innerHTML = ''; return; }
-  const dur = splitterState.duration;
-  // Skip events that would overlap the previous label in pixel space — keeps
-  // the timeline readable when detection produces dense changes.
-  const rect = wrap.getBoundingClientRect();
-  const w = rect.width || 1000;
-  const minPxBetween = 38;
-  const visible = [];
-  let lastPx = -1000;
-  for (const ev of stem.events) {
-    const px = (ev.start / dur) * w;
-    if (px - lastPx >= minPxBetween) {
-      visible.push(ev);
-      lastPx = px;
-    }
+  if (wrap) wrap.innerHTML = '';
+  // Indicate via the notes-button state whether events exist
+  const stem = splitterState.stems[stemId];
+  const track = document.getElementById('stem-track-' + stemId);
+  if (track) {
+    track.classList.toggle('has-events', !!(stem && stem.events && stem.events.length));
   }
-  wrap.innerHTML = visible.map(ev => {
-    const leftPct = (ev.start / dur) * 100;
-    const safe = String(ev.label).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
-    return `<div class="event" style="left:${leftPct.toFixed(2)}%;" title="${safe} @ ${splitterFormatTime(ev.start)}">${safe}</div>`;
-  }).join('');
 }
 
 function splitterRenderAllTimelines() {
@@ -6855,6 +7122,7 @@ setupMetronome();
 setupCustomChordPanel();
 setupCollapsibles();
 setupListener();
+splitterSetupNotesModal();
 setupHeaderButtons();
 bindModeButtons();
 document.getElementById('filter-weak').onchange = () => renderGraph();
