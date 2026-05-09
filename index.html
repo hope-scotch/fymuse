@@ -640,6 +640,15 @@
   .ls-card-actions button[data-action="play"] { background: var(--accent); color: #1a1a1a; border-color: var(--accent); font-weight: 600; }
   .ls-card-actions button[data-action="play"]:hover { filter: brightness(1.1); color: #1a1a1a; border-color: var(--accent); }
 
+  .listener-voices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .voice-tile { padding: 12px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; text-align: center; transition: border-color 0.15s, background 0.15s; }
+  .voice-tile.is-primary { border-color: var(--accent); background: var(--accent-soft); }
+  .voice-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: 1.6px; text-transform: uppercase; margin-bottom: 5px; }
+  .voice-note { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.4px; line-height: 1; min-height: 22px; }
+  .voice-tile.is-primary .voice-note { color: var(--accent); }
+  .voice-count-pill { display: inline-block; margin-left: 4px; padding: 1px 7px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-2); }
+  .voice-count-pill:empty { display: none; }
+
   .listener-chroma { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; height: 120px; align-items: end; }
   .listener-chroma-bar { background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px 3px 0 0; position: relative; min-height: 4px; transition: height 0.08s linear, background 0.12s; }
   .listener-chroma-bar.is-active { background: var(--accent); border-color: var(--accent); }
@@ -4161,6 +4170,10 @@ const listenerState = {
   tuningEma: 0,           // EMA for tuning offset before commit
   tuningSamples: 0,       // Number of frames contributing to tuningEma (gates application)
   topGap: 0,              // Last frame's top1 vs top2 score gap (0..1)
+  // Voice splitter:
+  lowMidi: -1,            // Lowest active note (MIDI), -1 if silence
+  highMidi: -1,           // Highest active note (MIDI), -1 if silence
+  voiceCount: 0,          // Number of "active" kernel peaks (rough polyphony estimate)
 };
 const LISTENER_HYSTERESIS = 1.10; // new candidate must beat locked one by 10% to switch
 const LISTENER_NOISE_MARGIN_DB = 6;       // dB above noise floor counts as "audio"
@@ -4299,6 +4312,9 @@ async function listenerStart() {
     listenerState.tuningSamples = 0;
     listenerState.topGap = 0;
     listenerState.noteKernels = buildListenerNoteKernels(ctx.sampleRate, fftAnalyser.fftSize);
+    listenerState.lowMidi = -1;
+    listenerState.highMidi = -1;
+    listenerState.voiceCount = 0;
     listenerState.active = true;
     btn.classList.add('is-listening');
     btn.innerHTML = '<i class="ph-duotone ph-stop sz-sm"></i> Stop listening';
@@ -4337,6 +4353,9 @@ function listenerStop() {
   listenerState.tuningEma = 0;
   listenerState.tuningSamples = 0;
   listenerState.topGap = 0;
+  listenerState.lowMidi = -1;
+  listenerState.highMidi = -1;
+  listenerState.voiceCount = 0;
   listenerState.lastStable = null;
   listenerState.lastShown = null;
   const btn = document.getElementById('listener-toggle');
@@ -4456,12 +4475,16 @@ function listenerLoop() {
     }
   }
 
-  // --- Chroma + bass via log-frequency note kernels (CQT-style) ---
+  // --- Chroma + bass + voice splitter via log-frequency note kernels (CQT-style) ---
   const chroma = new Float32Array(12);
   const bassChroma = new Float32Array(12);
   const kernels = listenerState.noteKernels;
+  let kernelEnergies = null;
+  let maxKernelEnergy = 0;
   if (kernels) {
-    for (const k of kernels) {
+    kernelEnergies = new Float32Array(kernels.length);
+    for (let i = 0; i < kernels.length; i++) {
+      const k = kernels[i];
       let energy = 0;
       for (let j = 0; j < k.bins.length; j++) {
         const bin = k.bins[j][0];
@@ -4470,10 +4493,34 @@ function listenerLoop() {
         if (db < -75) continue;
         energy += Math.pow(10, db / 20) * w;
       }
+      kernelEnergies[i] = energy;
+      if (energy > maxKernelEnergy) maxKernelEnergy = energy;
       if (energy <= 0) continue;
       chroma[k.pc] += energy;
       if (k.fCenter <= 180) bassChroma[k.pc] += energy;
     }
+    // Voice splitter: lowest / highest "active" notes + rough polyphony estimate.
+    // A note is active if its kernel energy >= 25% of the max kernel energy this
+    // frame. We also count peaks (local maxima) as a polyphony approximation.
+    let lowMidi = -1, highMidi = -1, peakCount = 0;
+    if (maxKernelEnergy > 0) {
+      const thresh = maxKernelEnergy * 0.25;
+      for (let i = 0; i < kernels.length; i++) {
+        const e = kernelEnergies[i];
+        if (e >= thresh) {
+          if (lowMidi < 0) lowMidi = kernels[i].midi;
+          highMidi = kernels[i].midi;
+          // Peak: this kernel is a local maximum (skip noisy adjacent semitones)
+          const prev = i > 0 ? kernelEnergies[i - 1] : 0;
+          const next = i < kernels.length - 1 ? kernelEnergies[i + 1] : 0;
+          if (e >= prev && e >= next) peakCount++;
+        }
+      }
+    }
+    // Smooth voice readouts a touch (snap-on, slow-off) so they don't flicker
+    if (lowMidi >= 0)  listenerState.lowMidi = lowMidi;
+    if (highMidi >= 0) listenerState.highMidi = highMidi;
+    listenerState.voiceCount = peakCount;
   }
 
   // --- Onset detection: clear history when energy spikes (= new chord struck) ---
@@ -4602,11 +4649,13 @@ function listenerLoop() {
       listenerState.lastShown = { ...stable, chord: detectedChord, since: now };
       renderListenerDetected(detectedChord, topResults);
       renderListenerSuggestions(detectedChord);
+      renderListenerVoices(detectedChord);
       listenerState.lastSuggestUpdate = now;
     } else if (top) {
-      // Update alternates list periodically without rebuilding the main display
+      // Update alternates + voice splitter periodically without rebuilding the main display
       if (now - listenerState.lastBuilt > 200) {
         renderListenerAlternates(topResults);
+        renderListenerVoices(listenerState.lastShown ? listenerState.lastShown.chord : null);
         listenerState.lastBuilt = now;
       }
     }
@@ -4700,6 +4749,32 @@ function syncListenerActiveCard() {
     document.querySelectorAll('.ls-card[data-numeral]').forEach(el => {
       if (el.dataset.numeral === state.selectedChord) el.classList.add('is-active-detail');
     });
+  }
+}
+
+// Convert a MIDI note number to a "C4" / "G#3" style label using key-aware spelling.
+function listenerMidiToLabel(midi) {
+  if (midi == null || midi < 0) return '—';
+  const pc = ((midi % 12) + 12) % 12;
+  const oct = Math.floor(midi / 12) - 1;
+  const useFlats = shouldUseFlats(state.key, state.mode);
+  return indexToNote(pc, useFlats) + oct;
+}
+
+// Voice splitter readout: bass note, chord (the matched tonal center), top note,
+// plus a rough polyphony count. Updated each detection cycle.
+function renderListenerVoices(detectedChord) {
+  const bassEl = document.getElementById('voice-bass');
+  const chordEl = document.getElementById('voice-chord');
+  const topEl = document.getElementById('voice-top');
+  const countEl = document.getElementById('voice-count-pill');
+  if (!bassEl || !chordEl || !topEl) return;
+  bassEl.textContent = listenerMidiToLabel(listenerState.lowMidi);
+  topEl.textContent = listenerMidiToLabel(listenerState.highMidi);
+  chordEl.textContent = detectedChord ? detectedChord.name : '—';
+  if (countEl) {
+    const n = listenerState.voiceCount | 0;
+    countEl.textContent = n >= 2 ? n + ' voices' : '';
   }
 }
 
@@ -5018,6 +5093,24 @@ function buildListenerViewSkeleton(root) {
             <div class="listener-detected-actions" id="listener-detected-actions" style="display:none;">
               <button class="play-btn" id="listener-detected-play"><i class="ph-duotone ph-play sz-sm"></i> Play</button>
               <button class="secondary-btn" id="listener-detected-add"><i class="ph-duotone ph-plus sz-sm"></i> Builder</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="listener-section">
+          <div class="panel-title" style="margin-bottom:6px;">Voices <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">· bass · chord · top <span id="voice-count-pill" class="voice-count-pill"></span></span></div>
+          <div class="listener-voices" id="listener-voices">
+            <div class="voice-tile">
+              <div class="voice-label">Bass</div>
+              <div class="voice-note" id="voice-bass">—</div>
+            </div>
+            <div class="voice-tile is-primary">
+              <div class="voice-label">Chord</div>
+              <div class="voice-note" id="voice-chord">—</div>
+            </div>
+            <div class="voice-tile">
+              <div class="voice-label">Top</div>
+              <div class="voice-note" id="voice-top">—</div>
             </div>
           </div>
         </div>
