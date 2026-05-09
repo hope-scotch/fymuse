@@ -10,17 +10,18 @@ Open `index.html` in any modern browser. No build step.
 
 ```
 FYMuse/
-├── index.html    # The whole app — single HTML file (~180KB)
+├── index.html    # The whole app — single HTML file (~250KB)
+├── logo.png      # FYmuse brand mark (orange wordmark with hex/music-note glyph)
 └── MEMORY.md     # This file
 ```
 
-The HTML file contains everything: HTML structure, CSS, JS, music theory engine, audio synthesis, UI rendering. External dependencies are loaded from CDNs.
+The HTML file contains everything: HTML structure, CSS, JS, music theory engine, audio synthesis, UI rendering. External dependencies are loaded from CDNs. `logo.png` is referenced via relative path so the page works locally and from any host.
 
 ---
 
 ## External dependencies (CDN-loaded)
 
-- **Inter** + **JetBrains Mono** fonts → `fonts.googleapis.com`
+- **Inter** + **JetBrains Mono** + **Space Grotesk** fonts → `fonts.googleapis.com`
 - **Phosphor Icons** (duotone style) → `unpkg.com/@phosphor-icons/web@2.1.1`
 - **Tone.js v14.8.49** → `cdnjs.cloudflare.com`
 - **Salamander piano samples** (only when "Piano" instrument selected) → `tonejs.github.io/audio/salamander/`
@@ -33,8 +34,9 @@ Internet required on first load; thereafter the page works offline if cached.
 
 ```
 ┌─ HEADER ─────────────────────────────────────────────────────────────────────┐
-│ Title │ [Playground][Path Finder][Melody Mode][Songwriter][Sidebar] │ Key │ Sound │
-│ Tempo Loop Metronome │ Genre pills (Pop, Rock, …)                          │
+│ [logo.png] │ [Playground][Path Finder][Melody Mode][Custom Chord]         │
+│            │ [Listener][Songwriter][Sidebar] │ Key │ Sound                │
+│ Tempo Loop Metronome │ Genre pills (Pop, Rock, …)                         │
 ├─ MAIN ────────────────────────────────────────────────┬─ INFO SIDEBAR ──────┤
 │  GRAPH PANEL or PLAYGROUND VIEW                       │  Mood filter        │
 │  (main panel — does NOT shrink when side panels open) │  Signature progs    │
@@ -144,19 +146,24 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
 - **Real-time chord detection from the mic** + suggestions for the next chord
 - "Start listening" button kicks off `getUserMedia({ audio: {echoCancellation:false, noiseSuppression:false, autoGainControl:false} })`. Mic is **never connected to destination** — no monitoring, no feedback risk.
 - Audio path: `MediaStreamSource → AnalyserNode (FFT 8192, smoothing 0.4)` and a parallel `AnalyserNode (time-domain, 2048)` for an RMS level meter. Reuses Tone's audio context if available (`Tone.context.rawContext`), else creates its own.
-- **Chroma extraction**: each FFT bin between ~70–2200 Hz is mapped to a pitch class via `MIDI = 69 + 12·log2(freq/440)` then `pc = round(MIDI) mod 12`, magnitudes summed (linear from dBFS, threshold –75 dB), normalized 0..1. The raw chroma is then **median-smoothed across 3 frames** to kill transient spikes, and **EMA low-passed** (alpha=0.55) into the smoothed chroma used for matching.
-- **Bass detection**: same FFT pass also accumulates a separate low-band chroma (70–180 Hz). Argmax = bass pitch class, dropped if not clearly ahead of 2nd strongest in band. Used for slash-chord display + inversion labels + a 1.15× score boost for candidates whose root matches the bass.
-- **Onset detection**: spectral flux (sum of positive frame-to-frame magnitude deltas) tracked against an EMA baseline. When `flux > 2.5× baseline`, the rolling vote + locked key are reset so a newly-struck chord locks in within a few frames instead of fighting the previous one.
-- **Chord matching**: 12 root candidates × 10 quality templates (`'', m, 7, maj7, m7, sus4, sus2, dim, aug, m7b5`). Each template is built from a **harmonic series profile** (octaves + 5ths + maj3 + m7) summed at every chord tone, so the templates "expect" realistic overtone bleed. Score = cosine similarity × per-template prior weight × bass-bias (if applicable). Top results sorted by score.
-- **Smoothing + hysteresis**: rolling history of last 14 top-1 frames, weighted majority vote per `root:quality` key. Once a chord is locked, a new candidate must beat the locked one's tally by 10% to take over (`LISTENER_HYSTERESIS = 1.10`). Below ~–60 dB RMS or ~0.001 chroma max, frames count as silence and bleed history without pushing.
-- UI elements: live level meter (RMS dB), big detected chord name + Roman numeral analysis in the current key, top-3 alternates with confidence bars, live 12-bin chroma bar chart with the dominant + secondary pitch class highlighted, and a "Suggested next chord" list.
+- **Chroma extraction (CQT-style)**: built via precomputed log-frequency note kernels (`buildListenerNoteKernels()` runs once at start). One kernel per MIDI note from C2 to C6 = 49 kernels. Each is a list of `(binIndex, weight)` pairs with a triangular profile centered on the note's frequency, ±50 cents half-width. Per frame: sum FFT magnitudes weighted by each kernel into per-note energies, then aggregate into 12 PC bins. This gives semitone-resolution log-frequency chroma using the existing FFT — no DSP rewrite. Replaces the old simple bin→PC mapping which under-resolved low pitches.
+- **Median + low-pass smoothing**: raw chroma goes through a 3-frame element-wise median (kills transient spikes from cymbals, sibilance, room noise) before an EMA low-pass (alpha=0.55) into the smoothed chroma used for matching.
+- **Bass detection**: same kernel pass also accumulates a separate low-band chroma (kernels with center freq ≤ 180 Hz). Argmax = bass pitch class, dropped if not clearly ahead of 2nd strongest in band. Used for slash-chord display + inversion labels + a 1.15× score boost for candidates whose root matches the bass (`LISTENER_BASS_BOOST`).
+- **Adaptive noise floor**: EMA tracks ambient RMS during quiet frames; the silence threshold is `noiseFloorEma + 6 dB`. Floor is bounded between –90 dB and –45 dB so it can never get pinned high by sustained loud input. Slow drift up vs fast drift down (alpha 0.001 vs 0.015). Replaces the previous hard-coded –60 dB threshold.
+- **Tuning offset estimate (informational only — NOT applied)**: per-frame magnitude-weighted average of cents-deviation from equal temperament, fed into a slow EMA (alpha=0.04). Capped at ±50 cents and only computed after 30+ confident frames. Surfaced in the UI as `input ±N¢` when |offset| ≥ 12¢. Auto-correction was deliberately disabled — the kernel-PC shift was a step function (no-op below 50¢, full semitone jump above) which caused over-correction. Continuous correction would require per-frame kernel rebuilds and is still risky on detuned instruments / vibrato.
+- **Onset detection**: spectral flux (sum of positive frame-to-frame magnitude deltas) tracked against an EMA baseline (`fluxAvg`). When `flux > 2.5× baseline` (and an absolute floor), the rolling vote + locked key are reset so a newly-struck chord locks in within ~4 frames instead of fighting the previous one for the full HISTORY_SIZE.
+- **Chord matching**: 12 root candidates × 10 quality templates (`'', m, 7, maj7, m7, sus4, sus2, dim, aug, m7b5`). Each template is built from a **harmonic series profile** (`LISTENER_HARMONIC_PROFILE` — h1/h2/h4/h8 octaves, h3/h6 fifths, h5 maj3, h7 m7) summed at every chord tone, so the templates "expect" realistic overtone bleed. Score = cosine similarity × per-template prior weight × bass-bias (if applicable). Top results sorted by score.
+- **Smoothing + hysteresis**: rolling history of last 14 top-1 frames, weighted majority vote per `root:quality` key. Once a chord is locked, a new candidate must beat the locked one's tally by 10% to take over (`LISTENER_HYSTERESIS = 1.10`). Below the adaptive silence threshold, frames count as silence and bleed history without pushing.
+- **Honest confidence display** (`listenerState.topGap`): replaces the old "X% match" (which was just the top score normalized to itself, meaningless). Confidence label is derived from the gap between top-1 and top-2 scores: **locked in** (≥15%, green), **stable** (5–15%, orange), **ambiguous** (<5%, red). The actual gap percentage is shown alongside.
+- UI elements: live level meter (RMS dB) — only visible while listening (`#listener-view.is-listening` class); big detected chord name with slash-chord notation when bass differs from root, Roman numeral in the current key, honest confidence label + gap %, optional `input ±N¢` tuning readout; top-3 alternates with proper percentage bars (`display:block` + gradient fill); live 12-bin chroma bar chart; "Suggested next chord" grid.
 - **Suggestion engine** (`suggestNextChords(detectedChord)`):
   1. Genre transitions — if `state.genre.transitions` exists and the detected chord's Roman numeral matches a `from`, every matching `[from, to, weight]` row contributes a suggestion at weight `0.5 + 0.5·w`.
   2. Universal moves — `LISTENER_UNIVERSAL_MOVES` table mapping common Roman numerals to canonical destinations (V→I, ii→V, IV→I, vi→IV, i→iv/V/VI/VII, ♭VII→IV, etc.) with theory-based reasons.
   3. **V7 of detected** — synthesizes a dominant 7 a fifth above the detected chord, for "set up returning to X" moves even when the detected chord is non-diatonic.
   4. **IV of detected** — plagal predecessor.
   Suggestions deduped by chord name, sorted by weight, top 6 returned.
-- Suggestion cards have **Play** (just the suggestion), **Try** (detected → suggestion as a 2-chord preview), and **+ Builder** (auto-prepends the detected chord if it's not already last in the queue, then appends the suggestion). Roman numerals push as `{numeral, rhythm}` so they retranspose; synthetic `V7/X` notations push as absolute `{chord, rhythm}`.
+- **Suggestion cards** rendered as a responsive grid (`auto-fill, minmax(230px, 1fr)`, gap 10px). Each tile: from→to flow ("C → G", suggested chord at 24 px font-weight 700), Roman-numeral badge in the corner, chord notes (`G · B · D`), the reason in body text, and three labeled action buttons — **Play** (orange-accent primary, plays just the suggestion), **Pair** (plays detected → suggestion preview), **Add** (auto-prepends detected if not already last, then appends suggestion to Builder). Hover lifts the tile by 1px with a soft shadow.
+- **Click any chord card → opens chord detail panel** (existing info-sidebar machinery). `openListenerChordDetail(chord)` derives the Roman numeral via `findRomanForChord`, sets `state.selectedChord`, adds `body.has-chord-detail`, calls `renderChordDetail()`. Click the same card again to close (toggle), or click another to swap. CSS shows the info-sidebar in listener mode only when `.has-chord-detail` is set, and hides every section except `#chord-detail-panel`. Active card gets an orange highlight (`is-active-detail`). An **X close button** sits at the top-right of `#chord-detail-panel` (only shown in listener view) for explicit close. Non-diatonic chords flash an inline tip ("change Key to see voicings") instead of opening an empty detail. Highlights synced via `syncListenerActiveCard()`.
 - Mic auto-stops on: leaving Listener view (any other genre pill / Playground / etc — handled inside `renderAll` by checking `listenerState.active && !state.genre.isListener`) and on tab hide (`visibilitychange`).
 - View skeleton is built lazily on first activation by `buildListenerViewSkeleton(root)`, which inserts a `<div id="listener-view">` inside `#graph-panel`. `showListenerView()` mirrors `showPlaygroundView()` — toggles sibling `#graph-panel` children to `display:none` while the listener view is active. `renderListener()` (called from `renderAll`) restores any prior detection if the user toggles in/out.
 - State: `listenerState` — `{active, audioCtx, micStream, source, fftAnalyser, timeAnalyser, fftBuffer, timeBuffer, rafId, smoothChroma, history, lastShown, …}`.
@@ -180,14 +187,14 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
 ### Sound (8 instruments)
 | Name | Implementation |
 |------|----------------|
-| Synth (triangle) | `PolySynth(Synth)` triangle oscillator |
-| Piano (sampled) | `Sampler` with Salamander piano samples |
-| Electric Piano | `PolySynth(FMSynth)` bell-like envelope |
-| Acoustic Guitar | `PolySynth(Synth)` fatsawtooth + filter + light reverb (synth pluck simulation) |
-| Clean Electric Guitar | synth → light overdrive → cab filter → EQ → chorus → spring reverb |
-| Strings (ensemble) | 4 detuned saws → filter → chorus → hall reverb |
-| Organ | `PolySynth(Synth)` sine + sustained envelope |
-| Distorted Guitar (Muse/LP) | synth → heavy distortion → HP → cab sim → smile-curve EQ → compressor → plate reverb → limiter |
+| Poly Synth | `PolySynth(MonoSynth)` fattriangle (count 2, spread 12) → lowpass with filter envelope (movement) → chorus → reverb |
+| Piano (sampled) | `Sampler` with Salamander piano samples (untouched — sounds great) |
+| Electric Piano | `PolySynth(FMSynth)` harmonicity 1.999 (octave-up modulator = metallic tine), modulationIndex 6, sharp percussive envelope → tremolo (4.5 Hz) → chorus → EQ → room reverb |
+| Acoustic Guitar | `PolySynth(MonoSynth)` fatsawtooth + strong filter envelope (lowpass sweeps high→low fast = pluck attack) → body resonance peaking filters at 220 Hz + 1.5 kHz → highpass → EQ → reverb |
+| Clean Electric Guitar | `PolySynth(Synth)` sawtooth → light overdrive → cab filter → EQ → chorus → spring reverb (untouched — sounds great) |
+| Strings (ensemble) | `PolySynth(Synth)` fatsawtooth (count 4, spread 50), slow attack 0.9s → vibrato (5.5 Hz) → highpass → lowpass → deep chorus (0.7 Hz, depth 0.7, 50% wet) → 4s hall reverb at 40% wet |
+| Organ | `PolySynth(FMSynth)` harmonicity 2 (octave-up drawbar) additive timbre → vibrato (rotor pitch) + tremolo (rotor amp) Leslie sim → EQ → plate reverb |
+| Distorted Guitar (Muse/LP) | synth → pre-EQ mid-bump (Tube-Screamer "honk") → heavy distortion → HP → cab sim → smile-curve EQ (3/-3/2) → compressor → ping-pong delay (32n, 12% feedback) stereo widener → plate reverb → limiter |
 
 Each factory disposes its own effect chain on instrument switch.
 
@@ -288,6 +295,11 @@ MINOR_INTERVALS = [0,2,3,5,7,8,10]   // natural minor
 - `fluxAvg`: EMA of spectral flux — onset detection baseline
 - `bassPc`: currently detected bass pitch class (or -1 if ambiguous/silent)
 - `lockedKey`: 'root:quality' of the currently locked chord (for hysteresis)
+- `noteKernels`: precomputed log-frequency CQT-style kernels (per MIDI note from C2-C6); built once via `buildListenerNoteKernels()` on listener start
+- `noiseFloorEma`: adaptive RMS noise floor in dB (EMA, capped between -90 and -45)
+- `tuningOffsetCents`: estimated global tuning offset (cents) — surfaced in UI but **not** auto-applied to chord matching
+- `tuningEma`, `tuningSamples`: EMA + sample counter for the tuning estimate
+- `topGap`: last frame's top-1 vs top-2 score gap (0..1) — drives the honest confidence label
 - `history`: rolling array of last N top-1 detection frames `{root, quality, score}`
 - `HISTORY_SIZE`: 14
 - `lastShown`: last stable chord pushed to UI `{root, quality, name, chord, score, since}`
@@ -361,6 +373,22 @@ bindModeButtons();         // legacy no-op
 
 ## Recent change history (newest first)
 
+- **Listener tuning auto-correction disabled** (over-correction risk). The previous compensation used `Math.round(offsetSemis)` on the kernel PC mapping. Since the offset is capped at ±50 cents (= 0.5 semis), `Math.round` was effectively a step function: 0 below 50¢, ±1 whole semitone at the boundary — guaranteed wrong-note shift at the edge. Removed the PC shift entirely. The estimation logic stays and surfaces in the UI as a passive `input ±N¢` readout (only when |offset| ≥ 12¢) so the user can decide to retune their gear.
+- **Instrument signal chains improved for 6 voices**. Piano + Clean Electric Guitar untouched (sounded good). Synth → "Poly Synth" with `PolySynth(MonoSynth)` + filter envelope + chorus + reverb. Electric Piano tuned to harmonicity 1.999 (metallic tine) with tremolo + chorus + room. Acoustic Guitar switched to `PolySynth(MonoSynth)` with strong filter envelope (true pluck) + body resonance peaks at 220 Hz / 1.5 kHz. Strings now have vibrato + deeper chorus + 4s hall + 100 Hz highpass. Organ switched to `PolySynth(FMSynth)` (harmonicity 2 = octave drawbar) + Leslie emulation (vibrato + tremolo). Distorted Guitar got a pre-distortion mid-boost (Tube-Screamer "honk") + ping-pong delay stereo widener.
+- **Listener accuracy — Tier 2 + log-frequency CQT-style chroma (Tier 3 #8)**:
+  1. **Log-frequency note-kernel chroma** — replaces flat FFT-bin→PC mapping. `buildListenerNoteKernels()` precomputes a triangular kernel (±50 cents) per MIDI note from C2 to C6, aggregating FFT bins into per-note energies before summing into 12 PC bins. Cleaner low-pitch resolution without a heavy DSP rewrite.
+  2. **Adaptive noise floor** — EMA of RMS during quiet frames; silence threshold = floor + 6 dB. Capped between –90 and –45 dB. Slow drift up vs fast drift down.
+  3. **Tuning offset estimate** — magnitude-weighted average of cents-deviation from equal temperament, slow EMA. Surfaced as info, *not* applied (see entry above).
+  4. **Honest confidence** — replaced the misleading "X% match" (top score normalized to itself) with a label based on the top-1 vs top-2 gap: locked in (≥15%) / stable (5–15%) / ambiguous (<5%). Color-coded with the gap %.
+- **Listener UI bug fixes**:
+  - Alt confidence bars were rendering at zero height because `.listener-alt-bar-fill` was an inline `<span>`. Added `display: block` to both the bar and fill plus a `min-width: 2px` so 0% bars still show a sliver.
+  - Chord-card toggle hardened. Refactored `openListenerChordDetail` into a clean open/close pair (`closeListenerChordDetail`) sharing a `syncListenerActiveCard` helper.
+  - **X close button** added at top-right of `#chord-detail-panel` (only shown in listener view), explicitly closes the panel.
+- **Click any chord card → opens chord detail** (info-sidebar's piano + guitar voicings, "where can I go from here", etc). Uses existing `renderChordDetail()` machinery. Body class `has-chord-detail` controls visibility; CSS hides every section except `#chord-detail-panel` so only voicings show. Toggle behavior on the card body, action buttons (Play/Pair/Add) `stopPropagation`. Active card highlighted.
+- **Suggestion cards redesigned as a chord-tile grid** (`auto-fill, minmax(230px, 1fr)`, gap 10px). Each tile shows from→to flow ("C → G"), Roman numeral badge, chord notes, the reason, and three labeled buttons (Play / Pair / Add) with Play styled as the orange-accent primary. Hover lifts +1px with soft shadow.
+- **Listener header restructured**: title + Start button on a single row (no more giant whitespace gap on wide viewports), description on a full-width row below. Bottom border under the header removed.
+- **Listener mic status pill**: small colored dot prefix (grey when off, cyan pulsing when listening, red on error) instead of monospace "Mic off" text. Level meter row hidden when mic is off (`#listener-view.is-listening` class) — no more empty 8 px outline taking up space.
+- **Logo / brand mark**: `logo.png` (cropped FYmuse wordmark) loaded as `<img>` and stretched to full available width in the H1 (max-height 96 px sanity cap). Replaces the previous text wordmark + Phosphor music-note icon. Tagline "chord progression finder" removed. Old `.brand-mark` gradient styles removed; Space Grotesk still loaded for any future use.
 - **Listener accuracy upgrade — Tier 1**. Four orthogonal improvements bumped synthetic-test accuracy from 14/19 → 18/19 with much wider score margins:
   1. **Harmonic-aware templates** — chord templates are now built by summing the harmonic series profile (`LISTENER_HARMONIC_PROFILE` — h1/h2/h4/h8 octaves, h3/h6 fifths, h5 maj3, h7 m7) at every chord tone. Real audio's overtone bleed now matches the templates instead of working against them. Built by `buildHarmonicTemplate(intervals)`.
   2. **Bass-note detection** — a separate low-band chroma (70-180 Hz, computed in the same FFT pass) finds the dominant pitch class in the bass. Required to be clearly ahead of the second-strongest bass-band PC (>30% gap) or it's dropped as ambiguous. Used to (a) display slash-chord notation `C/E` when bass differs from root, (b) label inversion (1st / 2nd / 7th in bass / slash), (c) apply a `LISTENER_BASS_BOOST = 1.15` multiplier to candidates whose root matches the bass — disambiguates F#dim vs rootless D7 etc.
@@ -379,7 +407,7 @@ bindModeButtons();         // legacy no-op
 - **New queue item type**: `{chord, rhythm}` for custom absolute chords. `playProgression`'s `resolve` returns `item.chord` directly. Builder chips show `(custom)` suffix to distinguish from Roman numeral entries.
 - **Builder Clear now also re-renders Playground** so chord cards' in-builder ✓ badges and cyan tints clear too.
 - **Metronome button is icon-only** — removed the "Metronome" / "Stop" text label. Tooltip + active class indicate state.
-- **Project moved to `~/fymuse/`** with main file renamed to `index.html` (was `chord_progression_finder.html`). Page title: "FYMuse — Chord Progression Finder". Header brand: "FY" (white) + "Muse" (orange) with subtle "· chord progression finder" subtitle.
+- **Project moved to `~/fymuse/`** with main file renamed to `index.html` (was `chord_progression_finder.html`). Page title: "FYMuse — Chord Progression Finder". Original header brand was "FY" (white) + "Muse" (orange); since replaced by `logo.png` (see entries above).
 - **Layout precedence rules**: side panels take width preference; main panel never shrinks because of side panels (they overlay); builder drawer's right edge shifts to `right: 460px` when any side panel is open via `body.side-panel-open` CSS class managed by `syncBodyPanelState()`. Smooth 0.32s cubic-bezier transition.
 - **Side panels reverted to fixed-position overlays** (briefly experimented with inline flex columns but the user wanted main untouched). Mutually exclusive — opening one closes the other via `closeAllSidePanels()` then `openSidePanel()`.
 - **Info Sidebar is now toggleable** via a "Sidebar" header button (default visible). Uses `.collapsed` class on `#info-sidebar` to animate `flex-basis: 0`. Main panel reflows when sidebar collapses/expands.
