@@ -591,6 +591,11 @@
   .splitter-status.is-error::before { background: #ff6b6b; }
   .splitter-status.is-ready { color: var(--success); }
   .splitter-status.is-ready::before { background: var(--success); }
+  .splitter-progress-wrap { display: inline-flex; align-items: center; gap: 8px; min-width: 130px; }
+  .splitter-progress-wrap[hidden] { display: none; }
+  .splitter-progress-bar { flex: 1; height: 5px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; min-width: 80px; }
+  .splitter-progress-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.25s ease-out; min-width: 2px; }
+  .splitter-progress-pct { font-family: var(--font-mono); font-size: 11px; color: var(--accent); min-width: 36px; text-align: right; font-weight: 600; }
 
   /* Drag-drop highlight on the splitter view */
   #splitter-view.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); border-radius: 8px; }
@@ -5513,6 +5518,10 @@ function buildSplitterViewSkeleton(root) {
           <button class="primary" id="splitter-upload-btn" title="Upload a song (or drag-drop one here)"><i class="ph-duotone ph-upload-simple sz-sm"></i> Upload song</button>
           <input type="file" id="splitter-file-input" accept="audio/*" hidden>
           <span class="splitter-status" id="splitter-status">No song loaded</span>
+          <div class="splitter-progress-wrap" id="splitter-progress-wrap" hidden>
+            <div class="splitter-progress-bar"><div class="splitter-progress-fill" id="splitter-progress-fill"></div></div>
+            <span class="splitter-progress-pct" id="splitter-progress-pct">0%</span>
+          </div>
         </div>
       </div>
       <div class="splitter-sub">Drop an MP3/WAV/etc. and Splitter pulls the song apart into 4 rough stems using on-device DSP (no server, no cost). Quality is approximate — drums vs harmonic content separates well; isolating individual instruments from the harmonic bucket is not free-ML achievable. Each stem gets its own volume, mute, and solo. Take note: separation runs offline on your CPU and may take 10–60 seconds for a 3-minute song.</div>
@@ -5605,12 +5614,28 @@ function renderSplitter() {
   splitterUpdateStatusUI();
 }
 
-function splitterSetStatus(text, state) {
+function splitterSetStatus(text, state, progress) {
   splitterState.status = state || splitterState.status;
   const el = document.getElementById('splitter-status');
-  if (!el) return;
-  el.textContent = text;
-  el.className = 'splitter-status' + (state === 'busy' ? ' is-busy' : state === 'error' ? ' is-error' : state === 'ready' ? ' is-ready' : '');
+  if (el) {
+    el.textContent = text;
+    el.className = 'splitter-status' + (state === 'busy' ? ' is-busy' : state === 'error' ? ' is-error' : state === 'ready' ? ' is-ready' : '');
+  }
+  // Progress bar + percent — visible only while busy
+  const wrap = document.getElementById('splitter-progress-wrap');
+  const fill = document.getElementById('splitter-progress-fill');
+  const pct = document.getElementById('splitter-progress-pct');
+  const isBusy = state === 'busy';
+  if (wrap) wrap.hidden = !isBusy;
+  if (isBusy && progress != null) {
+    const p = Math.max(0, Math.min(1, progress));
+    if (fill) fill.style.width = (p * 100).toFixed(1) + '%';
+    if (pct) pct.textContent = Math.round(p * 100) + '%';
+  } else if (!isBusy) {
+    // Reset for the next run
+    if (fill) fill.style.width = '0%';
+    if (pct) pct.textContent = '0%';
+  }
 }
 
 function splitterUpdateStatusUI() {
@@ -5824,19 +5849,21 @@ async function splitterYield() {
 async function splitterHPSS(buffer, opts) {
   opts = Object.assign({ fftSize: 2048, hopSize: 512, kernelTime: 17, kernelFreq: 17, power: 2 }, opts || {});
   const setStatus = opts.setStatus || (() => {});
-  setStatus('mixing to mono…');
+  // Phase progress checkpoints (rough, calibrated against typical run times):
+  //   mix 2% · STFT 25% · median-h 50% · median-p 72% · masks 76% · iSTFT-h 88% · iSTFT-p 99%
+  setStatus('mixing to mono…', 0.02);
   await splitterYield();
   const audio = splitterMixToMono(buffer);
-  setStatus('forward STFT…');
+  setStatus('forward STFT…', 0.05);
   await splitterYield();
   const stft = splitterSTFT(audio, opts.fftSize, opts.hopSize);
-  setStatus('median-filter (harmonic)…');
+  setStatus('median-filter (harmonic)…', 0.28);
   await splitterYield();
   const harmRef = splitterMedianFilter2D(stft.mags, stft.numFrames, stft.numBins, opts.kernelTime, 0);
-  setStatus('median-filter (percussive)…');
+  setStatus('median-filter (percussive)…', 0.52);
   await splitterYield();
   const percRef = splitterMedianFilter2D(stft.mags, stft.numFrames, stft.numBins, opts.kernelFreq, 1);
-  setStatus('computing soft masks…');
+  setStatus('computing soft masks…', 0.74);
   await splitterYield();
   const total = stft.mags.length;
   const harmMags = new Float32Array(total);
@@ -5851,10 +5878,10 @@ async function splitterHPSS(buffer, opts) {
     harmMags[i] = stft.mags[i] * hRatio;
     percMags[i] = stft.mags[i] * pRatio;
   }
-  setStatus('inverse STFT (harmonic)…');
+  setStatus('inverse STFT (harmonic)…', 0.78);
   await splitterYield();
   const harmonic = splitterISTFT(stft, harmMags, audio.length);
-  setStatus('inverse STFT (percussive)…');
+  setStatus('inverse STFT (percussive)…', 0.90);
   await splitterYield();
   const percussive = splitterISTFT(stft, percMags, audio.length);
   return { harmonic, percussive, sampleRate: buffer.sampleRate, length: audio.length };
@@ -5925,10 +5952,10 @@ async function splitterProcess() {
   if (!buffer || !ctx) return;
   splitterCloseStems();
   const sr = buffer.sampleRate;
-  const setSubStatus = (msg) => splitterSetStatus('processing · ' + msg, 'busy');
+  const setSubStatus = (msg, prog) => splitterSetStatus('processing · ' + msg, 'busy', prog);
   // Run HPSS (heavy, async-yielding so the UI stays responsive)
   const { harmonic, percussive } = await splitterHPSS(buffer, { setStatus: setSubStatus });
-  setSubStatus('extracting bass…');
+  setSubStatus('extracting bass…', 0.99);
   await splitterYield();
   const bass = await splitterLowpass(harmonic, sr, 220);
   // Build AudioBuffers and stem records
