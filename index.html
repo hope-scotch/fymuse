@@ -5846,16 +5846,29 @@ function splitterRenderWaveform(stemId) {
 }
 
 function splitterRenderTimelineEvents(stemId) {
-  // Event labels (chord/note names) get rendered here once analysis lands;
-  // for v0 of the timeline this is a no-op but the container exists.
   const stem = splitterState.stems[stemId];
   const wrap = document.getElementById('stem-events-' + stemId);
   if (!wrap) return;
   if (!stem || !stem.events || !splitterState.duration) { wrap.innerHTML = ''; return; }
   const dur = splitterState.duration;
-  wrap.innerHTML = stem.events.map(ev => {
+  // Skip events that would overlap the previous label in pixel space — keeps
+  // the timeline readable when detection produces dense changes.
+  const rect = wrap.getBoundingClientRect();
+  const w = rect.width || 1000;
+  const minPxBetween = 38;
+  const visible = [];
+  let lastPx = -1000;
+  for (const ev of stem.events) {
+    const px = (ev.start / dur) * w;
+    if (px - lastPx >= minPxBetween) {
+      visible.push(ev);
+      lastPx = px;
+    }
+  }
+  wrap.innerHTML = visible.map(ev => {
     const leftPct = (ev.start / dur) * 100;
-    return `<div class="event" style="left:${leftPct.toFixed(2)}%;">${ev.label}</div>`;
+    const safe = String(ev.label).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
+    return `<div class="event" style="left:${leftPct.toFixed(2)}%;" title="${safe} @ ${splitterFormatTime(ev.start)}">${safe}</div>`;
   }).join('');
 }
 
@@ -5870,13 +5883,149 @@ function splitterRenderAllTimelines() {
 async function splitterAnalyzeStems() {
   splitterSetStatus('extracting waveforms…', 'busy', 0.995);
   await splitterYield();
-  for (const def of splitterStems()) {
+  const stems = splitterStems();
+  // Phase 1: waveform peaks (cheap)
+  for (const def of stems) {
     const stem = splitterState.stems[def.id];
     if (!stem || !stem.buffer) continue;
     stem.waveformPeaks = splitterExtractPeaks(stem.buffer, 400);
   }
   splitterRenderAllTimelines();
+  // Phase 2: chord/note events (heavier — may take a few seconds per stem)
+  for (let i = 0; i < stems.length; i++) {
+    const def = stems[i];
+    const stem = splitterState.stems[def.id];
+    if (!stem || !stem.buffer) continue;
+    splitterSetStatus('analysing ' + def.name + '…', 'busy', 0.995);
+    await splitterYield();
+    stem.events = await splitterAnalyseStemEvents(def.id, stem.buffer);
+    splitterRenderTimelineEvents(def.id);
+  }
   splitterUpdateStemCursors();
+}
+
+// Per-stem dispatcher: poly chord detection for harmonic-type stems,
+// monophonic note tracker for bass/vocals, skip drums.
+async function splitterAnalyseStemEvents(stemId, buffer) {
+  if (stemId === 'drums' || stemId === 'percussive') return [];
+  if (stemId === 'bass' || stemId === 'vocals')      return splitterDetectNotes(buffer);
+  return splitterDetectChords(buffer);
+}
+
+// ---- Offline chord detection ---------------------------------------------
+// Slides a window over the stem's audio, computes chroma via the existing
+// kernel set, runs listenerScoreChroma, dedupes consecutive identical chords
+// into events. Returns [{start, end, label}].
+async function splitterDetectChords(buffer) {
+  const hopSec = 0.5;
+  const fftSize = 4096;
+  const sr = buffer.sampleRate;
+  const hopSamples = Math.max(1, Math.floor(hopSec * sr));
+  const audio = (buffer.numberOfChannels === 1)
+    ? buffer.getChannelData(0)
+    : splitterMixToMono(buffer);
+  if (audio.length < fftSize) return [];
+  const numFrames = Math.floor((audio.length - fftSize) / hopSamples) + 1;
+  const kernels = buildListenerNoteKernels(sr, fftSize);
+  const window = splitterHannWindow(fftSize);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const numBins = fftSize / 2 + 1;
+  const mags = new Float32Array(numBins);
+  const chroma = new Float32Array(12);
+
+  const events = [];
+  let curLabel = null;
+  let curStart = 0;
+
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * hopSamples;
+    for (let i = 0; i < fftSize; i++) { re[i] = audio[start + i] * window[i]; im[i] = 0; }
+    splitterFFT(re, im);
+    for (let i = 0; i < numBins; i++) mags[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+    chroma.fill(0);
+    for (const k of kernels) {
+      let energy = 0;
+      for (let j = 0; j < k.bins.length; j++) energy += mags[k.bins[j][0]] * k.bins[j][1];
+      chroma[k.pc] += energy;
+    }
+    let maxV = 0;
+    for (let i = 0; i < 12; i++) if (chroma[i] > maxV) maxV = chroma[i];
+    const tNow = f * hopSec;
+    if (maxV < 0.01) {
+      // Silence — close any open event
+      if (curLabel) { events.push({ start: curStart, end: tNow, label: curLabel }); curLabel = null; }
+      continue;
+    }
+    for (let i = 0; i < 12; i++) chroma[i] /= maxV;
+    const results = listenerScoreChroma(chroma);
+    if (!results.length) continue;
+    const label = listenerCandidateToChord(results[0]).name;
+    if (label !== curLabel) {
+      if (curLabel) events.push({ start: curStart, end: tNow, label: curLabel });
+      curLabel = label;
+      curStart = tNow;
+    }
+    if ((f & 31) === 0) await splitterYield();
+  }
+  if (curLabel) events.push({ start: curStart, end: numFrames * hopSec, label: curLabel });
+  // Drop events shorter than 0.4 s — usually noise / mid-transition
+  return events.filter(ev => (ev.end - ev.start) >= 0.4);
+}
+
+// ---- Offline monophonic note detection -----------------------------------
+// For bass / vocals: at each frame find the strongest kernel (= dominant note),
+// dedupe consecutive identical notes into events. Returns [{start, end, label}].
+async function splitterDetectNotes(buffer) {
+  const hopSec = 0.4;
+  const fftSize = 4096;
+  const sr = buffer.sampleRate;
+  const hopSamples = Math.max(1, Math.floor(hopSec * sr));
+  const audio = (buffer.numberOfChannels === 1)
+    ? buffer.getChannelData(0)
+    : splitterMixToMono(buffer);
+  if (audio.length < fftSize) return [];
+  const numFrames = Math.floor((audio.length - fftSize) / hopSamples) + 1;
+  const kernels = buildListenerNoteKernels(sr, fftSize);
+  const window = splitterHannWindow(fftSize);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const numBins = fftSize / 2 + 1;
+  const mags = new Float32Array(numBins);
+  const useFlats = (typeof shouldUseFlats === 'function') ? shouldUseFlats(state.key, state.mode) : false;
+
+  const events = [];
+  let curLabel = null;
+  let curStart = 0;
+
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * hopSamples;
+    for (let i = 0; i < fftSize; i++) { re[i] = audio[start + i] * window[i]; im[i] = 0; }
+    splitterFFT(re, im);
+    for (let i = 0; i < numBins; i++) mags[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+    let bestEnergy = 0, bestKernel = null;
+    for (const k of kernels) {
+      let energy = 0;
+      for (let j = 0; j < k.bins.length; j++) energy += mags[k.bins[j][0]] * k.bins[j][1];
+      if (energy > bestEnergy) { bestEnergy = energy; bestKernel = k; }
+    }
+    const tNow = f * hopSec;
+    if (!bestKernel || bestEnergy < 0.5) {
+      if (curLabel) { events.push({ start: curStart, end: tNow, label: curLabel }); curLabel = null; }
+      continue;
+    }
+    const pc = ((bestKernel.midi % 12) + 12) % 12;
+    const oct = Math.floor(bestKernel.midi / 12) - 1;
+    const label = (typeof indexToNote === 'function' ? indexToNote(pc, useFlats) : ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][pc]) + oct;
+    if (label !== curLabel) {
+      if (curLabel) events.push({ start: curStart, end: tNow, label: curLabel });
+      curLabel = label;
+      curStart = tNow;
+    }
+    if ((f & 31) === 0) await splitterYield();
+  }
+  if (curLabel) events.push({ start: curStart, end: numFrames * hopSec, label: curLabel });
+  return events.filter(ev => (ev.end - ev.start) >= 0.2);
 }
 
 // Called from renderAll when entering / refreshing splitter view. Currently a no-op
