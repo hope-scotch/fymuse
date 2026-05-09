@@ -584,6 +584,24 @@
   .listener-controls .primary:hover { filter: brightness(1.1); }
   .listener-view-controls .primary.is-listening,
   .listener-controls .primary.is-listening { background: var(--accent-2); }
+  .listener-upload-btn { padding: 8px 14px; background: var(--panel-2); color: var(--text-2); border: 1px solid var(--border); border-radius: 6px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; font-size: 13px; font-family: var(--font-sans); }
+  .listener-upload-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--panel); }
+
+  /* Drag-drop highlight on the listener view itself */
+  #listener-view.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); border-radius: 8px; }
+
+  /* Audio file player (visible when a file is loaded) */
+  .listener-file-player { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; }
+  .listener-file-player[hidden] { display: none; }
+  .listener-file-play-btn { width: 36px; height: 36px; padding: 0; background: var(--accent); color: #1a1a1a; border: none; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; transition: filter 0.15s; }
+  .listener-file-play-btn:hover { filter: brightness(1.1); }
+  .listener-file-info { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .listener-file-name { font-size: 12px; color: var(--text-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .listener-file-bar { height: 4px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; position: relative; }
+  .listener-file-bar-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.1s linear; min-width: 2px; }
+  .listener-file-time { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+  .listener-file-close-btn { width: 28px; height: 28px; padding: 0; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
+  .listener-file-close-btn:hover { color: var(--accent); border-color: var(--accent); }
   .listener-status { font-size: 12px; color: var(--muted); font-family: var(--font-sans); display: inline-flex; align-items: center; gap: 6px; }
   .listener-status::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
   .listener-status.is-active { color: var(--accent-2); }
@@ -639,15 +657,6 @@
   .ls-card-actions button:hover { color: var(--accent); border-color: var(--accent); }
   .ls-card-actions button[data-action="play"] { background: var(--accent); color: #1a1a1a; border-color: var(--accent); font-weight: 600; }
   .ls-card-actions button[data-action="play"]:hover { filter: brightness(1.1); color: #1a1a1a; border-color: var(--accent); }
-
-  .listener-voices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .voice-tile { padding: 12px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; text-align: center; transition: border-color 0.15s, background 0.15s; }
-  .voice-tile.is-primary { border-color: var(--accent); background: var(--accent-soft); }
-  .voice-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: 1.6px; text-transform: uppercase; margin-bottom: 5px; }
-  .voice-note { font-family: var(--font-mono); font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.4px; line-height: 1; min-height: 22px; }
-  .voice-tile.is-primary .voice-note { color: var(--accent); }
-  .voice-count-pill { display: inline-block; margin-left: 4px; padding: 1px 7px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-2); }
-  .voice-count-pill:empty { display: none; }
 
   .listener-chroma { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; height: 120px; align-items: end; }
   .listener-chroma-bar { background: var(--panel-2); border: 1px solid var(--border); border-radius: 3px 3px 0 0; position: relative; min-height: 4px; transition: height 0.08s linear, background 0.12s; }
@@ -4170,10 +4179,14 @@ const listenerState = {
   tuningEma: 0,           // EMA for tuning offset before commit
   tuningSamples: 0,       // Number of frames contributing to tuningEma (gates application)
   topGap: 0,              // Last frame's top1 vs top2 score gap (0..1)
-  // Voice splitter:
-  lowMidi: -1,            // Lowest active note (MIDI), -1 if silence
-  highMidi: -1,           // Highest active note (MIDI), -1 if silence
-  voiceCount: 0,          // Number of "active" kernel peaks (rough polyphony estimate)
+  // Audio-file source (alternative to mic):
+  mode: 'idle',           // 'idle' | 'mic' | 'file'
+  fileBuffer: null,       // decoded AudioBuffer
+  fileName: null,
+  fileSource: null,       // active AudioBufferSourceNode
+  filePlaying: false,
+  fileStartCtxTime: 0,    // ctx.currentTime when current source started
+  fileOffset: 0,          // position within the buffer where current source started
 };
 const LISTENER_HYSTERESIS = 1.10; // new candidate must beat locked one by 10% to switch
 const LISTENER_NOISE_MARGIN_DB = 6;       // dB above noise floor counts as "audio"
@@ -4312,9 +4325,7 @@ async function listenerStart() {
     listenerState.tuningSamples = 0;
     listenerState.topGap = 0;
     listenerState.noteKernels = buildListenerNoteKernels(ctx.sampleRate, fftAnalyser.fftSize);
-    listenerState.lowMidi = -1;
-    listenerState.highMidi = -1;
-    listenerState.voiceCount = 0;
+    listenerState.mode = 'mic';
     listenerState.active = true;
     btn.classList.add('is-listening');
     btn.innerHTML = '<i class="ph-duotone ph-stop sz-sm"></i> Stop listening';
@@ -4334,7 +4345,17 @@ async function listenerStart() {
 function listenerStop() {
   listenerState.active = false;
   if (listenerState.rafId) { cancelAnimationFrame(listenerState.rafId); listenerState.rafId = null; }
+  // Tear down whichever source was active (mic OR file)
   if (listenerState.source) { try { listenerState.source.disconnect(); } catch(e) {} listenerState.source = null; }
+  if (listenerState.fileSource) {
+    try { listenerState.fileSource.onended = null; listenerState.fileSource.stop(); listenerState.fileSource.disconnect(); } catch(e) {}
+    listenerState.fileSource = null;
+  }
+  listenerState.fileBuffer = null;
+  listenerState.fileName = null;
+  listenerState.filePlaying = false;
+  listenerState.fileOffset = 0;
+  listenerState.mode = 'idle';
   if (listenerState.micStream) {
     listenerState.micStream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} });
     listenerState.micStream = null;
@@ -4353,9 +4374,6 @@ function listenerStop() {
   listenerState.tuningEma = 0;
   listenerState.tuningSamples = 0;
   listenerState.topGap = 0;
-  listenerState.lowMidi = -1;
-  listenerState.highMidi = -1;
-  listenerState.voiceCount = 0;
   listenerState.lastStable = null;
   listenerState.lastShown = null;
   const btn = document.getElementById('listener-toggle');
@@ -4370,6 +4388,10 @@ function listenerStop() {
   }
   const lv = document.getElementById('listener-view');
   if (lv) lv.classList.remove('is-listening');
+  // Hide file player + re-enable mic toggle
+  const player = document.getElementById('listener-file-player');
+  if (player) player.hidden = true;
+  if (btn) btn.disabled = false;
   // Reset meter + UI
   const meter = document.getElementById('listener-meter-fill');
   if (meter) meter.style.width = '0%';
@@ -4407,8 +4429,182 @@ function buildListenerNoteKernels(sampleRate, fftSize) {
   return kernels;
 }
 
+// ---- Audio file mode ------------------------------------------------------
+// Lets the user upload an MP3/WAV (or drag-drop one) and run the same chord
+// detection + suggestion pipeline against it instead of live mic input. The
+// audio also plays through speakers so the user hears what's being analyzed.
+
+// Shared analyser setup. Idempotent — only creates analysers + chroma kernels
+// if they don't already exist. Called by both mic start and file start so
+// the FFT path is identical regardless of source.
+async function listenerEnsureAudioPipeline() {
+  if (!listenerState.audioCtx) {
+    const ctx = (typeof Tone !== 'undefined' && Tone.context && Tone.context.rawContext)
+      ? Tone.context.rawContext
+      : new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    listenerState.audioCtx = ctx;
+  }
+  const ctx = listenerState.audioCtx;
+  if (!listenerState.fftAnalyser) {
+    const fftAnalyser = ctx.createAnalyser();
+    fftAnalyser.fftSize = 8192;
+    fftAnalyser.smoothingTimeConstant = 0.4;
+    const timeAnalyser = ctx.createAnalyser();
+    timeAnalyser.fftSize = 2048;
+    timeAnalyser.smoothingTimeConstant = 0;
+    listenerState.fftAnalyser = fftAnalyser;
+    listenerState.timeAnalyser = timeAnalyser;
+    listenerState.fftBuffer = new Float32Array(fftAnalyser.frequencyBinCount);
+    listenerState.timeBuffer = new Float32Array(timeAnalyser.fftSize);
+    listenerState.smoothChroma = new Float32Array(12);
+    listenerState.history = [];
+    listenerState.rawChromaHistory = [];
+    listenerState.prevSpectrum = new Float32Array(fftAnalyser.frequencyBinCount);
+    listenerState.fluxAvg = 0;
+    listenerState.bassPc = -1;
+    listenerState.lockedKey = null;
+    listenerState.noiseFloorEma = -60;
+    listenerState.tuningOffsetCents = 0;
+    listenerState.tuningEma = 0;
+    listenerState.tuningSamples = 0;
+    listenerState.topGap = 0;
+    listenerState.noteKernels = buildListenerNoteKernels(ctx.sampleRate, fftAnalyser.fftSize);
+  }
+}
+
+async function listenerLoadFile(file) {
+  if (!file) return;
+  const status = document.getElementById('listener-status');
+  // If mic is running, stop it first — modes are exclusive
+  if (listenerState.mode === 'mic') listenerStop();
+  // If a file was already loaded, tear it down
+  if (listenerState.fileSource) {
+    try { listenerState.fileSource.onended = null; listenerState.fileSource.stop(); listenerState.fileSource.disconnect(); } catch(e) {}
+    listenerState.fileSource = null;
+  }
+  listenerState.fileBuffer = null;
+  listenerState.fileOffset = 0;
+  if (status) { status.textContent = 'decoding…'; status.className = 'listener-status'; }
+  try {
+    await listenerEnsureAudioPipeline();
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = await listenerState.audioCtx.decodeAudioData(arrayBuffer);
+    listenerState.fileBuffer = buffer;
+    listenerState.fileName = file.name;
+    listenerStartFileSource(0);
+    // Rolling state already initialized by ensureAudioPipeline
+  } catch (err) {
+    console.error('[Listener] file decode failed', err);
+    if (status) { status.textContent = 'decode failed'; status.className = 'listener-status is-error'; }
+    listenerState.fileBuffer = null;
+    listenerState.fileName = null;
+    const player = document.getElementById('listener-file-player');
+    if (player) player.hidden = true;
+  }
+}
+
+function listenerStartFileSource(offsetSec) {
+  const ctx = listenerState.audioCtx;
+  const buffer = listenerState.fileBuffer;
+  if (!ctx || !buffer) return;
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(listenerState.fftAnalyser);
+  source.connect(listenerState.timeAnalyser);
+  source.connect(ctx.destination);
+  source.onended = () => {
+    if (listenerState.fileSource !== source) return; // we already replaced it
+    listenerState.fileSource = null;
+    listenerState.filePlaying = false;
+    listenerState.fileOffset = 0;
+    updateListenerFilePlayer();
+  };
+  source.start(0, Math.max(0, offsetSec));
+  listenerState.fileSource = source;
+  listenerState.fileStartCtxTime = ctx.currentTime;
+  listenerState.fileOffset = offsetSec;
+  listenerState.filePlaying = true;
+  listenerState.mode = 'file';
+  listenerState.active = true;
+
+  // UI sync
+  const player = document.getElementById('listener-file-player');
+  if (player) player.hidden = false;
+  const nameEl = document.getElementById('listener-file-name');
+  if (nameEl) nameEl.textContent = listenerState.fileName || '';
+  const lv = document.getElementById('listener-view');
+  if (lv) lv.classList.add('is-listening');
+  const status = document.getElementById('listener-status');
+  if (status) { status.textContent = 'analysing file'; status.className = 'listener-status is-active'; }
+  // Disable mic toggle while a file is loaded so the modes don't conflict
+  const btn = document.getElementById('listener-toggle');
+  if (btn) { btn.disabled = true; btn.classList.remove('is-listening'); }
+  // Kick off the analysis loop if it's not already running
+  if (!listenerState.rafId) listenerLoop();
+  updateListenerFilePlayer();
+}
+
+function listenerToggleFilePlay() {
+  if (!listenerState.fileBuffer) return;
+  const ctx = listenerState.audioCtx;
+  if (listenerState.filePlaying && listenerState.fileSource) {
+    // Pause: capture elapsed, stop source
+    const elapsed = ctx.currentTime - listenerState.fileStartCtxTime;
+    listenerState.fileOffset = (listenerState.fileOffset || 0) + elapsed;
+    if (listenerState.fileOffset > listenerState.fileBuffer.duration) {
+      listenerState.fileOffset = 0;
+    }
+    try { listenerState.fileSource.onended = null; listenerState.fileSource.stop(); listenerState.fileSource.disconnect(); } catch(e) {}
+    listenerState.fileSource = null;
+    listenerState.filePlaying = false;
+    updateListenerFilePlayer();
+  } else {
+    // Resume / restart
+    listenerStartFileSource(listenerState.fileOffset || 0);
+  }
+}
+
+function listenerCloseFile() {
+  // Full teardown — listenerStop already handles file source + analysers + UI reset
+  listenerStop();
+}
+
+function updateListenerFilePlayer() {
+  const ctx = listenerState.audioCtx;
+  const buffer = listenerState.fileBuffer;
+  const fill = document.getElementById('listener-file-bar-fill');
+  const time = document.getElementById('listener-file-time');
+  const playBtn = document.getElementById('listener-file-play');
+  if (!buffer || !ctx) return;
+  let elapsed = 0;
+  if (listenerState.filePlaying) {
+    elapsed = (ctx.currentTime - listenerState.fileStartCtxTime) + (listenerState.fileOffset || 0);
+  } else {
+    elapsed = listenerState.fileOffset || 0;
+  }
+  const duration = buffer.duration;
+  if (elapsed > duration) elapsed = duration;
+  const pct = duration > 0 ? (elapsed / duration) * 100 : 0;
+  if (fill) fill.style.width = pct.toFixed(1) + '%';
+  if (time) time.textContent = listenerFormatTime(elapsed) + ' / ' + listenerFormatTime(duration);
+  if (playBtn) {
+    playBtn.innerHTML = listenerState.filePlaying
+      ? '<i class="ph-duotone ph-pause sz-sm"></i>'
+      : '<i class="ph-duotone ph-play sz-sm"></i>';
+  }
+}
+function listenerFormatTime(sec) {
+  if (!isFinite(sec) || sec < 0) sec = 0;
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
 function listenerLoop() {
   if (!listenerState.active || !listenerState.fftAnalyser) return;
+  // Keep the file-player progress + time fresh while a file is playing
+  if (listenerState.mode === 'file') updateListenerFilePlayer();
   listenerState.fftAnalyser.getFloatFrequencyData(listenerState.fftBuffer);
   listenerState.timeAnalyser.getFloatTimeDomainData(listenerState.timeBuffer);
 
@@ -4475,16 +4671,12 @@ function listenerLoop() {
     }
   }
 
-  // --- Chroma + bass + voice splitter via log-frequency note kernels (CQT-style) ---
+  // --- Chroma + bass via log-frequency note kernels (CQT-style) ---
   const chroma = new Float32Array(12);
   const bassChroma = new Float32Array(12);
   const kernels = listenerState.noteKernels;
-  let kernelEnergies = null;
-  let maxKernelEnergy = 0;
   if (kernels) {
-    kernelEnergies = new Float32Array(kernels.length);
-    for (let i = 0; i < kernels.length; i++) {
-      const k = kernels[i];
+    for (const k of kernels) {
       let energy = 0;
       for (let j = 0; j < k.bins.length; j++) {
         const bin = k.bins[j][0];
@@ -4493,34 +4685,10 @@ function listenerLoop() {
         if (db < -75) continue;
         energy += Math.pow(10, db / 20) * w;
       }
-      kernelEnergies[i] = energy;
-      if (energy > maxKernelEnergy) maxKernelEnergy = energy;
       if (energy <= 0) continue;
       chroma[k.pc] += energy;
       if (k.fCenter <= 180) bassChroma[k.pc] += energy;
     }
-    // Voice splitter: lowest / highest "active" notes + rough polyphony estimate.
-    // A note is active if its kernel energy >= 25% of the max kernel energy this
-    // frame. We also count peaks (local maxima) as a polyphony approximation.
-    let lowMidi = -1, highMidi = -1, peakCount = 0;
-    if (maxKernelEnergy > 0) {
-      const thresh = maxKernelEnergy * 0.25;
-      for (let i = 0; i < kernels.length; i++) {
-        const e = kernelEnergies[i];
-        if (e >= thresh) {
-          if (lowMidi < 0) lowMidi = kernels[i].midi;
-          highMidi = kernels[i].midi;
-          // Peak: this kernel is a local maximum (skip noisy adjacent semitones)
-          const prev = i > 0 ? kernelEnergies[i - 1] : 0;
-          const next = i < kernels.length - 1 ? kernelEnergies[i + 1] : 0;
-          if (e >= prev && e >= next) peakCount++;
-        }
-      }
-    }
-    // Smooth voice readouts a touch (snap-on, slow-off) so they don't flicker
-    if (lowMidi >= 0)  listenerState.lowMidi = lowMidi;
-    if (highMidi >= 0) listenerState.highMidi = highMidi;
-    listenerState.voiceCount = peakCount;
   }
 
   // --- Onset detection: clear history when energy spikes (= new chord struck) ---
@@ -4649,13 +4817,11 @@ function listenerLoop() {
       listenerState.lastShown = { ...stable, chord: detectedChord, since: now };
       renderListenerDetected(detectedChord, topResults);
       renderListenerSuggestions(detectedChord);
-      renderListenerVoices(detectedChord);
       listenerState.lastSuggestUpdate = now;
     } else if (top) {
-      // Update alternates + voice splitter periodically without rebuilding the main display
+      // Update alternates list periodically without rebuilding the main display
       if (now - listenerState.lastBuilt > 200) {
         renderListenerAlternates(topResults);
-        renderListenerVoices(listenerState.lastShown ? listenerState.lastShown.chord : null);
         listenerState.lastBuilt = now;
       }
     }
@@ -4749,32 +4915,6 @@ function syncListenerActiveCard() {
     document.querySelectorAll('.ls-card[data-numeral]').forEach(el => {
       if (el.dataset.numeral === state.selectedChord) el.classList.add('is-active-detail');
     });
-  }
-}
-
-// Convert a MIDI note number to a "C4" / "G#3" style label using key-aware spelling.
-function listenerMidiToLabel(midi) {
-  if (midi == null || midi < 0) return '—';
-  const pc = ((midi % 12) + 12) % 12;
-  const oct = Math.floor(midi / 12) - 1;
-  const useFlats = shouldUseFlats(state.key, state.mode);
-  return indexToNote(pc, useFlats) + oct;
-}
-
-// Voice splitter readout: bass note, chord (the matched tonal center), top note,
-// plus a rough polyphony count. Updated each detection cycle.
-function renderListenerVoices(detectedChord) {
-  const bassEl = document.getElementById('voice-bass');
-  const chordEl = document.getElementById('voice-chord');
-  const topEl = document.getElementById('voice-top');
-  const countEl = document.getElementById('voice-count-pill');
-  if (!bassEl || !chordEl || !topEl) return;
-  bassEl.textContent = listenerMidiToLabel(listenerState.lowMidi);
-  topEl.textContent = listenerMidiToLabel(listenerState.highMidi);
-  chordEl.textContent = detectedChord ? detectedChord.name : '—';
-  if (countEl) {
-    const n = listenerState.voiceCount | 0;
-    countEl.textContent = n >= 2 ? n + ' voices' : '';
   }
 }
 
@@ -5072,15 +5212,27 @@ function buildListenerViewSkeleton(root) {
         <h2 class="listener-view-title"><i class="ph-duotone ph-microphone"></i> Listener</h2>
         <div class="listener-view-controls">
           <button class="primary" id="listener-toggle"><i class="ph-duotone ph-microphone sz-sm"></i> Start listening</button>
+          <button class="secondary listener-upload-btn" id="listener-upload-btn" title="Upload an audio file (or drag-drop one here)"><i class="ph-duotone ph-upload-simple sz-sm"></i> Upload audio</button>
+          <input type="file" id="listener-file-input" accept="audio/*" hidden>
           <span class="listener-status" id="listener-status">Mic off</span>
         </div>
       </div>
-      <div class="listener-view-sub">Play a chord on any instrument near the mic — Listener identifies it and proposes likely next chords for your key &amp; genre.</div>
+      <div class="listener-view-sub">Play a chord on any instrument near the mic — or upload an audio file — and Listener identifies it and proposes likely next chords for your key &amp; genre.</div>
     </div>
 
     <div class="listener-meter-row">
       <div class="listener-meter"><div class="listener-meter-fill" id="listener-meter-fill"></div></div>
       <span class="listener-meter-label" id="listener-meter-label">—</span>
+    </div>
+
+    <div class="listener-file-player" id="listener-file-player" hidden>
+      <button class="listener-file-play-btn" id="listener-file-play" title="Play / pause"><i class="ph-duotone ph-play sz-sm"></i></button>
+      <div class="listener-file-info">
+        <span class="listener-file-name" id="listener-file-name">—</span>
+        <div class="listener-file-bar"><div class="listener-file-bar-fill" id="listener-file-bar-fill"></div></div>
+      </div>
+      <span class="listener-file-time" id="listener-file-time">0:00 / 0:00</span>
+      <button class="listener-file-close-btn" id="listener-file-close" title="Close file"><i class="ph-duotone ph-x sz-sm"></i></button>
     </div>
 
     <div class="listener-grid">
@@ -5093,24 +5245,6 @@ function buildListenerViewSkeleton(root) {
             <div class="listener-detected-actions" id="listener-detected-actions" style="display:none;">
               <button class="play-btn" id="listener-detected-play"><i class="ph-duotone ph-play sz-sm"></i> Play</button>
               <button class="secondary-btn" id="listener-detected-add"><i class="ph-duotone ph-plus sz-sm"></i> Builder</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="listener-section">
-          <div class="panel-title" style="margin-bottom:6px;">Voices <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">· bass · chord · top <span id="voice-count-pill" class="voice-count-pill"></span></span></div>
-          <div class="listener-voices" id="listener-voices">
-            <div class="voice-tile">
-              <div class="voice-label">Bass</div>
-              <div class="voice-note" id="voice-bass">—</div>
-            </div>
-            <div class="voice-tile is-primary">
-              <div class="voice-label">Chord</div>
-              <div class="voice-note" id="voice-chord">—</div>
-            </div>
-            <div class="voice-tile">
-              <div class="voice-label">Top</div>
-              <div class="voice-note" id="voice-top">—</div>
             </div>
           </div>
         </div>
@@ -5189,9 +5323,45 @@ function setupListener() {
       }
     });
   }
-  // Stop mic on tab hide
+  // --- Audio file upload wiring ---
+  const fileInput = document.getElementById('listener-file-input');
+  const uploadBtn = document.getElementById('listener-upload-btn');
+  if (uploadBtn && fileInput) {
+    uploadBtn.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) listenerLoadFile(f);
+      fileInput.value = ''; // allow re-selecting the same file
+    };
+  }
+  const filePlay = document.getElementById('listener-file-play');
+  if (filePlay) filePlay.onclick = () => listenerToggleFilePlay();
+  const fileClose = document.getElementById('listener-file-close');
+  if (fileClose) fileClose.onclick = () => listenerCloseFile();
+  // Drag-drop on the listener view itself — accepts any audio file
+  const lv = document.getElementById('listener-view');
+  if (lv) {
+    const isAudioDrag = (dt) => dt && (Array.from(dt.items || []).some(i => i.kind === 'file' && (i.type || '').startsWith('audio/')) || (dt.types && Array.from(dt.types).includes('Files')));
+    lv.addEventListener('dragover', (e) => {
+      if (!isAudioDrag(e.dataTransfer)) return;
+      e.preventDefault();
+      lv.classList.add('is-drop-target');
+    });
+    lv.addEventListener('dragleave', (e) => {
+      if (e.target === lv) lv.classList.remove('is-drop-target');
+    });
+    lv.addEventListener('drop', (e) => {
+      if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+      const f = Array.from(e.dataTransfer.files).find(file => (file.type || '').startsWith('audio/'));
+      if (!f) return;
+      e.preventDefault();
+      lv.classList.remove('is-drop-target');
+      listenerLoadFile(f);
+    });
+  }
+  // Stop on tab hide (mic) — file mode is fine to keep paused via Web Audio's natural behavior
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && listenerState.active) listenerStop();
+    if (document.hidden && listenerState.mode === 'mic') listenerStop();
   });
 }
 
