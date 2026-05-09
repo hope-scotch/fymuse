@@ -49,7 +49,7 @@
     gap: 10px;
     background: linear-gradient(180deg, #14141d 0%, #0b0b12 100%);
   }
-  .header-row { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
+  .header-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
   .header-row.top h1 { flex: 0 0 auto; font-size: 18px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 12px; }
   .brand-link { display: flex; align-items: center; line-height: 1; text-decoration: none; flex-shrink: 0; }
   .brand-logo {
@@ -64,7 +64,7 @@
   .header-row.middle { gap: 12px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.04); }
   .header-row.middle .control-group { flex: 0 0 auto; min-width: 0; }
   .header-row.middle .pill-group { flex: 1; min-width: 0; }
-  .controls-right { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .controls-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .transport-group { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 5px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; }
   .transport-group .control-group label { color: var(--text-2); font-size: 10.5px; }
   .transport-group input[type=range] { width: 92px; accent-color: var(--accent); cursor: pointer; }
@@ -81,6 +81,10 @@
   .header-action-btn.active { background: var(--accent-2); border-color: var(--accent-2); color: #0a0a10; }
   .control-group { display: flex; align-items: center; gap: 7px; }
   .control-group label { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
+  /* On narrower viewports, hide Key/Sound labels in the top row so the dropdowns fit */
+  @media (max-width: 1500px) {
+    .header-row.top .control-group label { display: none; }
+  }
   .pill-group { display: flex; gap: 3px; background: var(--panel-2); padding: 3px; border-radius: 8px; border: 1px solid var(--border); flex-wrap: wrap; }
   .pill { padding: 6px 12px; border: none; background: transparent; color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 12.5px; font-weight: 500; transition: all 0.15s ease; white-space: nowrap; font-family: var(--font-sans); }
   .pill:hover { color: var(--text); background: rgba(255,255,255,0.04); }
@@ -346,8 +350,16 @@
   @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
 
   /* Header tools row (Playground / Path Finder / Melody Mode / Songwriter) */
-  .header-tools { display: flex; gap: 6px; align-items: center; padding: 3px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; }
-  .header-tools .header-action-btn { padding: 6px 11px; background: transparent; border: none; border-radius: 6px; color: var(--text-2); }
+  .header-tools { display: flex; gap: 3px; align-items: center; padding: 2px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; flex-wrap: wrap; }
+  .header-tools .header-action-btn { padding: 5px 9px; font-size: 12.5px; background: transparent; border: none; border-radius: 6px; color: var(--text-2); white-space: nowrap; }
+  .header-tools .header-action-btn i[class*="ph-"] { font-size: 14px; }
+  /* On narrower viewports, hide button labels and show icons only.
+     The label is everything after the icon — we use font-size:0 to hide
+     the text node while keeping the icon visible (icon font-size is reset). */
+  @media (max-width: 1500px) {
+    .header-tools .header-action-btn { font-size: 0; padding: 6px 8px; }
+    .header-tools .header-action-btn i[class*="ph-"] { font-size: 16px; vertical-align: middle; }
+  }
   .header-tools .header-action-btn:hover { color: var(--text); background: var(--panel); }
   .header-tools .header-action-btn.active { background: var(--accent); color: #1a1a1a; }
   .header-tools .header-action-btn#header-songwriter-btn.active { background: var(--accent-2); color: #0a0a10; }
