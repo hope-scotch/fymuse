@@ -630,9 +630,19 @@
   /* Mixer — one track per stem */
   .splitter-mixer { display: flex; flex-direction: column; gap: 10px; }
   .splitter-mixer[hidden] { display: none; }
-  .stem-track { display: grid; grid-template-columns: 140px auto 1fr 56px; align-items: center; gap: 14px; padding: 12px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.15s, border-color 0.15s; }
+  .stem-track { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.15s, border-color 0.15s; }
+  .stem-track-controls { display: grid; grid-template-columns: 160px auto 1fr 56px; align-items: center; gap: 14px; }
   .stem-track.is-soloed { border-color: var(--accent); background: var(--panel); }
   .stem-track.is-muted { opacity: 0.55; }
+  /* Per-stem timeline: waveform background + chord/note events + playhead cursor */
+  .stem-timeline { position: relative; height: 44px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; cursor: pointer; transition: border-color 0.12s; }
+  .stem-timeline:hover { border-color: var(--border-light); }
+  .stem-timeline-waveform { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0.2; pointer-events: none; color: var(--accent-2); }
+  .stem-timeline-waveform rect { fill: currentColor; }
+  .stem-track.is-soloed .stem-timeline-waveform { color: var(--accent); opacity: 0.28; }
+  .stem-timeline-events { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .stem-timeline-events .event { position: absolute; top: 50%; transform: translateY(-50%); font-size: 10.5px; font-family: var(--font-mono); color: var(--text); padding: 1px 5px; background: rgba(20,20,30,0.85); border: 1px solid var(--border); border-radius: 3px; white-space: nowrap; letter-spacing: -0.2px; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+  .stem-timeline-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; left: 0; box-shadow: 0 0 8px rgba(245,165,36,0.65); transition: left 0.05s linear; }
   .stem-name { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
   .stem-name i { color: var(--accent-2); font-size: 18px; }
   .stem-name small { display: block; font-family: var(--font-sans); font-weight: 400; color: var(--muted); font-size: 10.5px; letter-spacing: 0; text-transform: none; line-height: 1.2; }
@@ -5675,7 +5685,35 @@ function buildSplitterViewSkeleton(root) {
   splitterRebuildMixerSkeleton();
   splitterUpdateModeWarning();
 
-  // Click on transport bar = (future: seek). For now, nothing wired.
+  // Click anywhere on the master transport bar to jump to that part of the song
+  const transportBar = root.querySelector('#splitter-transport-bar');
+  if (transportBar) {
+    transportBar.onclick = (e) => {
+      if (!splitterState.duration) return;
+      const rect = transportBar.getBoundingClientRect();
+      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      splitterSeek(frac * splitterState.duration);
+    };
+  }
+}
+
+// Stub — gets a real implementation when per-stem timelines land.
+function splitterUpdateStemCursors() {
+  const dur = splitterState.duration || 1;
+  const elapsed = splitterCurrentTime();
+  const pct = (elapsed / dur) * 100;
+  document.querySelectorAll('.stem-timeline-cursor').forEach(el => {
+    el.style.left = pct.toFixed(2) + '%';
+  });
+}
+
+// Helper: where is the playhead right now?
+function splitterCurrentTime() {
+  if (!splitterState.audioCtx) return splitterState.pausedAt || 0;
+  if (splitterState.playing) {
+    return (splitterState.audioCtx.currentTime - splitterState.startCtxTime) + (splitterState.pausedAt || 0);
+  }
+  return splitterState.pausedAt || 0;
 }
 
 function splitterSetMode(newMode) {
@@ -5728,15 +5766,22 @@ function splitterRebuildMixerSkeleton() {
   const stems = splitterStems();
   mixer.innerHTML = stems.map(s => `
     <div class="stem-track" data-stem="${s.id}" id="stem-track-${s.id}">
-      <div class="stem-name"><i class="ph-duotone ${s.icon}"></i> ${s.name} <small>${s.sub}</small></div>
-      <div class="stem-toggle-group">
-        <button class="stem-toggle" data-stem="${s.id}" data-action="mute" title="Mute">M</button>
-        <button class="stem-toggle" data-stem="${s.id}" data-action="solo" title="Solo">S</button>
+      <div class="stem-track-controls">
+        <div class="stem-name"><i class="ph-duotone ${s.icon}"></i> ${s.name} <small>${s.sub}</small></div>
+        <div class="stem-toggle-group">
+          <button class="stem-toggle" data-stem="${s.id}" data-action="mute" title="Mute">M</button>
+          <button class="stem-toggle" data-stem="${s.id}" data-action="solo" title="Solo">S</button>
+        </div>
+        <div class="stem-volume-wrap">
+          <input type="range" class="stem-volume" data-stem="${s.id}" min="0" max="100" value="80" title="Volume">
+        </div>
+        <span class="stem-vu" id="stem-vu-${s.id}">80%</span>
       </div>
-      <div class="stem-volume-wrap">
-        <input type="range" class="stem-volume" data-stem="${s.id}" min="0" max="100" value="80" title="Volume">
+      <div class="stem-timeline" data-stem="${s.id}" id="stem-timeline-${s.id}" title="Click to jump to that position">
+        <svg class="stem-timeline-waveform" id="stem-wave-${s.id}" preserveAspectRatio="none" viewBox="0 0 1000 100"></svg>
+        <div class="stem-timeline-events" id="stem-events-${s.id}"></div>
+        <div class="stem-timeline-cursor" data-stem="${s.id}"></div>
       </div>
-      <span class="stem-vu" id="stem-vu-${s.id}">80%</span>
     </div>
   `).join('');
   mixer.querySelectorAll('.stem-toggle').forEach(btn => {
@@ -5745,6 +5790,93 @@ function splitterRebuildMixerSkeleton() {
   mixer.querySelectorAll('.stem-volume').forEach(slider => {
     slider.oninput = () => splitterSetVolume(slider.dataset.stem, parseFloat(slider.value));
   });
+  // Click anywhere on a stem timeline = jump global playhead to that point
+  mixer.querySelectorAll('.stem-timeline').forEach(tl => {
+    tl.onclick = (e) => {
+      if (!splitterState.duration) return;
+      const rect = tl.getBoundingClientRect();
+      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      splitterSeek(frac * splitterState.duration);
+    };
+  });
+  // If we already have analysed stems, re-render their waveforms + events
+  splitterRenderAllTimelines();
+}
+
+// ---- Waveform + timeline rendering ---------------------------------------
+function splitterExtractPeaks(audioBuffer, numBuckets) {
+  const channel0 = audioBuffer.getChannelData(0);
+  const len = channel0.length;
+  const samplesPerBucket = Math.max(1, Math.floor(len / numBuckets));
+  const peaks = new Float32Array(numBuckets);
+  for (let i = 0; i < numBuckets; i++) {
+    const start = i * samplesPerBucket;
+    const end = Math.min(start + samplesPerBucket, len);
+    let max = 0;
+    for (let j = start; j < end; j++) {
+      const v = Math.abs(channel0[j]);
+      if (v > max) max = v;
+    }
+    peaks[i] = max;
+  }
+  // Normalize so the loudest bucket fills the strip
+  let mx = 0;
+  for (let i = 0; i < numBuckets; i++) if (peaks[i] > mx) mx = peaks[i];
+  if (mx > 0) for (let i = 0; i < numBuckets; i++) peaks[i] /= mx;
+  return peaks;
+}
+
+function splitterRenderWaveform(stemId) {
+  const stem = splitterState.stems[stemId];
+  const svg = document.getElementById('stem-wave-' + stemId);
+  if (!svg) return;
+  if (!stem || !stem.waveformPeaks) { svg.innerHTML = ''; return; }
+  const peaks = stem.waveformPeaks;
+  const N = peaks.length;
+  const VBW = 1000, VBH = 100;
+  const bucketW = VBW / N;
+  const barW = bucketW * 0.8;
+  let parts = [];
+  for (let i = 0; i < N; i++) {
+    const h = Math.max(1, peaks[i] * VBH * 0.92);
+    const x = i * bucketW + (bucketW - barW) * 0.5;
+    parts.push(`<rect x="${x.toFixed(2)}" y="${((VBH - h) * 0.5).toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}" />`);
+  }
+  svg.innerHTML = parts.join('');
+}
+
+function splitterRenderTimelineEvents(stemId) {
+  // Event labels (chord/note names) get rendered here once analysis lands;
+  // for v0 of the timeline this is a no-op but the container exists.
+  const stem = splitterState.stems[stemId];
+  const wrap = document.getElementById('stem-events-' + stemId);
+  if (!wrap) return;
+  if (!stem || !stem.events || !splitterState.duration) { wrap.innerHTML = ''; return; }
+  const dur = splitterState.duration;
+  wrap.innerHTML = stem.events.map(ev => {
+    const leftPct = (ev.start / dur) * 100;
+    return `<div class="event" style="left:${leftPct.toFixed(2)}%;">${ev.label}</div>`;
+  }).join('');
+}
+
+function splitterRenderAllTimelines() {
+  for (const def of splitterStems()) {
+    splitterRenderWaveform(def.id);
+    splitterRenderTimelineEvents(def.id);
+  }
+}
+
+// Called after each processing pipeline (DSP or ML) finishes producing stems.
+async function splitterAnalyzeStems() {
+  splitterSetStatus('extracting waveforms…', 'busy', 0.995);
+  await splitterYield();
+  for (const def of splitterStems()) {
+    const stem = splitterState.stems[def.id];
+    if (!stem || !stem.buffer) continue;
+    stem.waveformPeaks = splitterExtractPeaks(stem.buffer, 400);
+  }
+  splitterRenderAllTimelines();
+  splitterUpdateStemCursors();
 }
 
 // Called from renderAll when entering / refreshing splitter view. Currently a no-op
@@ -6231,6 +6363,8 @@ async function splitterLoadFile(file) {
       splitterSetStatus('processing with DSP…', 'busy', 0);
       await splitterProcess();
     }
+    // Build per-stem timelines (waveform + event labels)
+    await splitterAnalyzeStems();
     splitterSetStatus('ready · ' + splitterFormatTime(buffer.duration), 'ready');
     splitterUpdateStatusUI();
   } catch (err) {
@@ -6352,6 +6486,25 @@ function splitterTogglePlay() {
   if (!splitterState.fileBuffer || !Object.keys(splitterState.stems).length) return;
   if (splitterState.playing) splitterPause();
   else splitterPlay(splitterState.pausedAt || 0);
+}
+
+// Jump to a target time in seconds. If currently playing, resumes from
+// there; if paused, just moves the playhead and updates the UI.
+function splitterSeek(targetSec) {
+  if (!splitterState.fileBuffer || !splitterState.duration) return;
+  const dur = splitterState.duration;
+  const t = Math.max(0, Math.min(dur, targetSec));
+  const wasPlaying = splitterState.playing;
+  splitterStopSources();
+  splitterState.playing = false;
+  splitterState.pausedAt = t;
+  if (wasPlaying) {
+    splitterPlay(t);
+  } else {
+    splitterUpdatePlayButtonUI();
+    splitterUpdateTransportUI();
+    splitterUpdateStemCursors();
+  }
 }
 
 function splitterPlay(offsetSec) {
@@ -6497,6 +6650,7 @@ function splitterUpdateTransportUI() {
 function splitterRafTick() {
   if (!splitterState.playing) return;
   splitterUpdateTransportUI();
+  splitterUpdateStemCursors();
   // End-of-track detection
   const elapsed = (splitterState.audioCtx.currentTime - splitterState.startCtxTime) + (splitterState.pausedAt || 0);
   if (elapsed >= splitterState.duration) {
@@ -6505,6 +6659,7 @@ function splitterRafTick() {
     splitterState.pausedAt = 0;
     splitterUpdatePlayButtonUI();
     splitterUpdateTransportUI();
+    splitterUpdateStemCursors();
     return;
   }
   splitterState.rafId = requestAnimationFrame(splitterRafTick);
