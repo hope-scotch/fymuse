@@ -556,6 +556,69 @@
   .lyrics-textarea:focus { border-color: var(--accent); outline: none; }
   .lyrics-help { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
 
+  /* Splitter — full main view (mirrors Listener / Playground) */
+  body.view-splitter #info-sidebar { display: none; }
+  body.view-splitter main > #graph-panel { flex: 1 1 100%; }
+  #splitter-view { display: flex; flex-direction: column; gap: 16px; }
+  .splitter-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+  .splitter-titlebar { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+  .splitter-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.4px; display: flex; align-items: center; gap: 10px; color: var(--text); }
+  .splitter-title i { color: var(--accent-2); font-size: 26px; }
+  .splitter-sub { font-size: 12.5px; color: var(--muted); max-width: 760px; line-height: 1.5; }
+  .splitter-controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .splitter-controls .primary { padding: 9px 16px; background: var(--accent); color: #1a1a1a; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: filter 0.15s; font-size: 13px; }
+  .splitter-controls .primary:hover { filter: brightness(1.1); }
+  .splitter-controls .primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .splitter-controls .secondary { padding: 8px 14px; background: var(--panel-2); color: var(--text-2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; font-size: 13px; font-weight: 500; }
+  .splitter-controls .secondary:hover { color: var(--accent); border-color: var(--accent); background: var(--panel); }
+  .splitter-controls .secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .splitter-status { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .splitter-status::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .splitter-status.is-busy { color: var(--accent); }
+  .splitter-status.is-busy::before { background: var(--accent); animation: listener-pulse 1.4s ease-in-out infinite; }
+  .splitter-status.is-error { color: #ff6b6b; }
+  .splitter-status.is-error::before { background: #ff6b6b; }
+  .splitter-status.is-ready { color: var(--success); }
+  .splitter-status.is-ready::before { background: var(--success); }
+
+  /* Drag-drop highlight on the splitter view */
+  #splitter-view.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); border-radius: 8px; }
+
+  /* Master transport row — once a song is loaded */
+  .splitter-transport { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .splitter-transport[hidden] { display: none; }
+  .splitter-transport-btn { width: 38px; height: 38px; padding: 0; background: var(--accent); color: #1a1a1a; border: none; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; transition: filter 0.15s; }
+  .splitter-transport-btn:hover { filter: brightness(1.1); }
+  .splitter-transport-btn.is-secondary { background: var(--panel); color: var(--text-2); border: 1px solid var(--border); width: 32px; height: 32px; }
+  .splitter-transport-btn.is-secondary:hover { color: var(--accent); border-color: var(--accent); }
+  .splitter-transport-info { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .splitter-transport-name { font-size: 13px; color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .splitter-transport-bar { height: 6px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; cursor: pointer; }
+  .splitter-transport-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.1s linear; min-width: 2px; }
+  .splitter-transport-time { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+
+  /* Mixer — one track per stem */
+  .splitter-mixer { display: flex; flex-direction: column; gap: 10px; }
+  .splitter-mixer[hidden] { display: none; }
+  .stem-track { display: grid; grid-template-columns: 140px auto 1fr 56px; align-items: center; gap: 14px; padding: 12px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.15s, border-color 0.15s; }
+  .stem-track.is-soloed { border-color: var(--accent); background: var(--panel); }
+  .stem-track.is-muted { opacity: 0.55; }
+  .stem-name { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .stem-name i { color: var(--accent-2); font-size: 18px; }
+  .stem-name small { display: block; font-family: var(--font-sans); font-weight: 400; color: var(--muted); font-size: 10.5px; letter-spacing: 0; text-transform: none; line-height: 1.2; }
+  .stem-toggle-group { display: flex; gap: 4px; }
+  .stem-toggle { width: 28px; height: 28px; padding: 0; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-family: var(--font-mono); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; transition: all 0.12s; }
+  .stem-toggle:hover { color: var(--accent); border-color: var(--accent); }
+  .stem-toggle.is-on[data-action="mute"] { background: var(--dominant); color: #fff; border-color: var(--dominant); }
+  .stem-toggle.is-on[data-action="solo"] { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
+  .stem-volume-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .stem-volume { flex: 1; min-width: 80px; cursor: pointer; -webkit-appearance: none; appearance: none; background: transparent; }
+  .stem-volume::-webkit-slider-runnable-track { height: 4px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 2px; }
+  .stem-volume::-moz-range-track { height: 4px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 2px; }
+  .stem-volume::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; background: var(--accent); border: 2px solid var(--text); border-radius: 50%; margin-top: -6px; cursor: pointer; }
+  .stem-volume::-moz-range-thumb { width: 14px; height: 14px; background: var(--accent); border: 2px solid var(--text); border-radius: 50%; cursor: pointer; }
+  .stem-vu { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); text-align: right; white-space: nowrap; }
+
   /* Listener — full main view (mirrors Playground) */
   body.view-listener #info-sidebar { display: none; }
   body.view-listener.has-chord-detail #info-sidebar { display: flex; }
@@ -678,6 +741,7 @@
         <button id="header-melody-btn" class="header-action-btn" title="Open Melody Mode · note-by-note"><i class="ph-duotone ph-music-note"></i> Melody Mode</button>
         <button id="header-customchord-btn" class="header-action-btn" title="Build a custom chord (e.g. Cm7add9add11)"><i class="ph-duotone ph-pencil-line"></i> Custom Chord</button>
         <button id="header-listener-btn" class="header-action-btn" title="Listen to audio · detect chord · suggest next"><i class="ph-duotone ph-microphone"></i> Listener</button>
+        <button id="header-splitter-btn" class="header-action-btn" title="Upload a song · split into stems · per-stem chord detection"><i class="ph-duotone ph-stack"></i> Splitter</button>
         <button id="header-songwriter-btn" class="header-action-btn" title="Open Songwriter shutter (Shift+S)"><i class="ph-duotone ph-note-pencil"></i> Songwriter</button>
         <button id="header-sidebar-btn" class="header-action-btn active" title="Toggle reference sidebar (templates, chord detail, substitutions)"><i class="ph-duotone ph-sidebar-simple"></i> Sidebar</button>
       </div>
@@ -1630,6 +1694,19 @@ const GENRES = {
     categories: [],
   },
 
+  splitter: {
+    name: 'Splitter',
+    iconHtml: '<i class="ph-duotone ph-stack sz-sm"></i>',
+    isSplitter: true,
+    bpm: 100,
+    moods: [],
+    chords: [],
+    transitions: [],
+    progressions: [],
+    substitutions: [],
+    categories: [],
+  },
+
   pop: {
     name: 'Pop',
     moods: ['uplifting','nostalgic','sad','energetic','dreamy'],
@@ -2178,7 +2255,7 @@ function renderGenrePicker() {
   const el = document.getElementById('genre-picker');
   el.innerHTML = '';
   Object.entries(GENRES).forEach(([key, g]) => {
-    if (key === 'playground' || key === 'listener') return; // Both have their own dedicated header buttons
+    if (key === 'playground' || key === 'listener' || key === 'splitter') return; // All have their own dedicated header buttons
     const btn = document.createElement('button');
     btn.className = 'pill' + (state.genreKey === key ? ' active' : '');
     btn.innerHTML = (g.iconHtml ? g.iconHtml + ' ' : '') + g.name;
@@ -3556,6 +3633,24 @@ function setupHeaderButtons() {
       renderAll();
     };
   }
+  // Splitter: full main view (mirrors Listener / Playground)
+  const splitterBtn = document.getElementById('header-splitter-btn');
+  if (splitterBtn) {
+    splitterBtn.onclick = () => {
+      state.genreKey = 'splitter';
+      state.genre = GENRES.splitter;
+      state.selectedMoods = new Set();
+      state.selectedChord = null;
+      state.voicingIndex = 0;
+      builderState.bpm = state.genre.bpm;
+      const tempoEl = document.getElementById('builder-tempo');
+      const tempoVal = document.getElementById('builder-tempo-val');
+      if (tempoEl) tempoEl.value = state.genre.bpm;
+      if (tempoVal) tempoVal.textContent = state.genre.bpm;
+      closeAllSidePanels();
+      renderAll();
+    };
+  }
   // Reference sidebar toggle
   const sidebarBtn = document.getElementById('header-sidebar-btn');
   const sidebar = document.getElementById('info-sidebar');
@@ -3635,6 +3730,8 @@ function syncHeaderButtonStates() {
   if (playgroundBtn) playgroundBtn.classList.toggle('active', state.genreKey === 'playground');
   const listenerBtn = document.getElementById('header-listener-btn');
   if (listenerBtn) listenerBtn.classList.toggle('active', state.genreKey === 'listener');
+  const splitterBtn = document.getElementById('header-splitter-btn');
+  if (splitterBtn) splitterBtn.classList.toggle('active', state.genreKey === 'splitter');
 }
 
 // === Songwriter ===
@@ -3869,12 +3966,17 @@ function renderAll() {
   if (typeof listenerState !== 'undefined' && listenerState.active && !(state.genre && state.genre.isListener)) {
     listenerStop();
   }
+  // Stop splitter playback if leaving splitter view
+  if (typeof splitterState !== 'undefined' && splitterState.playing && !(state.genre && state.genre.isSplitter)) {
+    splitterStopAll();
+  }
   // Clear listener chord-detail state when leaving listener view
   if (!(state.genre && state.genre.isListener) && document.body.classList.contains('has-chord-detail')) {
     document.body.classList.remove('has-chord-detail');
   }
-  // Toggle body class so CSS can hide info-sidebar etc. while in listener view
+  // Toggle body classes so CSS can hide info-sidebar etc. while in main views
   document.body.classList.toggle('view-listener', !!(state.genre && state.genre.isListener));
+  document.body.classList.toggle('view-splitter', !!(state.genre && state.genre.isSplitter));
   renderGenrePicker();
   renderKeyPicker();
   renderInstrumentPicker();
@@ -3883,6 +3985,9 @@ function renderAll() {
   if (state.genre.isListener) {
     showListenerView();
     renderListener();
+  } else if (state.genre.isSplitter) {
+    showSplitterView();
+    renderSplitter();
   } else if (state.genre.isPlayground) {
     showPlaygroundView();
     renderPlayground();
@@ -3899,7 +4004,7 @@ function renderAll() {
 
 // View toggle: hide all graph-panel children except the active view child (playground / listener / graph).
 const ALWAYS_VISIBLE_CHILDREN = new Set();
-const SUBVIEW_CHILDREN = new Set(['playground-view', 'listener-view']);
+const SUBVIEW_CHILDREN = new Set(['playground-view', 'listener-view', 'splitter-view']);
 function showPlaygroundView() {
   const panel = document.getElementById('graph-panel');
   let pv = document.getElementById('playground-view');
@@ -3925,6 +4030,20 @@ function showListenerView() {
   Array.from(panel.children).forEach(child => {
     if (ALWAYS_VISIBLE_CHILDREN.has(child.id)) { child.style.display = ''; return; }
     child.style.display = child.id === 'listener-view' ? 'block' : 'none';
+  });
+}
+function showSplitterView() {
+  const panel = document.getElementById('graph-panel');
+  let sv = document.getElementById('splitter-view');
+  if (!sv) {
+    sv = document.createElement('div');
+    sv.id = 'splitter-view';
+    panel.insertBefore(sv, panel.firstChild);
+    buildSplitterViewSkeleton(sv);
+  }
+  Array.from(panel.children).forEach(child => {
+    if (ALWAYS_VISIBLE_CHILDREN.has(child.id)) { child.style.display = ''; return; }
+    child.style.display = child.id === 'splitter-view' ? 'block' : 'none';
   });
 }
 function showGraphView() {
@@ -5346,6 +5465,395 @@ function renderListener() {
     const ctx = document.getElementById('listener-suggest-context');
     if (ctx) ctx.textContent = '·';
   }
+}
+
+//==================================================================
+// SPLITTER — upload a song, run HPSS-based DSP separation,
+// play back stems with per-stem volume/mute/solo
+//==================================================================
+const SPLITTER_STEMS = [
+  { id: 'original',   name: 'Original',   sub: 'full mix',    icon: 'ph-vinyl-record' },
+  { id: 'harmonic',   name: 'Harmonic',   sub: 'chords / leads', icon: 'ph-piano-keys' },
+  { id: 'bass',       name: 'Bass',       sub: 'low end',     icon: 'ph-waveform' },
+  { id: 'percussive', name: 'Drums',      sub: 'transients',  icon: 'ph-drum' },
+];
+
+const splitterState = {
+  audioCtx: null,
+  fileBuffer: null,    // decoded original AudioBuffer
+  fileName: null,
+  // Each stem: { buffer: AudioBuffer, source: AudioBufferSourceNode, gain: GainNode, muted: bool, solo: bool, volume: number }
+  stems: {},
+  processing: false,
+  status: 'idle',      // 'idle' | 'decoding' | 'processing' | 'ready' | 'playing' | 'paused' | 'error'
+  playing: false,
+  startCtxTime: 0,
+  pausedAt: 0,
+  duration: 0,
+  rafId: null,
+};
+
+function buildSplitterViewSkeleton(root) {
+  root.innerHTML = `
+    <div class="splitter-header">
+      <div class="splitter-titlebar">
+        <h2 class="splitter-title"><i class="ph-duotone ph-stack"></i> Splitter <small style="font-family:var(--font-sans);font-size:13px;color:var(--muted);font-weight:400;letter-spacing:0;">· DSP separation</small></h2>
+        <div class="splitter-controls">
+          <button class="primary" id="splitter-upload-btn" title="Upload a song (or drag-drop one here)"><i class="ph-duotone ph-upload-simple sz-sm"></i> Upload song</button>
+          <input type="file" id="splitter-file-input" accept="audio/*" hidden>
+          <span class="splitter-status" id="splitter-status">No song loaded</span>
+        </div>
+      </div>
+      <div class="splitter-sub">Drop an MP3/WAV/etc. and Splitter pulls the song apart into 4 rough stems using on-device DSP (no server, no cost). Quality is approximate — drums vs harmonic content separates well; isolating individual instruments from the harmonic bucket is not free-ML achievable. Each stem gets its own volume, mute, and solo. Take note: separation runs offline on your CPU and may take 10–60 seconds for a 3-minute song.</div>
+    </div>
+
+    <div class="splitter-transport" id="splitter-transport" hidden>
+      <button class="splitter-transport-btn" id="splitter-play" title="Play / pause"><i class="ph-duotone ph-play sz-sm"></i></button>
+      <button class="splitter-transport-btn is-secondary" id="splitter-stop" title="Stop"><i class="ph-duotone ph-stop sz-sm"></i></button>
+      <div class="splitter-transport-info">
+        <span class="splitter-transport-name" id="splitter-track-name">—</span>
+        <div class="splitter-transport-bar" id="splitter-transport-bar"><div class="splitter-transport-fill" id="splitter-transport-fill"></div></div>
+      </div>
+      <span class="splitter-transport-time" id="splitter-transport-time">0:00 / 0:00</span>
+      <button class="splitter-transport-btn is-secondary" id="splitter-close" title="Close song"><i class="ph-duotone ph-x sz-sm"></i></button>
+    </div>
+
+    <div class="splitter-mixer" id="splitter-mixer" hidden>
+      ${SPLITTER_STEMS.map(s => `
+        <div class="stem-track" data-stem="${s.id}" id="stem-track-${s.id}">
+          <div class="stem-name"><i class="ph-duotone ${s.icon}"></i> ${s.name} <small>${s.sub}</small></div>
+          <div class="stem-toggle-group">
+            <button class="stem-toggle" data-stem="${s.id}" data-action="mute" title="Mute">M</button>
+            <button class="stem-toggle" data-stem="${s.id}" data-action="solo" title="Solo">S</button>
+          </div>
+          <div class="stem-volume-wrap">
+            <input type="range" class="stem-volume" data-stem="${s.id}" min="0" max="100" value="80" title="Volume">
+          </div>
+          <span class="stem-vu" id="stem-vu-${s.id}">80%</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  // Wire dynamic controls now that the skeleton lives in the DOM.
+  const fileInput = root.querySelector('#splitter-file-input');
+  const uploadBtn = root.querySelector('#splitter-upload-btn');
+  if (uploadBtn && fileInput) {
+    uploadBtn.onclick = (e) => { e.preventDefault(); fileInput.click(); };
+    fileInput.onchange = (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) splitterLoadFile(f);
+      fileInput.value = '';
+    };
+  }
+  // Drag-drop on the splitter view
+  const isAudioDrag = (dt) => {
+    if (!dt) return false;
+    if (dt.items && dt.items.length) {
+      return Array.from(dt.items).some(i => i.kind === 'file' && (i.type || '').startsWith('audio/'));
+    }
+    if (dt.types && Array.from(dt.types).includes('Files')) return true;
+    return false;
+  };
+  root.addEventListener('dragover', (e) => {
+    if (!isAudioDrag(e.dataTransfer)) return;
+    e.preventDefault();
+    root.classList.add('is-drop-target');
+  });
+  root.addEventListener('dragleave', (e) => {
+    if (e.target === root) root.classList.remove('is-drop-target');
+  });
+  root.addEventListener('drop', (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+    const f = Array.from(e.dataTransfer.files).find(file => (file.type || '').startsWith('audio/'));
+    if (!f) return;
+    e.preventDefault();
+    root.classList.remove('is-drop-target');
+    splitterLoadFile(f);
+  });
+
+  // Transport controls
+  root.querySelector('#splitter-play').onclick = () => splitterTogglePlay();
+  root.querySelector('#splitter-stop').onclick = () => splitterStopAll();
+  root.querySelector('#splitter-close').onclick = () => splitterClose();
+
+  // Per-stem mute / solo / volume
+  root.querySelectorAll('.stem-toggle').forEach(btn => {
+    btn.onclick = () => splitterToggleStem(btn.dataset.stem, btn.dataset.action);
+  });
+  root.querySelectorAll('.stem-volume').forEach(slider => {
+    slider.oninput = () => splitterSetVolume(slider.dataset.stem, parseFloat(slider.value));
+  });
+
+  // Click on transport bar = (future: seek). For now, nothing wired.
+}
+
+// Called from renderAll when entering / refreshing splitter view. Currently a no-op
+// — actual UI updates are driven by splitter* functions reacting to user actions.
+function renderSplitter() {
+  splitterUpdateStatusUI();
+}
+
+function splitterSetStatus(text, state) {
+  splitterState.status = state || splitterState.status;
+  const el = document.getElementById('splitter-status');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'splitter-status' + (state === 'busy' ? ' is-busy' : state === 'error' ? ' is-error' : state === 'ready' ? ' is-ready' : '');
+}
+
+function splitterUpdateStatusUI() {
+  const transport = document.getElementById('splitter-transport');
+  const mixer = document.getElementById('splitter-mixer');
+  const ready = !!splitterState.fileBuffer && Object.keys(splitterState.stems).length > 0;
+  if (transport) transport.hidden = !ready;
+  if (mixer) mixer.hidden = !ready;
+  const trackName = document.getElementById('splitter-track-name');
+  if (trackName) trackName.textContent = splitterState.fileName || '—';
+}
+
+async function splitterLoadFile(file) {
+  if (!file) return;
+  // Stop any current playback + tear down sources
+  splitterStopAll();
+  splitterCloseStems();
+  splitterState.fileBuffer = null;
+  splitterState.fileName = null;
+  splitterSetStatus('decoding "' + file.name + '"…', 'busy');
+  // Ensure audio context
+  if (!splitterState.audioCtx) {
+    const ctx = (typeof Tone !== 'undefined' && Tone.context && Tone.context.rawContext)
+      ? Tone.context.rawContext
+      : new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    splitterState.audioCtx = ctx;
+  }
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = await splitterState.audioCtx.decodeAudioData(arrayBuffer);
+    splitterState.fileBuffer = buffer;
+    splitterState.fileName = file.name;
+    splitterState.duration = buffer.duration;
+    // For now (scaffold), build identical stems — actual DSP separation lands next commit.
+    splitterSetStatus('processing (placeholder — same audio for all stems)…', 'busy');
+    await splitterProcess();
+    splitterSetStatus('ready · ' + splitterFormatTime(buffer.duration), 'ready');
+    splitterUpdateStatusUI();
+  } catch (err) {
+    console.error('[Splitter] load/process failed', err);
+    splitterSetStatus('error: ' + (err.message || err), 'error');
+  }
+}
+
+// Placeholder processing for v0 scaffold: every stem is just the original buffer.
+// Real HPSS separation lands in a follow-up commit.
+async function splitterProcess() {
+  const buffer = splitterState.fileBuffer;
+  if (!buffer) return;
+  splitterCloseStems();
+  for (const def of SPLITTER_STEMS) {
+    splitterState.stems[def.id] = {
+      buffer: buffer, // TODO: replace with HPSS output
+      source: null,
+      gain: null,
+      muted: false,
+      solo: false,
+      volume: 0.8,
+    };
+  }
+}
+
+function splitterCloseStems() {
+  for (const id of Object.keys(splitterState.stems)) {
+    const s = splitterState.stems[id];
+    if (!s) continue;
+    if (s.source) {
+      try { s.source.onended = null; s.source.stop(); s.source.disconnect(); } catch(e) {}
+    }
+    if (s.gain) {
+      try { s.gain.disconnect(); } catch(e) {}
+    }
+  }
+  splitterState.stems = {};
+}
+
+function splitterClose() {
+  splitterStopAll();
+  splitterCloseStems();
+  splitterState.fileBuffer = null;
+  splitterState.fileName = null;
+  splitterState.duration = 0;
+  splitterSetStatus('No song loaded', 'idle');
+  splitterUpdateStatusUI();
+}
+
+function splitterTogglePlay() {
+  if (!splitterState.fileBuffer || !Object.keys(splitterState.stems).length) return;
+  if (splitterState.playing) splitterPause();
+  else splitterPlay(splitterState.pausedAt || 0);
+}
+
+function splitterPlay(offsetSec) {
+  const ctx = splitterState.audioCtx;
+  if (!ctx) return;
+  splitterStopSources();
+  for (const def of SPLITTER_STEMS) {
+    const stem = splitterState.stems[def.id];
+    if (!stem) continue;
+    const source = ctx.createBufferSource();
+    source.buffer = stem.buffer;
+    const gain = ctx.createGain();
+    gain.gain.value = splitterEffectiveGain(def.id);
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    source.onended = () => {
+      if (splitterState.stems[def.id] && splitterState.stems[def.id].source === source && !splitterState.seeking) {
+        // Only treat as "ended" if all sources finished their natural duration
+        // We use a unified end check via RAF instead.
+      }
+    };
+    source.start(0, Math.max(0, offsetSec));
+    stem.source = source;
+    stem.gain = gain;
+  }
+  splitterState.playing = true;
+  splitterState.startCtxTime = ctx.currentTime;
+  splitterState.pausedAt = offsetSec;
+  splitterUpdatePlayButtonUI();
+  splitterRafTick();
+}
+
+function splitterPause() {
+  if (!splitterState.playing) return;
+  const ctx = splitterState.audioCtx;
+  const elapsed = ctx.currentTime - splitterState.startCtxTime;
+  splitterState.pausedAt = (splitterState.pausedAt || 0) + elapsed;
+  if (splitterState.pausedAt > splitterState.duration) splitterState.pausedAt = 0;
+  splitterStopSources();
+  splitterState.playing = false;
+  splitterUpdatePlayButtonUI();
+  if (splitterState.rafId) { cancelAnimationFrame(splitterState.rafId); splitterState.rafId = null; }
+}
+
+function splitterStopAll() {
+  if (!splitterState.fileBuffer) return;
+  splitterStopSources();
+  splitterState.playing = false;
+  splitterState.pausedAt = 0;
+  splitterUpdatePlayButtonUI();
+  splitterUpdateTransportUI();
+  if (splitterState.rafId) { cancelAnimationFrame(splitterState.rafId); splitterState.rafId = null; }
+}
+
+function splitterStopSources() {
+  for (const id of Object.keys(splitterState.stems)) {
+    const s = splitterState.stems[id];
+    if (!s) continue;
+    if (s.source) {
+      try { s.source.onended = null; s.source.stop(); s.source.disconnect(); } catch(e) {}
+      s.source = null;
+    }
+    if (s.gain) {
+      try { s.gain.disconnect(); } catch(e) {}
+      s.gain = null;
+    }
+  }
+}
+
+function splitterToggleStem(stemId, action) {
+  const stem = splitterState.stems[stemId];
+  if (!stem) return;
+  if (action === 'mute') stem.muted = !stem.muted;
+  else if (action === 'solo') stem.solo = !stem.solo;
+  splitterApplyGains();
+  splitterUpdateMixerUI();
+}
+
+function splitterSetVolume(stemId, value) {
+  const stem = splitterState.stems[stemId];
+  if (!stem) return;
+  stem.volume = Math.max(0, Math.min(1, value / 100));
+  splitterApplyGains();
+  splitterUpdateMixerUI();
+}
+
+// Solo logic: if ANY stem is soloed, only soloed (and not-muted) stems play.
+function splitterEffectiveGain(stemId) {
+  const stem = splitterState.stems[stemId];
+  if (!stem) return 0;
+  const anySolo = SPLITTER_STEMS.some(s => splitterState.stems[s.id] && splitterState.stems[s.id].solo);
+  if (anySolo && !stem.solo) return 0;
+  if (stem.muted) return 0;
+  return stem.volume;
+}
+
+function splitterApplyGains() {
+  for (const def of SPLITTER_STEMS) {
+    const stem = splitterState.stems[def.id];
+    if (stem && stem.gain) stem.gain.gain.value = splitterEffectiveGain(def.id);
+  }
+}
+
+function splitterUpdatePlayButtonUI() {
+  const btn = document.getElementById('splitter-play');
+  if (!btn) return;
+  btn.innerHTML = splitterState.playing
+    ? '<i class="ph-duotone ph-pause sz-sm"></i>'
+    : '<i class="ph-duotone ph-play sz-sm"></i>';
+}
+
+function splitterUpdateMixerUI() {
+  for (const def of SPLITTER_STEMS) {
+    const stem = splitterState.stems[def.id];
+    const track = document.getElementById('stem-track-' + def.id);
+    const muteBtn = document.querySelector('.stem-toggle[data-stem="' + def.id + '"][data-action="mute"]');
+    const soloBtn = document.querySelector('.stem-toggle[data-stem="' + def.id + '"][data-action="solo"]');
+    const vu = document.getElementById('stem-vu-' + def.id);
+    if (track) {
+      track.classList.toggle('is-muted', !!(stem && stem.muted));
+      track.classList.toggle('is-soloed', !!(stem && stem.solo));
+    }
+    if (muteBtn && stem) muteBtn.classList.toggle('is-on', stem.muted);
+    if (soloBtn && stem) soloBtn.classList.toggle('is-on', stem.solo);
+    if (vu && stem) vu.textContent = Math.round(stem.volume * 100) + '%';
+  }
+}
+
+function splitterUpdateTransportUI() {
+  const ctx = splitterState.audioCtx;
+  const buffer = splitterState.fileBuffer;
+  const fill = document.getElementById('splitter-transport-fill');
+  const time = document.getElementById('splitter-transport-time');
+  if (!ctx || !buffer) return;
+  let elapsed = splitterState.pausedAt || 0;
+  if (splitterState.playing) elapsed += ctx.currentTime - splitterState.startCtxTime;
+  if (elapsed > splitterState.duration) elapsed = splitterState.duration;
+  const pct = splitterState.duration > 0 ? (elapsed / splitterState.duration) * 100 : 0;
+  if (fill) fill.style.width = pct.toFixed(1) + '%';
+  if (time) time.textContent = splitterFormatTime(elapsed) + ' / ' + splitterFormatTime(splitterState.duration);
+}
+
+function splitterRafTick() {
+  if (!splitterState.playing) return;
+  splitterUpdateTransportUI();
+  // End-of-track detection
+  const elapsed = (splitterState.audioCtx.currentTime - splitterState.startCtxTime) + (splitterState.pausedAt || 0);
+  if (elapsed >= splitterState.duration) {
+    splitterStopSources();
+    splitterState.playing = false;
+    splitterState.pausedAt = 0;
+    splitterUpdatePlayButtonUI();
+    splitterUpdateTransportUI();
+    return;
+  }
+  splitterState.rafId = requestAnimationFrame(splitterRafTick);
+}
+
+function splitterFormatTime(sec) {
+  if (!isFinite(sec) || sec < 0) sec = 0;
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ':' + (s < 10 ? '0' : '') + s;
 }
 
 function setupListener() {
