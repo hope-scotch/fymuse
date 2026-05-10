@@ -655,7 +655,15 @@
   .notes-modal-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
   .notes-modal-title i { color: var(--accent-2); font-size: 22px; }
   .notes-modal-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
-  .notes-modal-zoom-group { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
+  .notes-modal-notation-group { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; padding: 3px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
+  .notes-modal-notation { padding: 5px 9px; background: transparent; border: none; color: var(--text-2); font-size: 11.5px; font-weight: 600; cursor: pointer; border-radius: 5px; transition: all 0.12s; font-family: var(--font-sans); }
+  .notes-modal-notation:hover { color: var(--accent); background: var(--accent-soft); }
+  .notes-modal-notation.is-active { background: var(--accent); color: #1a1a1a; }
+  .notes-modal-sa-group { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
+  .notes-modal-sa-group[hidden] { display: none; }
+  .notes-modal-sa-label { font-size: 11px; color: var(--muted); font-family: var(--font-mono); letter-spacing: 0.4px; }
+  .notes-modal-sa-select { font-family: var(--font-mono); font-size: 11.5px; padding: 3px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+  .notes-modal-zoom-group { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
   .notes-modal-zoom { width: 28px; height: 26px; padding: 0; background: transparent; border: none; color: var(--text-2); font-size: 16px; font-weight: 700; cursor: pointer; border-radius: 5px; transition: all 0.12s; }
   .notes-modal-zoom:hover { color: var(--accent); background: var(--accent-soft); }
   .notes-modal-zoom-slider { width: 140px; cursor: pointer; -webkit-appearance: none; appearance: none; background: transparent; }
@@ -1039,6 +1047,28 @@
     <div class="notes-modal-header">
       <h3 class="notes-modal-title" id="notes-modal-title">Notes</h3>
       <span class="notes-modal-meta" id="notes-modal-meta"></span>
+      <div class="notes-modal-notation-group">
+        <button class="notes-modal-notation is-active" data-mode="western"   title="Western notation: C, D, E…">ABC</button>
+        <button class="notes-modal-notation" data-mode="sargam"   title="Hindustani sargam in Latin: Sa, Re, Ga…">Sa Re</button>
+        <button class="notes-modal-notation" data-mode="devanagari" title="Hindustani sargam in Devanagari: सा, रे, ग…">सा रे</button>
+      </div>
+      <div class="notes-modal-sa-group" id="notes-modal-sa-group" hidden>
+        <span class="notes-modal-sa-label">Sa =</span>
+        <select class="notes-modal-sa-select" id="notes-modal-sa-select">
+          <option value="0">C</option>
+          <option value="1">C♯</option>
+          <option value="2">D</option>
+          <option value="3">D♯</option>
+          <option value="4">E</option>
+          <option value="5">F</option>
+          <option value="6">F♯</option>
+          <option value="7">G</option>
+          <option value="8">G♯</option>
+          <option value="9">A</option>
+          <option value="10">A♯</option>
+          <option value="11">B</option>
+        </select>
+      </div>
       <div class="notes-modal-zoom-group">
         <button class="notes-modal-zoom" data-zoom="-" title="Stretch less (zoom out)">−</button>
         <input type="range" class="notes-modal-zoom-slider" id="notes-modal-zoom-slider" min="10" max="2000" value="60" step="1" title="Stretch the timeline horizontally">
@@ -5793,9 +5823,41 @@ function splitterCurrentTime() {
 const splitterModalState = {
   open: false,
   stemId: null,
-  pxPerSec: 60,        // zoom level
+  pxPerSec: 60,            // zoom level
   rafId: null,
+  notation: 'western',     // 'western' | 'sargam' | 'devanagari'
+  sa: 0,                   // tonic pitch class (0=C..11=B) when notation != western
 };
+
+// 12 swaras (semitones from Sa). Komal/sudh/tivra naming convention:
+//   Sa, re (komal), Re (sudh), ga (komal), Ga (sudh), Ma (sudh),
+//   Ma♯ (tivra), Pa, dha (komal), Dha (sudh), ni (komal), Ni (sudh)
+const SARGAM_LATIN = ['Sa','re','Re','ga','Ga','Ma','Ma♯','Pa','dha','Dha','ni','Ni'];
+const SARGAM_DEVA  = ['सा','रे॒','रे','ग॒','ग','म','म॑','प','ध॒','ध','नि॒','नि'];
+
+// Convert MIDI pitch -> display label using the modal's current notation.
+// Octave indicators in sargam: '.' or apostrophe per octave above middle
+// Sa, comma per octave below.
+function splitterFormatNote(midi) {
+  const mode = splitterModalState.notation;
+  const pc = ((midi % 12) + 12) % 12;
+  if (mode === 'western') {
+    const useFlats = (typeof shouldUseFlats === 'function') ? shouldUseFlats(state.key, state.mode) : false;
+    const NOTES = useFlats ? NOTES_FLAT : NOTES_SHARP;
+    const oct = Math.floor(midi / 12) - 1;
+    return NOTES[pc] + oct;
+  }
+  // Sargam (Latin or Devanagari). Middle Sa anchored at MIDI 60 + saPc.
+  const saPc = splitterModalState.sa;
+  const fromSa = midi - 60 - saPc;
+  const semis = ((fromSa % 12) + 12) % 12;
+  const oct = Math.floor(fromSa / 12);
+  const swaras = (mode === 'devanagari') ? SARGAM_DEVA : SARGAM_LATIN;
+  let label = swaras[semis];
+  if (oct > 0) label = label + "'".repeat(Math.min(3, oct));
+  if (oct < 0) label = ",".repeat(Math.min(3, -oct)) + label;
+  return label;
+}
 
 function splitterOpenNotesModal(stemId) {
   const stem = splitterState.stems[stemId];
@@ -5916,20 +5978,17 @@ function splitterRenderNotesModal() {
   maxMidi = Math.min(127, maxMidi + 2);
   const numRows = maxMidi - minMidi + 1;
   const totalHeight = numRows * SPLITTER_PR_ROW_H;
-  const useFlats = (typeof shouldUseFlats === 'function') ? shouldUseFlats(state.key, state.mode) : false;
-  const NOTES = useFlats ? NOTES_FLAT : NOTES_SHARP;
-
-  // Build piano keyboard column (highest MIDI at top)
+  // Build piano keyboard column (highest MIDI at top). Labels honour the
+  // active notation mode (Western / sargam / Devanagari).
   const keys = [];
   for (let m = maxMidi; m >= minMidi; m--) {
     const pc = ((m % 12) + 12) % 12;
-    const oct = Math.floor(m / 12) - 1;
     const isBlack = SPLITTER_PR_BLACK_PCS.has(pc);
     const isC = pc === 0;
     keys.push(
       '<div class="pr-key' + (isBlack ? ' is-black' : '') + (isC ? ' is-c' : '') + '" '
       + 'style="height:' + SPLITTER_PR_ROW_H + 'px;">'
-      + NOTES[pc] + oct + '</div>'
+      + splitterFormatNote(m) + '</div>'
     );
   }
 
@@ -5945,17 +6004,22 @@ function splitterRenderNotesModal() {
     );
   }
 
-  // Build event bars — one per detected event at its MIDI row + time offset
+  // Build event bars — one per detected event at its MIDI row + time offset.
+  // Monophonic note events get their label computed from .midi via the active
+  // notation mode; chord events keep their Western chord-name label since
+  // chords aren't part of the sargam vocabulary.
   const bars = events.map((ev, i) => {
     const m = evMidis[i];
     const top = (maxMidi - m) * SPLITTER_PR_ROW_H + 1;
     const left = ev.start * pxPerSec;
     const w = Math.max(20, (ev.end - ev.start) * pxPerSec);
-    const safe = String(ev.label).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
+    const displayLabel = (ev.midi != null) ? splitterFormatNote(ev.midi) : ev.label;
+    const safe = String(displayLabel).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
+    const tooltip = String(ev.label).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
     return '<div class="pr-event" data-time="' + ev.start.toFixed(3) + '" '
       + 'style="left:' + left.toFixed(1) + 'px;top:' + top + 'px;'
       + 'width:' + (w - 1).toFixed(1) + 'px;height:' + (SPLITTER_PR_ROW_H - 2) + 'px;" '
-      + 'title="' + safe + ' · ' + splitterFormatTime(ev.start) + ' → ' + splitterFormatTime(ev.end) + '">'
+      + 'title="' + tooltip + ' · ' + splitterFormatTime(ev.start) + ' → ' + splitterFormatTime(ev.end) + '">'
       + safe + '</div>';
   }).join('');
 
@@ -6053,6 +6117,25 @@ function splitterSetupNotesModal() {
   if (slider) {
     slider.oninput = () => {
       splitterModalState.pxPerSec = Math.max(SPLITTER_ZOOM_MIN, Math.min(SPLITTER_ZOOM_MAX, parseInt(slider.value, 10) || 60));
+      splitterRenderNotesModal();
+    };
+  }
+  // Notation toggle (Western / Sargam / Devanagari)
+  document.querySelectorAll('.notes-modal-notation').forEach(btn => {
+    btn.onclick = () => {
+      splitterModalState.notation = btn.dataset.mode;
+      document.querySelectorAll('.notes-modal-notation').forEach(b =>
+        b.classList.toggle('is-active', b.dataset.mode === splitterModalState.notation));
+      const saGroup = document.getElementById('notes-modal-sa-group');
+      if (saGroup) saGroup.hidden = (splitterModalState.notation === 'western');
+      splitterRenderNotesModal();
+    };
+  });
+  // Sa selector (only relevant in sargam / devanagari modes)
+  const saSelect = document.getElementById('notes-modal-sa-select');
+  if (saSelect) {
+    saSelect.onchange = () => {
+      splitterModalState.sa = parseInt(saSelect.value, 10) || 0;
       splitterRenderNotesModal();
     };
   }
@@ -6336,11 +6419,11 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
   });
   if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
     minHz: 35,  maxHz: 400,    // low B0 -> G4 covers most basses + sub
-    hopSec: 0.15,              // bass moves slower
+    hopSec: 0.20,              // bass moves slowly — fewer frames is fine
     fftSize: 8192,             // bigger window for low-pitch resolution
     numHarmonics: 5,
-    smoothFrames: 3,
-    minEventSec: 0.1,
+    smoothFrames: 5,           // heavier smoothing kills spurious detections
+    minEventSec: 0.18,         // 200 ms-ish, drops the noise
   });
   return splitterDetectChords(buffer);
 }
@@ -6504,6 +6587,8 @@ async function splitterDetectChords(buffer) {
   const events = [];
   let curLabel = null;
   let curStart = 0;
+  let pendingLabel = null;   // candidate label for the 2-frame stability filter
+  let pendingCount = 0;
 
   for (let f = 0; f < numFrames; f++) {
     const start = f * hopSamples;
@@ -6522,22 +6607,32 @@ async function splitterDetectChords(buffer) {
     if (maxV < 0.01) {
       // Silence — close any open event
       if (curLabel) { events.push({ start: curStart, end: tNow, label: curLabel }); curLabel = null; }
+      pendingLabel = null;
+      pendingCount = 0;
       continue;
     }
     for (let i = 0; i < 12; i++) chroma[i] /= maxV;
     const results = listenerScoreChroma(chroma);
     if (!results.length) continue;
     const label = listenerCandidateToChord(results[0]).name;
-    if (label !== curLabel) {
+    // 2-frame stability: a candidate label has to win two frames in a row
+    // before we commit. Eliminates flicker from single-frame mis-detections.
+    if (label !== pendingLabel) {
+      pendingLabel = label;
+      pendingCount = 1;
+    } else {
+      pendingCount++;
+    }
+    if (pendingCount >= 2 && pendingLabel !== curLabel) {
       if (curLabel) events.push({ start: curStart, end: tNow, label: curLabel });
-      curLabel = label;
+      curLabel = pendingLabel;
       curStart = tNow;
     }
     if ((f & 31) === 0) await splitterYield();
   }
   if (curLabel) events.push({ start: curStart, end: numFrames * hopSec, label: curLabel });
-  // Drop events shorter than 0.4 s — usually noise / mid-transition
-  return events.filter(ev => (ev.end - ev.start) >= 0.4);
+  // Drop events shorter than 0.7 s — chord changes that brief are usually noise / mid-transition
+  return events.filter(ev => (ev.end - ev.start) >= 0.7);
 }
 
 // ---- Offline monophonic note detection -----------------------------------
