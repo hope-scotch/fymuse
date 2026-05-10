@@ -597,22 +597,20 @@
   .splitter-progress-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.25s ease-out; min-width: 2px; }
   .splitter-progress-pct { font-family: var(--font-mono); font-size: 11px; color: var(--accent); min-width: 36px; text-align: right; font-weight: 600; }
 
-  /* Drag-drop highlight on the splitter view */
-  #splitter-view.is-drop-target { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); border-radius: 8px; }
+  /* Drag-drop highlight — splitter view becomes a prominent drop target */
+  #splitter-view { position: relative; min-height: 60vh; }
+  #splitter-view.is-drop-target { outline: 3px dashed var(--accent); outline-offset: -14px; background: var(--accent-soft); border-radius: 10px; }
+  #splitter-view.is-drop-target::before { content: 'Drop to upload'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 28px; font-weight: 700; color: var(--accent); pointer-events: none; z-index: 5; letter-spacing: -0.5px; text-shadow: 0 0 24px var(--accent-soft); }
 
-  /* Quality mode toggle */
-  .splitter-mode-row { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-  .splitter-mode-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .splitter-mode-btn { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; padding: 10px 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); cursor: pointer; transition: all 0.15s; text-align: left; }
-  .splitter-mode-btn:hover { border-color: var(--accent); background: var(--panel); }
-  .splitter-mode-btn.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
-  .splitter-mode-btn .mode-name { font-size: 13px; font-weight: 700; }
-  .splitter-mode-btn.is-active .mode-name { color: var(--accent); }
-  .splitter-mode-btn .mode-meta { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
-  .splitter-mode-warn { padding: 10px 14px; background: var(--panel-2); border: 1px solid var(--accent-2); border-left: 3px solid var(--accent-2); border-radius: 6px; font-size: 12px; color: var(--text-2); line-height: 1.5; }
-  .splitter-mode-warn[hidden] { display: none; }
-  .splitter-mode-warn strong { color: var(--accent-2); }
-  .splitter-mode-warn code { font-family: var(--font-mono); font-size: 11.5px; padding: 1px 5px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; color: var(--text); }
+  /* Empty-state drop zone (shown when no song loaded) */
+  .splitter-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 48px 24px; background: var(--panel-2); border: 2px dashed var(--border); border-radius: 12px; text-align: center; min-height: 320px; transition: border-color 0.2s, background 0.2s; }
+  .splitter-empty[hidden] { display: none; }
+  #splitter-view:hover .splitter-empty { border-color: var(--border-light); }
+  .splitter-empty i.ph-duotone { font-size: 56px; color: var(--accent-2); margin-bottom: 4px; }
+  .splitter-empty h3 { margin: 0; font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+  .splitter-empty-sub { margin: 0; font-size: 13.5px; color: var(--text-2); }
+  .splitter-empty-sub strong { color: var(--accent); font-weight: 600; }
+  .splitter-empty-hint { max-width: 600px; margin: 8px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.6; }
 
   /* Master transport row — once a song is loaded */
   .splitter-transport { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
@@ -649,6 +647,37 @@
   .stem-timeline-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; left: 0; box-shadow: 0 0 8px rgba(245,165,36,0.65); transition: left 0.05s linear; }
   .stem-track .stem-name { cursor: pointer; }
   .stem-track:hover .stem-name { color: var(--accent); }
+
+  /* Processing modal — overlays during separation + analysis */
+  .processing-modal { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; }
+  .processing-modal[hidden] { display: none; }
+  .processing-modal-backdrop { position: absolute; inset: 0; background: rgba(8,8,15,0.78); backdrop-filter: blur(8px); }
+  .processing-modal-panel { position: relative; width: min(520px, 92vw); padding: 32px 32px 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+  .processing-icon { width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(circle, var(--accent-soft) 0%, transparent 70%); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+  .processing-icon i { font-size: 44px; color: var(--accent); animation: processing-pulse 2s ease-in-out infinite; }
+  @keyframes processing-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.7; }
+    50%      { transform: scale(1.12); opacity: 1; }
+  }
+  .processing-modal-title { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.4px; }
+  .processing-step { font-family: var(--font-mono); font-size: 12px; color: var(--accent); padding: 4px 10px; background: var(--accent-soft); border-radius: 4px; min-height: 22px; max-width: 100%; word-break: break-word; }
+  .processing-progress-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+  .processing-progress-bar { flex: 1; height: 8px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; position: relative; }
+  .processing-progress-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.4s ease-out; position: relative; min-width: 2px; }
+  .processing-progress-fill::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%); animation: processing-shimmer 1.6s linear infinite; }
+  @keyframes processing-shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .processing-percent { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); font-weight: 700; min-width: 42px; text-align: right; }
+  .processing-substeps { list-style: none; margin: 8px 0 0; padding: 12px 16px; width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+  .processing-substeps li { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); transition: color 0.15s; }
+  .processing-substeps li[data-state="active"] { color: var(--accent); }
+  .processing-substeps li[data-state="active"] .processing-mark { color: var(--accent); animation: processing-pulse 1.4s ease-in-out infinite; }
+  .processing-substeps li[data-state="done"] { color: var(--success); opacity: 0.8; }
+  .processing-substeps li[data-state="done"] .processing-mark { color: var(--success); }
+  .processing-mark { font-family: var(--font-mono); font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; }
+  .processing-hint { margin: 4px 0 0; font-size: 11px; color: var(--muted); line-height: 1.5; max-width: 420px; }
 
   /* Notes modal — full-event timeline for one stem */
   .notes-modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; }
@@ -1069,6 +1098,28 @@
       <button id="builder-clear"><i class="ph-duotone ph-trash sz-sm"></i> Clear</button>
     </div>
     <div class="help-text">Drag chips left/right to reorder · click × to remove · click any chord on the graph or in Playground to inspect, click the + on a card to add to this queue.</div>
+  </div>
+</div>
+
+<!-- Splitter processing modal — overlays during separation + analysis -->
+<div class="processing-modal" id="processing-modal" hidden>
+  <div class="processing-modal-backdrop"></div>
+  <div class="processing-modal-panel" role="dialog" aria-labelledby="processing-modal-title">
+    <div class="processing-icon"><i class="ph-duotone ph-music-notes"></i></div>
+    <h3 class="processing-modal-title" id="processing-modal-title">Processing your song</h3>
+    <div class="processing-step" id="processing-step">starting…</div>
+    <div class="processing-progress-row">
+      <div class="processing-progress-bar"><div class="processing-progress-fill" id="processing-progress-fill"></div></div>
+      <span class="processing-percent" id="processing-percent">0%</span>
+    </div>
+    <ul class="processing-substeps" id="processing-substeps">
+      <li data-phase="decode"><span class="processing-mark">○</span> <span class="processing-label">Decoding audio</span></li>
+      <li data-phase="model"><span class="processing-mark">○</span> <span class="processing-label">Loading ML model</span></li>
+      <li data-phase="separate"><span class="processing-mark">○</span> <span class="processing-label">Running Demucs separation</span></li>
+      <li data-phase="key"><span class="processing-mark">○</span> <span class="processing-label">Detecting song key</span></li>
+      <li data-phase="analyse"><span class="processing-mark">○</span> <span class="processing-label">Analysing per-stem chords / notes</span></li>
+    </ul>
+    <p class="processing-hint" id="processing-hint">First-run model download takes a while. After that, only inference time matters.</p>
   </div>
 </div>
 
@@ -5671,38 +5722,15 @@ function renderListener() {
 // SPLITTER — upload a song, run HPSS-based DSP separation,
 // play back stems with per-stem volume/mute/solo
 //==================================================================
-// Two stem layouts depending on Quality mode. The original mix isn't a
-// stem — playing the others mixes back into the original — so we don't
-// expose it as a separate row.
-//   DSP (Fast)    — HPSS-based: harmonic / bass / drums
-//   ML (Accurate) — Demucs ONNX: vocals / drums / bass / other
-const SPLITTER_STEMS_DSP = [
-  { id: 'harmonic',   name: 'Harmonic',   sub: 'chords / leads', icon: 'ph-piano-keys' },
-  { id: 'bass',       name: 'Bass',       sub: 'low end',        icon: 'ph-waveform' },
-  { id: 'percussive', name: 'Drums',      sub: 'transients',     icon: 'ph-drum' },
-];
-const SPLITTER_STEMS_ML = [
+// Demucs 4-stem layout. The original mix isn't a stem — playing the four
+// stems mixes back into the original — so we don't expose it as a row.
+const SPLITTER_STEMS = [
   { id: 'vocals',     name: 'Vocals',     sub: 'lead voice',icon: 'ph-microphone' },
   { id: 'drums',      name: 'Drums',      sub: 'percussion',icon: 'ph-drum' },
   { id: 'bass',       name: 'Bass',       sub: 'low end',   icon: 'ph-waveform' },
   { id: 'other',      name: 'Other',      sub: 'guitars / keys / pads', icon: 'ph-piano-keys' },
 ];
-function splitterStems() {
-  return splitterState.mode === 'ml' ? SPLITTER_STEMS_ML : SPLITTER_STEMS_DSP;
-}
-// Back-compat: many existing functions reference SPLITTER_STEMS — keep it pointing
-// at the active layout via a getter so legacy code reads the correct list.
-const SPLITTER_STEMS = new Proxy([], {
-  get(_, prop) {
-    const arr = splitterStems();
-    if (prop === 'length') return arr.length;
-    if (prop === Symbol.iterator) return arr[Symbol.iterator].bind(arr);
-    if (prop === 'map' || prop === 'forEach' || prop === 'some' || prop === 'find' || prop === 'filter') {
-      return arr[prop].bind(arr);
-    }
-    return arr[prop];
-  }
-});
+function splitterStems() { return SPLITTER_STEMS; }
 
 const splitterState = {
   audioCtx: null,
@@ -5717,12 +5745,9 @@ const splitterState = {
   pausedAt: 0,
   duration: 0,
   rafId: null,
-  // Quality mode — 'dsp' = HPSS (fast, on-device, free, approximate),
-  //                'ml'  = Demucs ONNX (slow, ~172MB model, ~3-5 min per song,
-  //                        much cleaner separation; needs HTTP server with
-  //                        COOP/COEP headers for multi-thread, otherwise falls
-  //                        back to single-thread WASM which is slower)
-  mode: 'dsp',
+  // ML-only — Demucs ONNX. DSP path was retired; kept here as a constant
+  // so any stale references don't crash.
+  mode: 'ml',
   mlReady: false,        // ONNX Runtime + demucs-web library loaded
   mlProcessor: null,     // DemucsProcessor instance
   mlModelLoaded: false,  // ONNX model loaded into the runtime
@@ -5732,31 +5757,20 @@ function buildSplitterViewSkeleton(root) {
   root.innerHTML = `
     <div class="splitter-header">
       <div class="splitter-titlebar">
-        <h2 class="splitter-title"><i class="ph-duotone ph-stack"></i> Splitter <small style="font-family:var(--font-sans);font-size:13px;color:var(--muted);font-weight:400;letter-spacing:0;">· DSP separation</small></h2>
+        <h2 class="splitter-title"><i class="ph-duotone ph-stack"></i> Splitter</h2>
         <div class="splitter-controls">
           <button class="primary" id="splitter-upload-btn" title="Upload a song (or drag-drop one here)"><i class="ph-duotone ph-upload-simple sz-sm"></i> Upload song</button>
           <input type="file" id="splitter-file-input" accept="audio/*" hidden>
-          <span class="splitter-status" id="splitter-status">No song loaded</span>
-          <div class="splitter-progress-wrap" id="splitter-progress-wrap" hidden>
-            <div class="splitter-progress-bar"><div class="splitter-progress-fill" id="splitter-progress-fill"></div></div>
-            <span class="splitter-progress-pct" id="splitter-progress-pct">0%</span>
-          </div>
         </div>
       </div>
-      <div class="splitter-sub">Drop an MP3/WAV/etc. and Splitter pulls the song apart into stems using on-device processing — no server, no API key, no cost. Each stem gets its own volume, mute, and solo. Two quality modes:</div>
-      <div class="splitter-mode-row">
-        <div class="splitter-mode-toggle" role="group" aria-label="Separation quality">
-          <button class="splitter-mode-btn is-active" data-mode="dsp" id="splitter-mode-dsp">
-            <span class="mode-name">Fast (DSP)</span>
-            <span class="mode-meta">~30 sec · approximate · 4 stems · ready now</span>
-          </button>
-          <button class="splitter-mode-btn" data-mode="ml" id="splitter-mode-ml">
-            <span class="mode-name">Accurate (ML — Demucs)</span>
-            <span class="mode-meta">~3–5 min · clean stems · 5 stems · 172 MB one-time download</span>
-          </button>
-        </div>
-        <div class="splitter-mode-warn" id="splitter-mode-warn" hidden></div>
-      </div>
+    </div>
+
+    <!-- Empty state — shown until a song is loaded -->
+    <div class="splitter-empty" id="splitter-empty">
+      <i class="ph-duotone ph-upload-simple"></i>
+      <h3>Drop a song here</h3>
+      <p class="splitter-empty-sub">…or click <strong>Upload song</strong>. The whole panel is a drop zone.</p>
+      <p class="splitter-empty-hint">Splitter uses Demucs ML on-device — no server, no API key. The first song downloads a 172 MB model that's cached forever after. Per-song processing takes 3–5 min on multi-thread WASM (HTTP w/ COOP-COEP), 15–25 min single-thread (file://).</p>
     </div>
 
     <div class="splitter-transport" id="splitter-transport" hidden>
@@ -5837,13 +5851,8 @@ function buildSplitterViewSkeleton(root) {
     slider.oninput = () => splitterSetVolume(slider.dataset.stem, parseFloat(slider.value));
   });
 
-  // Quality mode toggle (Fast DSP vs Accurate ML)
-  root.querySelectorAll('.splitter-mode-btn').forEach(btn => {
-    btn.onclick = () => splitterSetMode(btn.dataset.mode);
-  });
-  // Build the mixer rows for the initial mode + show any environment warnings
+  // Build the mixer rows (always ML stem layout)
   splitterRebuildMixerSkeleton();
-  splitterUpdateModeWarning();
 
   // Click anywhere on the master transport bar to jump to that part of the song
   const transportBar = root.querySelector('#splitter-transport-bar');
@@ -6541,47 +6550,10 @@ function splitterZoomAround(newPxPerSec, anchorScreenX) {
   wrap.scrollLeft = Math.max(0, newTrackX + SPLITTER_PR_KEYS_W - screenX);
 }
 
-function splitterSetMode(newMode) {
-  if (newMode === splitterState.mode) return;
-  // If a song is loaded, stop + clear stems so the user re-processes with the new mode
-  if (splitterState.fileBuffer) {
-    splitterStopAll();
-    splitterCloseStems();
-    splitterSetStatus('Mode changed — re-upload (or click the song again) to process with ' + (newMode === 'ml' ? 'ML' : 'DSP'), 'idle');
-  }
-  splitterState.mode = newMode;
-  document.querySelectorAll('.splitter-mode-btn').forEach(b => {
-    b.classList.toggle('is-active', b.dataset.mode === newMode);
-  });
-  splitterRebuildMixerSkeleton();
-  splitterUpdateModeWarning();
-}
-
-function splitterUpdateModeWarning() {
-  const warn = document.getElementById('splitter-mode-warn');
-  if (!warn) return;
-  if (splitterState.mode === 'dsp') {
-    warn.hidden = true;
-    return;
-  }
-  // ML mode — surface environment caveats up front so users know what to expect
-  const hasSAB = typeof SharedArrayBuffer !== 'undefined';
-  const hasWebGPU = (typeof navigator !== 'undefined' && 'gpu' in navigator);
-  const isFile = location.protocol === 'file:';
-  let msg = '';
-  if (isFile) {
-    msg = '<strong>Heads-up:</strong> you opened this from <code>file://</code>. ML mode will run but in slow single-thread WASM (~15–25 min per song). For full speed (3–5 min), serve the folder over HTTP with COOP/COEP headers — easiest is <code>python3 server.py</code> from this directory. ';
-  } else if (!hasSAB) {
-    msg = '<strong>Slow mode active:</strong> COOP/COEP headers not detected — running single-thread WASM (~15–25 min per song). Add the headers to enable multi-threading. ';
-  } else if (hasWebGPU) {
-    msg = '<strong>WebGPU detected.</strong> Inference will use GPU acceleration (~2–4 min per song). ';
-  } else {
-    msg = '<strong>WASM multi-thread ready.</strong> Inference ~3–5 min per song. ';
-  }
-  msg += 'First run downloads the 172 MB Demucs model and caches it in your browser; subsequent runs start instantly.';
-  warn.innerHTML = msg;
-  warn.hidden = false;
-}
+// Mode switching was retired — Splitter is always ML now. These are kept as
+// no-op stubs so any stale callers don't throw.
+function splitterSetMode() { splitterState.mode = 'ml'; }
+function splitterUpdateModeWarning() { /* warn box removed */ }
 
 // Rebuild the mixer rows from the current stem layout. Called on mode switch
 // so the UI reflects the active stem set (4 for DSP, 5 for ML).
@@ -7162,36 +7134,87 @@ function renderSplitter() {
   splitterUpdateStatusUI();
 }
 
+// Drives the processing modal. text = current step description, state =
+// 'idle'/'busy'/'ready'/'error', progress = 0..1. The modal auto-shows
+// on busy and auto-hides on ready/idle. Substeps are inferred from
+// text content via splitterMarkPhase.
 function splitterSetStatus(text, state, progress) {
   splitterState.status = state || splitterState.status;
-  const el = document.getElementById('splitter-status');
-  if (el) {
-    el.textContent = text;
-    el.className = 'splitter-status' + (state === 'busy' ? ' is-busy' : state === 'error' ? ' is-error' : state === 'ready' ? ' is-ready' : '');
-  }
-  // Progress bar + percent — visible only while busy
-  const wrap = document.getElementById('splitter-progress-wrap');
-  const fill = document.getElementById('splitter-progress-fill');
-  const pct = document.getElementById('splitter-progress-pct');
+  const modal = document.getElementById('processing-modal');
+  const stepEl = document.getElementById('processing-step');
+  const fill = document.getElementById('processing-progress-fill');
+  const pctEl = document.getElementById('processing-percent');
   const isBusy = state === 'busy';
-  if (wrap) wrap.hidden = !isBusy;
+  const isError = state === 'error';
+  if (modal) modal.hidden = !(isBusy || isError);
+  if (stepEl) stepEl.textContent = text || '';
   if (isBusy && progress != null) {
     const p = Math.max(0, Math.min(1, progress));
     if (fill) fill.style.width = (p * 100).toFixed(1) + '%';
-    if (pct) pct.textContent = Math.round(p * 100) + '%';
+    if (pctEl) pctEl.textContent = Math.round(p * 100) + '%';
   } else if (!isBusy) {
-    // Reset for the next run
     if (fill) fill.style.width = '0%';
-    if (pct) pct.textContent = '0%';
+    if (pctEl) pctEl.textContent = '0%';
+    splitterResetProcessingPhases();
   }
+  // Best-effort phase inference from the status text so the substeps
+  // checklist updates without each call site needing to remember the phase.
+  if (isBusy && text) splitterInferPhaseFromText(text);
+  if (state === 'ready') splitterMarkAllPhasesDone();
+}
+
+const SPLITTER_PHASE_KEYWORDS = [
+  ['decode',   /decod/i],
+  ['model',    /preparing ML|loading ONNX|downloading.+model|model load|preparing.+pipeline/i],
+  ['separate', /separat|inference|preparing audio|finalising|finalizing/i],
+  ['key',      /detecting key/i],
+  ['analyse',  /extracting waveforms|analysing|analyzing/i],
+];
+
+function splitterInferPhaseFromText(text) {
+  for (let i = 0; i < SPLITTER_PHASE_KEYWORDS.length; i++) {
+    if (SPLITTER_PHASE_KEYWORDS[i][1].test(text)) {
+      splitterMarkPhase(SPLITTER_PHASE_KEYWORDS[i][0], 'active');
+      // Earlier phases get marked done
+      for (let j = 0; j < i; j++) splitterMarkPhase(SPLITTER_PHASE_KEYWORDS[j][0], 'done');
+      return;
+    }
+  }
+}
+
+function splitterMarkPhase(phase, stateLabel) {
+  const li = document.querySelector('.processing-substeps li[data-phase="' + phase + '"]');
+  if (!li) return;
+  li.dataset.state = stateLabel;
+  const mark = li.querySelector('.processing-mark');
+  if (mark) mark.textContent = stateLabel === 'done' ? '✓' : stateLabel === 'active' ? '⏳' : '○';
+}
+
+function splitterMarkAllPhasesDone() {
+  document.querySelectorAll('.processing-substeps li').forEach(li => {
+    li.dataset.state = 'done';
+    const mark = li.querySelector('.processing-mark');
+    if (mark) mark.textContent = '✓';
+  });
+}
+
+function splitterResetProcessingPhases() {
+  document.querySelectorAll('.processing-substeps li').forEach(li => {
+    li.dataset.state = '';
+    const mark = li.querySelector('.processing-mark');
+    if (mark) mark.textContent = '○';
+  });
 }
 
 function splitterUpdateStatusUI() {
   const transport = document.getElementById('splitter-transport');
   const mixer = document.getElementById('splitter-mixer');
+  const empty = document.getElementById('splitter-empty');
   const ready = !!splitterState.fileBuffer && Object.keys(splitterState.stems).length > 0;
   if (transport) transport.hidden = !ready;
   if (mixer) mixer.hidden = !ready;
+  // Hide the empty drop-zone state once we have a song loaded
+  if (empty) empty.hidden = ready;
   const trackName = document.getElementById('splitter-track-name');
   if (trackName) trackName.textContent = splitterState.fileName || '—';
 }
@@ -7633,15 +7656,11 @@ async function splitterLoadFile(file) {
     splitterState.fileBuffer = buffer;
     splitterState.fileName = file.name;
     splitterState.duration = buffer.duration;
-    // Dispatch to the active mode's processing pipeline
-    if (splitterState.mode === 'ml') {
-      splitterSetStatus('processing with ML — this will take a while…', 'busy', 0);
-      await splitterProcessML();
-    } else {
-      splitterSetStatus('processing with DSP…', 'busy', 0);
-      await splitterProcess();
-    }
-    // Build per-stem timelines (waveform + event labels)
+    // Always run the ML pipeline (Demucs ONNX). DSP path was removed.
+    splitterState.mode = 'ml';
+    splitterSetStatus('starting Demucs separation…', 'busy', 0);
+    await splitterProcessML();
+    // Build per-stem timelines + run chord/note analysis
     await splitterAnalyzeStems();
     splitterSetStatus('ready · ' + splitterFormatTime(buffer.duration), 'ready');
     splitterUpdateStatusUI();
