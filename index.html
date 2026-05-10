@@ -679,10 +679,26 @@
   .processing-modal { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; }
   .processing-modal[hidden] { display: none; }
   .processing-modal-backdrop { position: absolute; inset: 0; background: rgba(8,8,15,0.82); backdrop-filter: blur(10px); }
-  .processing-modal-panel { position: relative; width: min(540px, 92vw); padding: 28px 32px 24px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; overflow: hidden; }
+  .processing-modal-panel { position: relative; width: min(540px, 92vw); padding: 28px 32px 24px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; overflow: hidden; transition: border-color 0.25s; }
+  .processing-modal-panel.is-error { border-color: var(--danger, #d34b4b); }
   /* Indeterminate marquee bar at the very top — communicates "always doing something" */
   .processing-modal-panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%); background-size: 30% 100%; background-repeat: no-repeat; animation: processing-marquee 1.8s linear infinite; }
+  .processing-modal-panel.is-error::before { animation: none; background: var(--danger, #d34b4b); opacity: 0.55; }
   @keyframes processing-marquee { 0% { background-position: -30% 0; } 100% { background-position: 130% 0; } }
+  /* Error-state: freeze and dim every animated decoration */
+  .processing-modal-panel.is-error .processing-hero-ring { animation: none; opacity: 0; }
+  .processing-modal-panel.is-error .processing-hero-core { background: transparent; }
+  .processing-modal-panel.is-error .processing-hero-core i { animation: none; color: var(--danger, #d34b4b); }
+  /* Swap waveform glyph for a warning glyph in error state */
+  .processing-hero-err { display: none; }
+  .processing-modal-panel.is-error .processing-hero-busy { display: none; }
+  .processing-modal-panel.is-error .processing-hero-err { display: block; }
+  .processing-modal-panel.is-error .processing-eq { display: none; }
+  .processing-modal-panel.is-error .processing-activity { display: none; }
+  .processing-modal-panel.is-error .processing-progress-row { display: none; }
+  .processing-modal-panel.is-error .processing-progress-fill::after { animation: none; }
+  .processing-modal-panel.is-error .processing-substeps li[data-state="active"] .pmk-active { animation: none; opacity: 0.4; }
+  .processing-modal-panel.is-error .processing-row-eq span { animation: none; opacity: 0.3; }
   /* Hero icon stack: pulsing rings + animated equalizer + central glyph */
   .processing-hero { position: relative; width: 110px; height: 110px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px; }
   .processing-hero-ring { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--accent); opacity: 0; animation: processing-ring 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
@@ -1191,7 +1207,10 @@
       <div class="processing-hero-ring"></div>
       <div class="processing-hero-ring"></div>
       <div class="processing-hero-ring"></div>
-      <div class="processing-hero-core"><i class="ph-duotone ph-waveform"></i></div>
+      <div class="processing-hero-core">
+        <i class="ph-duotone ph-waveform processing-hero-busy"></i>
+        <i class="ph-duotone ph-warning-circle processing-hero-err"></i>
+      </div>
       <div class="processing-eq"><span></span><span></span><span></span><span></span><span></span></div>
     </div>
     <h3 class="processing-modal-title" id="processing-modal-title">Processing your song</h3>
@@ -7568,6 +7587,9 @@ function splitterSetStatus(text, state, progress) {
   const wasHidden = modal ? modal.hidden : true;
   if (modal) modal.hidden = !(isBusy || isError);
   if (stepEl) stepEl.textContent = text || '';
+  // Error styling: freeze every running animation + tint the panel red.
+  const panel = modal && modal.querySelector('.processing-modal-panel');
+  if (panel) panel.classList.toggle('is-error', !!isError);
   if (isBusy && progress != null) {
     const p = Math.max(0, Math.min(1, progress));
     if (fill) fill.style.width = (p * 100).toFixed(1) + '%';
@@ -7575,15 +7597,15 @@ function splitterSetStatus(text, state, progress) {
   } else if (!isBusy) {
     if (fill) fill.style.width = '0%';
     if (pctEl) pctEl.textContent = '0%';
-    splitterResetProcessingPhases();
+    if (!isError) splitterResetProcessingPhases();
   }
   // Best-effort phase inference from the status text so the substeps
   // checklist updates without each call site needing to remember the phase.
   if (isBusy && text) splitterInferPhaseFromText(text);
   if (state === 'ready') splitterMarkAllPhasesDone();
-  // Activity ticker — start when the modal opens during busy, stop otherwise.
+  // Activity ticker — start on busy, stop on anything else (including error).
   if (isBusy && wasHidden) splitterStartActivityTicker();
-  if (!isBusy && !isError) splitterStopActivityTicker();
+  if (!isBusy) splitterStopActivityTicker();
 }
 
 const SPLITTER_PHASE_KEYWORDS = [
