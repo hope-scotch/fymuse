@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Tiny yt-dlp HTTP service. Designed to run on Fly.io as a sidecar to
-the main FYmuse Cloudflare Pages app.
+Tiny yt-dlp HTTP service. Runs on Render (free tier) or Fly.io as a
+sidecar to the main FYmuse Cloudflare Pages app.
 
 When YouTube blocks Cloudflare's datacenter IPs (which it does often
 and aggressively), the CF Pages Function at /api/yt falls back to
-this service. Fly's residential-ish IPs hit YouTube's bot detection
-much less than Cloudflare's do.
+this service. Render / Fly IPs hit YouTube's bot detection less than
+Cloudflare's do.
 
 Endpoints:
   GET /healthz
-      200 OK plaintext. Used by Fly's auto-start health checks.
+      200 OK plaintext. Used by the platform's health checks.
 
   GET /?url=<encoded-url>
       Spawns yt-dlp -f bestaudio -o - <url> and streams the audio
@@ -38,7 +38,7 @@ ALLOW_ORIGIN = os.environ.get("ALLOW_ORIGIN", "*")
 
 class YtHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        # Keep the log quiet — Fly captures stderr separately.
+        # Keep the log quiet — the platform captures stderr separately.
         sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
     def do_GET(self):

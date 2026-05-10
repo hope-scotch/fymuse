@@ -39,10 +39,10 @@ function extractVideoId(rawUrl) {
   return null;
 }
 
-// Proxy a request through to the configured yt-dlp Fly service. Returns
-// null if YT_SERVICE_URL isn't set; otherwise returns the streamed Response
-// (or throws on error).
-async function tryFlyService(env, target) {
+// Proxy a request through to the configured yt-dlp sidecar service
+// (Render / Fly / wherever YT_SERVICE_URL points). Returns null if it
+// isn't set; otherwise returns the streamed Response (or throws on error).
+async function trySidecar(env, target) {
   const base = env && env.YT_SERVICE_URL;
   if (!base) return null;
   const cleanBase = base.replace(/\/+$/, '');
@@ -145,15 +145,15 @@ export async function onRequestGet({ request, env }) {
     }
   }
   if (!streamUrl) {
-    // Fly fallback — try the yt-dlp sidecar if it's configured.
+    // Sidecar fallback — try the yt-dlp service if it's configured.
     if (env && env.YT_SERVICE_URL) {
       try {
-        const flyResponse = await tryFlyService(env, target);
-        if (flyResponse) return flyResponse;
+        const sidecarResponse = await trySidecar(env, target);
+        if (sidecarResponse) return sidecarResponse;
       } catch (e) {
         return new Response(
           'youtubei.js failed on all clients (' + (lastErr && lastErr.message || lastErr) + '). ' +
-          'Fly fallback also failed: ' + (e && e.message || e),
+          'Sidecar fallback also failed: ' + (e && e.message || e),
           { status: 502 },
         );
       }
@@ -162,7 +162,7 @@ export async function onRequestGet({ request, env }) {
       'YouTube extraction failed on all clients: ' +
       (lastErr && lastErr.message || lastErr) +
       '. YouTube is likely rate-limiting Cloudflare IPs for this video. ' +
-      'Configure YT_SERVICE_URL (Fly.io sidecar) for a more reliable fallback, ' +
+      'Configure YT_SERVICE_URL (Render / Fly sidecar) for a more reliable fallback, ' +
       'or use the local server (server.py + yt-dlp).',
       { status: 502 },
     );
