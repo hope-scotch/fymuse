@@ -114,9 +114,11 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
             # -o -        : write to stdout
             # --no-playlist: only the single video, even if URL is a playlist
             # --quiet     : keep stderr minimal
+            # Prefer M4A (universally browser-decodable) over Opus/WebM
+            # which Safari can't decode. Same selector as yt-service/app.py.
             cmd = [
                 ytdlp,
-                "-f", "bestaudio",
+                "-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio[acodec=aac]/bestaudio",
                 "-o", "-",
                 "--no-playlist",
                 "--no-warnings",

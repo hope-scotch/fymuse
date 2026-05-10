@@ -56,9 +56,13 @@ class YtHandler(BaseHTTPRequestHandler):
         if not ytdlp:
             self._send_text(503, "yt-dlp not in PATH (image misbuilt)")
             return
+        # Format selector: prefer M4A (universally browser-decodable),
+        # fall back to MP4 audio, then any bestaudio. YT Music tracks
+        # often default to Opus/WebM which Safari can't decode — forcing
+        # the m4a path avoids "Unable to decode audio data" in the browser.
         cmd = [
             ytdlp,
-            "-f", "bestaudio",
+            "-f", "bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio[acodec=aac]/bestaudio",
             "-o", "-",
             "--no-playlist",
             "--no-warnings",

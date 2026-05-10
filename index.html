@@ -8299,7 +8299,24 @@ async function splitterLoadFile(file) {
     // Hash content first so identical-bytes uploads (re-uploaded same song,
     // or pulled via URL etc.) hit the cache regardless of filename.
     const hash = await splitterHashBytes(arrayBuffer);
-    const buffer = await splitterState.audioCtx.decodeAudioData(arrayBuffer.slice(0));
+    let buffer;
+    try {
+      buffer = await splitterState.audioCtx.decodeAudioData(arrayBuffer.slice(0));
+    } catch (decodeErr) {
+      // Diagnostic — first few bytes tell us if it's actual audio (4 bytes
+      // 'ftyp' for mp4/m4a, 'OggS' for ogg/opus, 'ID3' or 0xFFFB for mp3)
+      // or HTML / text from a backend error.
+      const head = new Uint8Array(arrayBuffer.slice(0, 16));
+      const ascii = Array.from(head).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+      const hex = Array.from(head).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      throw new Error(
+        'Unable to decode audio data (' + arrayBuffer.byteLength + ' bytes received). ' +
+        'First bytes: "' + ascii + '" (hex ' + hex + '). ' +
+        (ascii.startsWith('<') || ascii.startsWith('{')
+          ? 'Looks like HTML/JSON — backend probably returned an error page.'
+          : 'Codec may not be supported by your browser — try a different track.')
+      );
+    }
     splitterState.fileBuffer = buffer;
     splitterState.fileName = file.name;
     splitterState.duration = buffer.duration;
