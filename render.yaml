@@ -1,0 +1,30 @@
+# Render.com Blueprint — defines the yt-dlp sidecar service.
+#
+# Render auto-detects this file when you create a new Blueprint in
+# their dashboard. The free plan covers a 0.1 CPU / 512 MB RAM web
+# service with auto-sleep after 15 min idle.
+#
+# Deploy:
+#   1. Sign up at https://render.com (no card required for free tier).
+#   2. Connect your GitHub.
+#   3. New → Blueprint → select this repo → Apply.
+#   4. Wait for the build to finish (~5 min first time).
+#   5. Copy the URL Render assigns (e.g. fymuse-yt.onrender.com)
+#      into Cloudflare Pages → Settings → Variables → YT_SERVICE_URL.
+#   6. Redeploy your CF Pages so the var takes effect.
+
+services:
+  - type: web
+    name: fymuse-yt
+    runtime: docker
+    plan: free
+    region: singapore        # change to oregon / frankfurt / ohio / virginia if closer
+    dockerfilePath: ./yt-service/Dockerfile
+    dockerContext: ./yt-service
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: ALLOW_ORIGIN
+        value: "*"            # tighten to your CF Pages URL once you know it

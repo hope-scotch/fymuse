@@ -11,7 +11,40 @@ fallback when YouTube blocks Cloudflare's datacenter IPs.
 `GET /?url=<encoded-url>` → streams audio bytes from the best audio-only
 format available for that URL via `yt-dlp -f bestaudio -o -`.
 
-## Deploy to Fly.io
+## Deploy to Render (free tier, recommended)
+
+The repo root has a `render.yaml` Blueprint. To deploy:
+
+1. Sign up at https://render.com (no credit card required).
+2. Connect your GitHub account.
+3. **New → Blueprint** → select the `fymuse` repo → **Apply**.
+4. Wait ~5 min for the first Docker build.
+5. Once it goes green, copy the URL Render assigns (e.g. `https://fymuse-yt.onrender.com`).
+
+Smoke test:
+
+```bash
+curl -I https://fymuse-yt.onrender.com/healthz
+# HTTP/2 200
+```
+
+The free plan sleeps the service after 15 min of inactivity. The first
+request after sleep takes ~30-60 s while the container wakes up;
+subsequent requests are normal speed. Acceptable for personal use.
+
+After deploy, wire it into Cloudflare Pages — see "Wire it up to
+Cloudflare Pages" section below.
+
+## Deploy to Fly.io (alternative, paid)
+
+Fly.io killed their truly-free tier in late 2024. The minimum is now
+~$5/month on the Pay-As-You-Go plan, applied as account credit. If
+you've already hit a "high risk account" verification charge during
+`fly launch`, that's the same thing.
+
+Upside vs. Render: machines auto-stop on idle but wake instantly
+(no 30-60s cold start), and Fly's IPs aren't blocked by YouTube as
+often.
 
 One time:
 
