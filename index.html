@@ -1173,7 +1173,9 @@
       <h3><i class="ph-duotone ph-link"></i> Load from URL</h3>
       <button class="splitter-aux-close" data-close="url" title="Close (Esc)"><i class="ph-duotone ph-x"></i></button>
     </div>
-    <div class="splitter-aux-help">Paste a direct link to an audio file (.mp3 / .wav / .m4a / .ogg / .flac). If the host blocks CORS, FYmuse retries via its own <code>/api/proxy</code> — works on Cloudflare Pages and with <code>server.py</code> locally. YouTube / Spotify / SoundCloud streams aren't direct files and won't work.</div>
+    <div class="splitter-aux-help">Paste a direct audio link (.mp3 / .wav / .m4a / .ogg / .flac) or a YouTube / SoundCloud / Bandcamp URL.<br>
+      <strong>Direct files:</strong> handled in-browser, retry via <code>/api/proxy</code> if the host blocks CORS.<br>
+      <strong>YouTube etc.:</strong> needs <code>yt-dlp</code> running through <code>server.py</code> on localhost — install with <code>pip install --user yt-dlp</code>. Spotify still won't work (DRM).</div>
     <div class="splitter-url-form">
       <input type="url" class="splitter-url-input" id="splitter-url-input" placeholder="https://example.com/song.mp3" spellcheck="false" autocomplete="off">
       <button class="primary" id="splitter-url-load" type="button">Load</button>
@@ -6582,46 +6584,77 @@ async function splitterLoadFromUrl(url) {
     splitterState.audioCtx = ctx;
   }
   splitterCloseAuxModal('url');
-  splitterSetStatus('fetching ' + url + '…', 'busy', 0.02);
-  // Try direct fetch first (works only when the audio host sends CORS headers).
-  // Fall back to our same-origin proxy at /api/proxy?url= which works on
-  // Cloudflare Pages (functions/api/proxy.js) and via server.py locally.
-  // file:// has no server → only direct + open hosts work.
+  // Hosts that need yt-dlp (extractors) — direct fetch / generic proxy
+  // can't get audio because the URL points to an HTML page, not a file.
+  const needsExtractor = /(?:^|\.)(youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com|bandcamp\.com|vimeo\.com|dailymotion\.com|twitch\.tv)(?:$|\/)/i.test(
+    (() => { try { return new URL(url).hostname; } catch { return ''; } })()
+  );
   let bytes;
-  let directErr = null;
-  try {
-    const res = await fetch(url, { mode: 'cors' });
-    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
-    bytes = await res.arrayBuffer();
-  } catch (e) {
-    directErr = e;
-  }
-  if (!bytes) {
-    // Try same-origin proxy. Only meaningful when served over http(s).
-    if (location.protocol === 'http:' || location.protocol === 'https:') {
-      splitterSetStatus('direct fetch blocked by CORS — retrying via proxy…', 'busy', 0.04);
-      try {
-        const proxyUrl = '/api/proxy?url=' + encodeURIComponent(url);
-        const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error('proxy HTTP ' + res.status + ' ' + res.statusText);
-        bytes = await res.arrayBuffer();
-      } catch (e) {
+  if (needsExtractor) {
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') {
+      splitterSetStatus(
+        'YouTube / SoundCloud links need yt-dlp via server.py. ' +
+        'Open http://localhost:8765/ instead of file://.',
+        'error'
+      );
+      return;
+    }
+    splitterSetStatus('extracting audio via yt-dlp…', 'busy', 0.04);
+    try {
+      const ytUrl = '/api/yt?url=' + encodeURIComponent(url);
+      const res = await fetch(ytUrl);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error('HTTP ' + res.status + (txt ? ' — ' + txt.slice(0, 200) : ''));
+      }
+      bytes = await res.arrayBuffer();
+    } catch (e) {
+      splitterSetStatus(
+        'yt-dlp fetch failed: ' + (e.message || e) +
+        '. Make sure yt-dlp is installed (pip install --user yt-dlp) and server.py is running.',
+        'error'
+      );
+      return;
+    }
+  } else {
+    splitterSetStatus('fetching ' + url + '…', 'busy', 0.02);
+    // Try direct fetch first (works only when the audio host sends CORS headers).
+    // Fall back to our same-origin proxy at /api/proxy?url= which works on
+    // Cloudflare Pages (functions/api/proxy.js) and via server.py locally.
+    // file:// has no server → only direct + open hosts work.
+    let directErr = null;
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      bytes = await res.arrayBuffer();
+    } catch (e) {
+      directErr = e;
+    }
+    if (!bytes) {
+      if (location.protocol === 'http:' || location.protocol === 'https:') {
+        splitterSetStatus('direct fetch blocked by CORS — retrying via proxy…', 'busy', 0.04);
+        try {
+          const proxyUrl = '/api/proxy?url=' + encodeURIComponent(url);
+          const res = await fetch(proxyUrl);
+          if (!res.ok) throw new Error('proxy HTTP ' + res.status + ' ' + res.statusText);
+          bytes = await res.arrayBuffer();
+        } catch (e) {
+          splitterSetStatus(
+            'fetch failed (' + (directErr && directErr.message || 'CORS') +
+            '), proxy failed (' + (e.message || e) + '). Try a CORS-friendly host or download + drag-drop.',
+            'error'
+          );
+          return;
+        }
+      } else {
         splitterSetStatus(
-          'fetch failed (' + (directErr && directErr.message || 'CORS') +
-          '), proxy failed (' + (e.message || e) + '). Try a CORS-friendly host or download + drag-drop.',
+          'fetch failed: ' + (directErr && directErr.message || directErr) +
+          '. URL load on file:// only works with CORS-friendly hosts. ' +
+          'Run server.py for proxy support, or just drag-drop the file.',
           'error'
         );
         return;
       }
-    } else {
-      // file:// — no proxy available
-      splitterSetStatus(
-        'fetch failed: ' + (directErr && directErr.message || directErr) +
-        '. URL load on file:// only works with CORS-friendly hosts. ' +
-        'Run server.py for proxy support, or just drag-drop the file.',
-        'error'
-      );
-      return;
     }
   }
   // Build a synthetic File from the bytes so we reuse splitterLoadFile's

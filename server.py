@@ -7,15 +7,25 @@ ONNX Runtime Web needs to enable SharedArrayBuffer (= multi-thread WASM).
 Without those headers, the Splitter's ML mode falls back to slow
 single-thread WASM (~15-25 min per song instead of ~3-5 min).
 
-Also exposes /api/proxy?url=<encoded-url> — fetches the given URL
-server-side and re-streams the bytes back. Lets the Splitter's "Load
-from URL" feature bypass browser CORS for arbitrary audio hosts.
+Endpoints:
+  /api/proxy?url=<encoded-url>
+      Fetches the URL server-side and re-streams the bytes back.
+      For direct audio file URLs (mp3/wav/m4a/etc) on hosts that
+      block CORS.
+
+  /api/yt?url=<encoded-url>
+      For YouTube / YouTube Music / SoundCloud / Bandcamp / etc —
+      anything that needs an extractor. Spawns yt-dlp -f bestaudio
+      and pipes the audio bytes back. Requires `pip install yt-dlp`
+      (and ffmpeg for some formats).
 
 Usage:
     python3 server.py            # serves on http://localhost:8765
     python3 server.py 9000       # serves on http://localhost:9000
 """
 
+import shutil
+import subprocess
 import sys
 import urllib.parse
 import urllib.request
@@ -38,6 +48,8 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/api/proxy"):
             return self._handle_proxy()
+        if self.path.startswith("/api/yt"):
+            return self._handle_yt()
         return super().do_GET()
 
     def _handle_proxy(self):
@@ -82,6 +94,73 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
         except Exception as e:
             self._send_text(502, f"proxy error: {e}")
 
+    def _handle_yt(self):
+        try:
+            qs = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(qs)
+            url = (params.get("url") or [""])[0]
+            if not url or not url.lower().startswith(("http://", "https://")):
+                self._send_text(400, "missing or non-http(s) ?url=")
+                return
+            ytdlp = shutil.which("yt-dlp") or shutil.which("yt-dlp.exe")
+            if not ytdlp:
+                self._send_text(
+                    503,
+                    "yt-dlp not installed. Install it with: pip install --user yt-dlp\n"
+                    "(also helpful: ffmpeg, e.g. 'brew install ffmpeg' on macOS)",
+                )
+                return
+            # -f bestaudio: pick the highest-quality audio-only stream
+            # -o -        : write to stdout
+            # --no-playlist: only the single video, even if URL is a playlist
+            # --quiet     : keep stderr minimal
+            cmd = [
+                ytdlp,
+                "-f", "bestaudio",
+                "-o", "-",
+                "--no-playlist",
+                "--no-warnings",
+                "--quiet",
+                url,
+            ]
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            self.send_response(200)
+            # We don't know the container in advance; the browser will sniff.
+            self.send_header("Content-Type", "audio/*")
+            self.end_headers()
+            read_total = 0
+            try:
+                while True:
+                    chunk = proc.stdout.read(64 * 1024)
+                    if not chunk:
+                        break
+                    read_total += len(chunk)
+                    if read_total > PROXY_MAX_BYTES:
+                        proc.kill()
+                        return
+                    try:
+                        self.wfile.write(chunk)
+                    except (BrokenPipeError, ConnectionResetError):
+                        proc.kill()
+                        return
+            finally:
+                # Drain stderr so the process can exit cleanly.
+                try:
+                    proc.stderr.read()
+                except Exception:
+                    pass
+                proc.wait(timeout=2)
+        except Exception as e:
+            # Headers may already be sent — best effort
+            try:
+                self._send_text(502, f"yt-dlp error: {e}")
+            except Exception:
+                pass
+
     def _send_text(self, status, body):
         body_bytes = body.encode("utf-8")
         self.send_response(status)
@@ -106,6 +185,11 @@ def main():
     print(f"FYmuse running at http://localhost:{port}/")
     print("Cross-origin isolation is on — Splitter ML mode will use multi-thread WASM.")
     print("URL proxy endpoint available at /api/proxy?url=<encoded-url>.")
+    if shutil.which("yt-dlp") or shutil.which("yt-dlp.exe"):
+        print("yt-dlp detected — /api/yt?url= will pull YouTube / SoundCloud audio.")
+    else:
+        print("yt-dlp NOT installed — YouTube / SoundCloud URLs will fail. "
+              "Install with: pip install --user yt-dlp")
     print("Ctrl+C to stop.")
     try:
         server.serve_forever()
