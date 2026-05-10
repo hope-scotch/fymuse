@@ -1050,8 +1050,7 @@
       <h3 class="notes-modal-title" id="notes-modal-title">Notes</h3>
       <span class="notes-modal-meta" id="notes-modal-meta"></span>
       <div class="notes-modal-notation-group">
-        <button class="notes-modal-notation is-active" data-mode="western"   title="Western notation: C, D, E…">ABC</button>
-        <button class="notes-modal-notation" data-mode="sargam"   title="Hindustani sargam in Latin: Sa, Re, Ga…">Sa Re</button>
+        <button class="notes-modal-notation is-active" data-mode="western" title="Western notation: C, D, E…">ABC</button>
         <button class="notes-modal-notation" data-mode="devanagari" title="Hindustani sargam in Devanagari: सा, रे, ग…">सा रे</button>
       </div>
       <div class="notes-modal-sa-group" id="notes-modal-sa-group" hidden>
@@ -5617,17 +5616,17 @@ function renderListener() {
 // SPLITTER — upload a song, run HPSS-based DSP separation,
 // play back stems with per-stem volume/mute/solo
 //==================================================================
-// Two stem layouts depending on Quality mode:
-//   DSP (Fast)    — HPSS-based: original / harmonic / bass / percussive
-//   ML (Accurate) — Demucs ONNX: original / vocals / drums / bass / other
+// Two stem layouts depending on Quality mode. The original mix isn't a
+// stem — playing the others mixes back into the original — so we don't
+// expose it as a separate row.
+//   DSP (Fast)    — HPSS-based: harmonic / bass / drums
+//   ML (Accurate) — Demucs ONNX: vocals / drums / bass / other
 const SPLITTER_STEMS_DSP = [
-  { id: 'original',   name: 'Original',   sub: 'full mix',       icon: 'ph-vinyl-record' },
   { id: 'harmonic',   name: 'Harmonic',   sub: 'chords / leads', icon: 'ph-piano-keys' },
   { id: 'bass',       name: 'Bass',       sub: 'low end',        icon: 'ph-waveform' },
   { id: 'percussive', name: 'Drums',      sub: 'transients',     icon: 'ph-drum' },
 ];
 const SPLITTER_STEMS_ML = [
-  { id: 'original',   name: 'Original',   sub: 'full mix',  icon: 'ph-vinyl-record' },
   { id: 'vocals',     name: 'Vocals',     sub: 'lead voice',icon: 'ph-microphone' },
   { id: 'drums',      name: 'Drums',      sub: 'percussion',icon: 'ph-drum' },
   { id: 'bass',       name: 'Bass',       sub: 'low end',   icon: 'ph-waveform' },
@@ -5833,15 +5832,14 @@ const splitterModalState = {
   saAutoDetected: true,    // true until user manually picks Sa via the dropdown
 };
 
-// 12 swaras (semitones from Sa). Komal/sudh/tivra naming convention:
-//   Sa, re (komal), Re (sudh), ga (komal), Ga (sudh), Ma (sudh),
-//   Ma♯ (tivra), Pa, dha (komal), Dha (sudh), ni (komal), Ni (sudh)
-const SARGAM_LATIN = ['Sa','re','Re','ga','Ga','Ma','Ma♯','Pa','dha','Dha','ni','Ni'];
-const SARGAM_DEVA  = ['सा','रे॒','रे','ग॒','ग','म','म॑','प','ध॒','ध','नि॒','नि'];
+// 12 swaras (semitones from Sa) in Devanagari with komal/tivra diacritics:
+//   सा, रे॒ (komal), रे (sudh), ग॒ (komal), ग (sudh), म (sudh), म॑ (tivra),
+//   प, ध॒ (komal), ध (sudh), नि॒ (komal), नि (sudh)
+const SARGAM_DEVA = ['सा','रे॒','रे','ग॒','ग','म','म॑','प','ध॒','ध','नि॒','नि'];
 
 // Convert MIDI pitch -> display label using the modal's current notation.
-// Octave indicators in sargam: '.' or apostrophe per octave above middle
-// Sa, comma per octave below.
+// Octave indicators in sargam: apostrophe per octave above middle Sa,
+// comma per octave below.
 function splitterFormatNote(midi) {
   const mode = splitterModalState.notation;
   const pc = ((midi % 12) + 12) % 12;
@@ -5851,13 +5849,12 @@ function splitterFormatNote(midi) {
     const oct = Math.floor(midi / 12) - 1;
     return NOTES[pc] + oct;
   }
-  // Sargam (Latin or Devanagari). Middle Sa anchored at MIDI 60 + saPc.
+  // Devanagari sargam. Middle Sa anchored at MIDI 60 + saPc.
   const saPc = splitterModalState.sa;
   const fromSa = midi - 60 - saPc;
   const semis = ((fromSa % 12) + 12) % 12;
   const oct = Math.floor(fromSa / 12);
-  const swaras = (mode === 'devanagari') ? SARGAM_DEVA : SARGAM_LATIN;
-  let label = swaras[semis];
+  let label = SARGAM_DEVA[semis];
   if (oct > 0) label = label + "'".repeat(Math.min(3, oct));
   if (oct < 0) label = ",".repeat(Math.min(3, -oct)) + label;
   return label;
@@ -6960,13 +6957,12 @@ async function splitterProcessML() {
   await splitterYield();
   const sr = buffer.sampleRate;
   const stemAudio = {
-    original: buffer,
     vocals: splitterStereoChannelsToBuffer(result.vocals, ctx, sr),
     drums:  splitterStereoChannelsToBuffer(result.drums,  ctx, sr),
     bass:   splitterStereoChannelsToBuffer(result.bass,   ctx, sr),
     other:  splitterStereoChannelsToBuffer(result.other,  ctx, sr),
   };
-  const defaultVolumes = { original: 0.0, vocals: 0.8, drums: 0.7, bass: 0.7, other: 0.7 };
+  const defaultVolumes = { vocals: 0.8, drums: 0.7, bass: 0.7, other: 0.7 };
   for (const def of splitterStems()) {
     splitterState.stems[def.id] = {
       buffer: stemAudio[def.id],
@@ -7371,13 +7367,12 @@ async function splitterProcess() {
   const bassBuf = splitterFloat32ToBuffer(bass, ctx, sr);
   const percBuf = splitterFloat32ToBuffer(percussive, ctx, sr);
   const stemBuffers = {
-    original:   buffer,
     harmonic:   harmBuf,
     bass:       bassBuf,
     percussive: percBuf,
   };
   // Default volumes — quieter than 0.8 for HPSS stems since they sum back to ~original
-  const defaultVolumes = { original: 0.0, harmonic: 0.7, bass: 0.7, percussive: 0.7 };
+  const defaultVolumes = { harmonic: 0.7, bass: 0.7, percussive: 0.7 };
   for (const def of SPLITTER_STEMS) {
     splitterState.stems[def.id] = {
       buffer: stemBuffers[def.id],
