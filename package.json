@@ -1,0 +1,8 @@
+{
+  "name": "fymuse",
+  "private": true,
+  "description": "Single-file music tool. The package.json exists only so Cloudflare Pages Functions can install youtubei.js for /api/yt — the main app at index.html has no build step.",
+  "dependencies": {
+    "youtubei.js": "^11.0.1"
+  }
+}
