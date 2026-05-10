@@ -6224,11 +6224,161 @@ async function splitterAnalyzeStems() {
 }
 
 // Per-stem dispatcher: poly chord detection for harmonic-type stems,
-// monophonic note tracker for bass/vocals, skip drums.
+// monophonic note tracker for bass/vocals (HPS-based for accuracy on fast
+// runs and harmonic suppression), skip drums.
 async function splitterAnalyseStemEvents(stemId, buffer) {
   if (stemId === 'drums' || stemId === 'percussive') return [];
-  if (stemId === 'bass' || stemId === 'vocals')      return splitterDetectNotes(buffer);
+  if (stemId === 'vocals') return splitterDetectMonophonicNotes(buffer, {
+    minHz: 80, maxHz: 1200,    // covers low bass voice E2 -> high soprano D6
+    hopSec: 0.06,              // ~16 fps so fast runs aren't missed
+    fftSize: 4096,
+    numHarmonics: 4,           // HPS depth — kills octave errors
+    smoothFrames: 1,           // OFF: preserve every detected pitch change
+    minEventSec: 0.03,         // keep events as short as 30 ms
+  });
+  if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
+    minHz: 35,  maxHz: 400,    // low B0 -> G4 covers most basses + sub
+    hopSec: 0.15,              // bass moves slower
+    fftSize: 8192,             // bigger window for low-pitch resolution
+    numHarmonics: 5,
+    smoothFrames: 3,
+    minEventSec: 0.1,
+  });
   return splitterDetectChords(buffer);
+}
+
+// ---- Generic monophonic pitch tracker ------------------------------------
+// HPS (Harmonic Product Spectrum): for each candidate fundamental bin b,
+// compute mag[b] * mag[2b] * mag[3b] * ... — the product peaks at the true
+// fundamental because all its harmonics line up. Vastly more reliable than
+// raw spectrum argmax for voice / bass, where harmonics are louder than the
+// fundamental. Parabolic peak interpolation gives sub-bin frequency precision
+// (i.e. accurate cents). Quantize to nearest semitone, then dedupe consecutive
+// identical notes into events.
+async function splitterDetectMonophonicNotes(buffer, opts) {
+  opts = Object.assign({
+    minHz: 80, maxHz: 1200,
+    hopSec: 0.06, fftSize: 4096,
+    numHarmonics: 4,
+    smoothFrames: 1,
+    minEventSec: 0.05,
+  }, opts || {});
+  const sr = buffer.sampleRate;
+  const fftSize = opts.fftSize;
+  const hopSamples = Math.max(1, Math.floor(opts.hopSec * sr));
+  const audio = (buffer.numberOfChannels === 1)
+    ? buffer.getChannelData(0)
+    : splitterMixToMono(buffer);
+  if (audio.length < fftSize) return [];
+  const numFrames = Math.floor((audio.length - fftSize) / hopSamples) + 1;
+  const window = splitterHannWindow(fftSize);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const numBins = fftSize / 2 + 1;
+  const mags = new Float32Array(numBins);
+  const binWidth = sr / fftSize;
+  const minBin = Math.max(2, Math.floor(opts.minHz / binWidth));
+  const maxBin = Math.min(numBins - 1, Math.ceil(opts.maxHz / binWidth));
+
+  // Per-frame raw fractional MIDI (negative = silence/unvoiced)
+  const rawMidi = new Float32Array(numFrames);
+  // Per-frame HPS peak strength (used to gate silence)
+  const peakStrength = new Float32Array(numFrames);
+
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * hopSamples;
+    for (let i = 0; i < fftSize; i++) { re[i] = audio[start + i] * window[i]; im[i] = 0; }
+    splitterFFT(re, im);
+    for (let i = 0; i < numBins; i++) mags[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+
+    // HPS peak inside the search range
+    let bestBin = -1, bestProd = 0;
+    for (let b = minBin; b <= maxBin; b++) {
+      let prod = mags[b];
+      for (let h = 2; h <= opts.numHarmonics; h++) {
+        const idx = b * h;
+        if (idx >= numBins) break;
+        prod *= mags[idx];
+      }
+      if (prod > bestProd) { bestProd = prod; bestBin = b; }
+    }
+    if (bestBin < 0) { rawMidi[f] = -1; peakStrength[f] = 0; continue; }
+    peakStrength[f] = bestProd;
+
+    // Parabolic interpolation around bestBin (in log-magnitude) for sub-bin precision
+    let interp = bestBin;
+    if (bestBin > 0 && bestBin < numBins - 1) {
+      const ya = Math.log(Math.max(mags[bestBin - 1], 1e-12));
+      const yb = Math.log(Math.max(mags[bestBin],     1e-12));
+      const yc = Math.log(Math.max(mags[bestBin + 1], 1e-12));
+      const denom = ya - 2 * yb + yc;
+      if (denom !== 0) {
+        const off = 0.5 * (ya - yc) / denom;
+        if (Math.abs(off) < 1) interp = bestBin + off;
+      }
+    }
+    const freq = interp * binWidth;
+    if (freq <= 0) { rawMidi[f] = -1; continue; }
+    rawMidi[f] = 69 + 12 * Math.log2(freq / 440);
+
+    if ((f & 31) === 0) await splitterYield();
+  }
+
+  // Adaptive silence/unvoiced threshold: median of peakStrength * 0.15.
+  // Frames whose HPS peak is way below the song's typical strength are
+  // dropped (no clear pitched content — silence, breath, or consonants).
+  const sorted = Array.prototype.slice.call(peakStrength).filter(x => x > 0).sort((a, b) => a - b);
+  const medStrength = sorted.length ? sorted[Math.floor(sorted.length * 0.5)] : 0;
+  const strengthGate = medStrength * 0.15;
+  for (let f = 0; f < numFrames; f++) {
+    if (peakStrength[f] < strengthGate) rawMidi[f] = -1;
+  }
+
+  // Optional N-frame median smoothing (skip silence in window). smoothFrames=1
+  // disables this — useful for vocals where preserving every detected pitch
+  // change matters more than removing single-frame noise.
+  let smoothed = rawMidi;
+  if (opts.smoothFrames >= 3) {
+    const half = (opts.smoothFrames - 1) >> 1;
+    smoothed = new Float32Array(numFrames);
+    for (let f = 0; f < numFrames; f++) {
+      const arr = [];
+      for (let k = -half; k <= half; k++) {
+        const idx = f + k;
+        if (idx >= 0 && idx < numFrames && rawMidi[idx] >= 0) arr.push(rawMidi[idx]);
+      }
+      if (!arr.length) { smoothed[f] = -1; continue; }
+      arr.sort((a, b) => a - b);
+      smoothed[f] = arr[Math.floor(arr.length / 2)];
+    }
+  }
+
+  // Dedupe consecutive identical (semitone-quantized) notes into events
+  const useFlats = (typeof shouldUseFlats === 'function') ? shouldUseFlats(state.key, state.mode) : false;
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const noteName = (midi) => {
+    const pc = ((midi % 12) + 12) % 12;
+    const oct = Math.floor(midi / 12) - 1;
+    return (typeof indexToNote === 'function' ? indexToNote(pc, useFlats) : NOTE_NAMES[pc]) + oct;
+  };
+  const events = [];
+  let curMidi = null, curStart = 0;
+  for (let f = 0; f < numFrames; f++) {
+    const m = smoothed[f];
+    const tNow = f * opts.hopSec;
+    if (m < 0) {
+      if (curMidi !== null) { events.push({ start: curStart, end: tNow, label: noteName(curMidi), midi: curMidi }); curMidi = null; }
+      continue;
+    }
+    const q = Math.round(m);
+    if (curMidi === null) { curMidi = q; curStart = tNow; }
+    else if (q !== curMidi) {
+      events.push({ start: curStart, end: tNow, label: noteName(curMidi), midi: curMidi });
+      curMidi = q; curStart = tNow;
+    }
+  }
+  if (curMidi !== null) events.push({ start: curStart, end: numFrames * opts.hopSec, label: noteName(curMidi), midi: curMidi });
+  return events.filter(ev => (ev.end - ev.start) >= opts.minEventSec);
 }
 
 // ---- Offline chord detection ---------------------------------------------
