@@ -583,19 +583,7 @@
   .splitter-controls .secondary { padding: 8px 14px; background: var(--panel-2); color: var(--text-2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; font-size: 13px; font-weight: 500; }
   .splitter-controls .secondary:hover { color: var(--accent); border-color: var(--accent); background: var(--panel); }
   .splitter-controls .secondary:disabled { opacity: 0.4; cursor: not-allowed; }
-  .splitter-status { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
-  .splitter-status::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
-  .splitter-status.is-busy { color: var(--accent); }
-  .splitter-status.is-busy::before { background: var(--accent); animation: listener-pulse 1.4s ease-in-out infinite; }
-  .splitter-status.is-error { color: #ff6b6b; }
-  .splitter-status.is-error::before { background: #ff6b6b; }
-  .splitter-status.is-ready { color: var(--success); }
-  .splitter-status.is-ready::before { background: var(--success); }
-  .splitter-progress-wrap { display: inline-flex; align-items: center; gap: 8px; min-width: 130px; }
-  .splitter-progress-wrap[hidden] { display: none; }
-  .splitter-progress-bar { flex: 1; height: 5px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 3px; overflow: hidden; min-width: 80px; }
-  .splitter-progress-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.25s ease-out; min-width: 2px; }
-  .splitter-progress-pct { font-family: var(--font-mono); font-size: 11px; color: var(--accent); min-width: 36px; text-align: right; font-weight: 600; }
+  /* (Old inline status pill + progress bar styles removed — replaced by the processing modal) */
 
   /* Drag-drop highlight — splitter view becomes a prominent drop target */
   #splitter-view { position: relative; min-height: 60vh; }
