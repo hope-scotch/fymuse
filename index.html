@@ -7529,17 +7529,24 @@ async function splitterClassifyDrumOnsets(buffer) {
   const onsets = splitterDetectDrumOnsets(audio, sr, fftSize, hopSize);
   if (!onsets.length) return [];
 
-  // 2. For each onset, extract a feature window + classify
-  const winSec = 0.30; // 300 ms post-onset window for spectral analysis
-  const winSamples = Math.floor(winSec * sr);
+  // 2. For each onset, extract TWO windows + classify.
+  //    - Spectral window: short (80 ms) starting at onset. Captures the
+  //      transient where the drum's identity actually lives. A 300 ms
+  //      window gets polluted by hat/cymbal bleed that's still ringing,
+  //      which biases centroid high and makes kicks look like snares.
+  //    - Decay window: longer (250 ms) for the late/early RMS ratio.
+  const specSec  = 0.08;
+  const decaySec = 0.25;
   const events = [];
   for (let i = 0; i < onsets.length; i++) {
     const t = onsets[i];
     const startSample = Math.floor(t * sr);
-    const endSample = Math.min(audio.length, startSample + winSamples);
-    if (endSample - startSample < 256) continue;
-    const window = audio.subarray(startSample, endSample);
-    const features = splitterDrumFeatures(window, sr);
+    const specEnd  = Math.min(audio.length, startSample + Math.floor(specSec  * sr));
+    const decayEnd = Math.min(audio.length, startSample + Math.floor(decaySec * sr));
+    if (specEnd - startSample < 256) continue;
+    const specWin  = audio.subarray(startSample, specEnd);
+    const decayWin = audio.subarray(startSample, decayEnd);
+    const features = splitterDrumFeatures(specWin, decayWin, sr);
     const cls = splitterClassifyDrumWindow(features);
     // Visual length: cap at ~180 ms or until next onset, whichever is earlier
     const nextT = onsets[i + 1] != null ? onsets[i + 1] : t + 0.30;
@@ -7611,17 +7618,19 @@ function splitterDetectDrumOnsets(audio, sr, fftSize, hopSize) {
   return onsetTimes;
 }
 
-function splitterDrumFeatures(window, sr) {
-  // Power-of-two zero-padded FFT of the window
+function splitterDrumFeatures(specWin, decayWin, sr) {
+  // Power-of-two zero-padded FFT of the SHORT spectral window. Using just
+  // the transient (first ~80 ms) so the drum's identity isn't washed out
+  // by hat/cymbal sustain ringing through.
   let fftSize = 1;
-  while (fftSize < window.length) fftSize <<= 1;
-  fftSize = Math.min(fftSize, 4096);
+  while (fftSize < specWin.length) fftSize <<= 1;
+  fftSize = Math.max(2048, Math.min(fftSize, 4096));
   const re = new Float32Array(fftSize);
   const im = new Float32Array(fftSize);
-  const winLen = Math.min(window.length, fftSize);
+  const winLen = Math.min(specWin.length, fftSize);
   for (let i = 0; i < winLen; i++) {
     const w = winLen > 1 ? 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (winLen - 1)) : 1;
-    re[i] = window[i] * w;
+    re[i] = specWin[i] * w;
   }
   splitterFFT(re, im);
 
@@ -7635,6 +7644,7 @@ function splitterDrumFeatures(window, sr) {
   // Energy-band proportions (sub / bass / lowMid / mid / high / vhigh)
   const bands = { sub: 0, bass: 0, lowMid: 0, mid: 0, high: 0, vhigh: 0 };
   let centroidNum = 0, centroidDen = 0;
+  let peakBin = 0, peakMag = 0;
   for (let k = 1; k < halfN; k++) {
     const f = k * binHz;
     const power = mag[k] * mag[k];
@@ -7646,11 +7656,13 @@ function splitterDrumFeatures(window, sr) {
     else                bands.vhigh  += power;
     centroidNum += f * mag[k];
     centroidDen += mag[k];
+    if (mag[k] > peakMag) { peakMag = mag[k]; peakBin = k; }
   }
   const totalPower = bands.sub + bands.bass + bands.lowMid + bands.mid + bands.high + bands.vhigh;
   const inv = totalPower > 1e-12 ? 1 / totalPower : 0;
   for (const k in bands) bands[k] *= inv;
   const centroid = centroidDen > 0 ? centroidNum / centroidDen : 0;
+  const peakHz = peakBin * binHz;
 
   // Spectral flatness in the 1-10 kHz range — high = noisy (snare wires,
   // cymbals); low = tonal (kick, tom).
@@ -7665,57 +7677,93 @@ function splitterDrumFeatures(window, sr) {
   }
   const flatness = n > 0 && linSum > 0 ? Math.exp(logSum / n) / (linSum / n) : 0;
 
-  // Decay ratio: late RMS / early RMS. Closer to 1 = sustained (cymbal,
-  // open hat, sometimes tom). Closer to 0 = quick attack-decay (kick,
-  // closed hat, snare).
-  const earlyEnd = Math.min(window.length, Math.floor(0.05 * sr));
-  const lateStart = Math.max(earlyEnd, window.length - Math.floor(0.10 * sr));
+  // Decay ratio: late RMS / early RMS, computed over the LONGER decayWin
+  // (~250 ms) since 80 ms is too short to see meaningful decay difference
+  // between, say, a closed hat and a cymbal.
+  const earlyEnd = Math.min(decayWin.length, Math.floor(0.05 * sr));
+  const lateStart = Math.max(earlyEnd, decayWin.length - Math.floor(0.10 * sr));
   let earlyRms = 0, lateRms = 0;
-  for (let i = 0; i < earlyEnd; i++) earlyRms += window[i] * window[i];
+  for (let i = 0; i < earlyEnd; i++) earlyRms += decayWin[i] * decayWin[i];
   earlyRms = Math.sqrt(earlyRms / Math.max(1, earlyEnd));
-  for (let i = lateStart; i < window.length; i++) lateRms += window[i] * window[i];
-  lateRms = Math.sqrt(lateRms / Math.max(1, window.length - lateStart));
+  for (let i = lateStart; i < decayWin.length; i++) lateRms += decayWin[i] * decayWin[i];
+  lateRms = Math.sqrt(lateRms / Math.max(1, decayWin.length - lateStart));
   const decay = earlyRms > 1e-6 ? lateRms / earlyRms : 0;
 
-  // Peak amplitude (used for velocity)
+  // Peak amplitude (used for velocity) — over the short spectral window
   let peak = 0;
-  for (let i = 0; i < window.length; i++) {
-    const v = Math.abs(window[i]);
+  for (let i = 0; i < specWin.length; i++) {
+    const v = Math.abs(specWin[i]);
     if (v > peak) peak = v;
   }
 
-  return Object.assign({}, bands, { centroid, flatness, decay, peak });
+  return Object.assign({}, bands, { centroid, flatness, decay, peak, peakHz });
 }
 
 function splitterClassifyDrumWindow(f) {
-  // Order-sensitive decision tree. Most distinctive checks first.
+  // Order-sensitive decision tree. Tuned against real-world Demucs output
+  // where hat/cymbal bleed always pollutes the low-frequency drum hits.
+  // Use SHORT-window spectral features so we look at the transient, not
+  // the steady-state sustain.
 
-  // 1) Cymbal: long sustain + HF dominant + noisy
-  if (f.decay > 0.45 && (f.high + f.vhigh) > 0.50 && f.flatness > 0.28) {
+  const lowE  = f.sub + f.bass;          // 0-200 Hz
+  const lowMid = f.lowMid;                // 200-500 Hz
+  const highE = f.high + f.vhigh;         // 2k-Nyquist
+
+  // 1) KICK (check first). Real kicks have very low spectral peak (<200 Hz)
+  // and significant sub-bass energy. Even with hat bleed, the spectral
+  // PEAK frequency is the kick fundamental. Three OR-conditions to catch
+  // various kick situations:
+  //   a) Spectral peak below 150 Hz — unambiguous kick fundamental.
+  //   b) Strong sub-band proportion regardless of HF bleed.
+  //   c) Combined low-band proportion > 0.35 with low centroid.
+  if (
+    (f.peakHz > 0 && f.peakHz < 150 && f.sub > 0.10) ||
+    (f.sub > 0.25 && f.centroid < 1500) ||
+    (lowE > 0.35 && f.centroid < 700 && f.flatness < 0.22)
+  ) {
+    return { type: 'kick', velocity: splitterDrumVelocity(f.peak) };
+  }
+
+  // 2) TOM. Mid-low tonal (peak in 100-400 Hz), longer decay than kick,
+  // not noisy.
+  if (
+    f.peakHz > 80 && f.peakHz < 400 &&
+    (f.bass + lowMid) > 0.30 &&
+    f.flatness < 0.20 &&
+    f.decay > 0.20
+  ) {
+    return { type: 'tom', velocity: splitterDrumVelocity(f.peak) };
+  }
+
+  // 3) CYMBAL. Long sustain + HF dominant + broadband noise.
+  if (f.decay > 0.45 && highE > 0.45 && f.flatness > 0.26) {
     return { type: 'cymbal', velocity: splitterDrumVelocity(f.peak) };
   }
-  // 2) Hi-hat: HF dominant, high centroid; split open vs closed by decay
-  if ((f.high + f.vhigh) > 0.55 && f.centroid > 4500) {
+
+  // 4) HI-HAT. HF dominant, high centroid, short(ish) decay. Open vs
+  // closed split by decay ratio.
+  if (highE > 0.50 && f.centroid > 3500) {
     const type = f.decay > 0.32 ? 'hihat_open' : 'hihat';
     return { type, velocity: splitterDrumVelocity(f.peak) };
   }
-  // 3) Kick: low frequencies dominant, low centroid
-  if ((f.sub + f.bass) > 0.55 && f.centroid < 800) {
-    return { type: 'kick', velocity: splitterDrumVelocity(f.peak) };
-  }
-  // 4) Snare: significant mid + broadband noise (snare wires) + HF presence
-  if ((f.mid + f.high) > 0.42 && f.flatness > 0.20 && f.centroid > 1400) {
+
+  // 5) SNARE. Mid + broadband noise + medium centroid. The "everything
+  // else with snare-character" bucket — wide range because snares vary
+  // a lot between acoustic / piccolo / 808.
+  if (
+    (f.lowMid + f.mid + f.high) > 0.40 &&
+    f.flatness > 0.18 &&
+    f.centroid > 600 && f.centroid < 5000
+  ) {
     return { type: 'snare', velocity: splitterDrumVelocity(f.peak) };
   }
-  // 5) Tom: low-mid tonal, NOT super noisy
-  if ((f.bass + f.lowMid) > 0.45 && f.centroid < 1500 && f.flatness < 0.30) {
-    return { type: 'tom', velocity: splitterDrumVelocity(f.peak) };
-  }
-  // Fallback: pick by spectral centroid
-  if (f.centroid < 500)  return { type: 'kick',   velocity: splitterDrumVelocity(f.peak) };
-  if (f.centroid < 2000) return { type: 'tom',    velocity: splitterDrumVelocity(f.peak) };
-  if (f.centroid < 5000) return { type: 'snare',  velocity: splitterDrumVelocity(f.peak) };
-                          return { type: 'hihat',  velocity: splitterDrumVelocity(f.peak) };
+
+  // Fallback: pick by spectral peak frequency, with centroid as tiebreaker.
+  if (f.peakHz > 0 && f.peakHz < 120) return { type: 'kick',  velocity: splitterDrumVelocity(f.peak) };
+  if (f.peakHz < 350)                  return { type: 'tom',   velocity: splitterDrumVelocity(f.peak) };
+  if (f.centroid < 1500)               return { type: 'tom',   velocity: splitterDrumVelocity(f.peak) };
+  if (f.centroid < 4500)               return { type: 'snare', velocity: splitterDrumVelocity(f.peak) };
+                                       return { type: 'hihat', velocity: splitterDrumVelocity(f.peak) };
 }
 
 function splitterDrumVelocity(peak) {
