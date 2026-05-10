@@ -1276,6 +1276,28 @@
   </div>
 </div>
 
+<!-- Splitter URL access request — shown when user isn't on the CF Access allowlist -->
+<div class="splitter-aux-modal" id="splitter-url-request-modal" hidden>
+  <div class="splitter-aux-backdrop" data-close="request"></div>
+  <div class="splitter-aux-panel splitter-aux-panel-narrow">
+    <div class="splitter-aux-header">
+      <h3><i class="ph-duotone ph-lock-key"></i> URL splitting is restricted</h3>
+      <button class="splitter-aux-close" data-close="request" title="Close (Esc)"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div class="splitter-aux-help">
+      Loading songs from URLs (especially YouTube / YT Music) authenticates as the maintainer's Google account. To prevent abuse, this feature is gated to a small allowlist.
+      <br><br>
+      <strong>If you're already approved</strong>, click <strong>Sign in</strong> below — Cloudflare will email you a one-time code, and the URL button will appear after.
+      <br><br>
+      <strong>If you're not yet approved</strong>, email <a href="mailto:sayantan.biswas7653@gmail.com?subject=fymuse URL access request&body=Hi Shay,%0D%0A%0D%0AI'd like access to the URL feature on fymuse. My email is _____.">sayantan.biswas7653@gmail.com</a> with the email address you want allowed. Once Shay adds you to the Cloudflare Access policy, hit Sign in.
+    </div>
+    <div class="splitter-url-form" style="justify-content: flex-end; gap: 8px;">
+      <button class="secondary" id="splitter-url-request-mailto" type="button"><i class="ph-duotone ph-paper-plane-tilt sz-sm"></i> Email Shay</button>
+      <button class="primary" id="splitter-url-request-signin" type="button"><i class="ph-duotone ph-sign-in sz-sm"></i> Sign in</button>
+    </div>
+  </div>
+</div>
+
 <!-- Splitter URL prompt — load from a direct audio link -->
 <div class="splitter-aux-modal" id="splitter-url-modal" hidden>
   <div class="splitter-aux-backdrop" data-close="url"></div>
@@ -5937,7 +5959,8 @@ function buildSplitterViewSkeleton(root) {
         <div class="splitter-controls">
           <button class="primary" id="splitter-upload-btn" title="Upload a song (or drag-drop one here)"><i class="ph-duotone ph-upload-simple sz-sm"></i> Upload song</button>
           <input type="file" id="splitter-file-input" accept="audio/*" hidden>
-          <button class="secondary" id="splitter-url-btn" title="Load from a direct audio URL"><i class="ph-duotone ph-link sz-sm"></i> URL</button>
+          <button class="secondary" id="splitter-url-btn" title="Load from a direct audio URL" hidden><i class="ph-duotone ph-link sz-sm"></i> URL</button>
+          <button class="secondary" id="splitter-url-request-btn" title="URL splitting is restricted — request access from Shay"><i class="ph-duotone ph-lock-key sz-sm"></i> Request URL access</button>
           <button class="secondary" id="splitter-history-btn" title="Browse previously processed songs"><i class="ph-duotone ph-clock-counter-clockwise sz-sm"></i> History</button>
         </div>
       </div>
@@ -6787,6 +6810,60 @@ function splitterCloseAuxModal(which) {
     const m = document.getElementById('splitter-url-modal');
     if (m) m.hidden = true;
   }
+  if (which === 'request' || !which) {
+    const m = document.getElementById('splitter-url-request-modal');
+    if (m) m.hidden = true;
+  }
+}
+
+// ---- Cloudflare Access ACL for the URL feature -------------------------
+// Shay's Cloudflare Zero Trust setup gates a route (e.g. /api/yt or
+// /cdn-cgi/access/) to a fixed allowlist of band-member emails. When
+// the page loads on the deployed site, ping CF Access's identity
+// endpoint to check whether the current visitor is authenticated +
+// allowed. Toggle the URL button visibility accordingly.
+//
+// On localhost or file://, CF Access doesn't exist — show the URL
+// button unconditionally so dev / local users aren't blocked.
+async function splitterCheckUrlAccess() {
+  const isLocal =
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1' ||
+    location.protocol === 'file:';
+  if (isLocal) return { local: true };
+  try {
+    const res = await fetch('/cdn-cgi/access/get-identity', {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    if (res.status === 404) {
+      // CF Access not configured for this domain — leave the gate open.
+      return { unconfigured: true };
+    }
+    if (res.ok) {
+      const ident = await res.json().catch(() => ({}));
+      return { authed: true, email: ident.email || ident.user_email || null };
+    }
+  } catch (e) {
+    // Network error — be conservative, deny.
+  }
+  return null;
+}
+
+async function splitterUpdateUrlAccessUI() {
+  const access = await splitterCheckUrlAccess();
+  const urlBtn = document.getElementById('splitter-url-btn');
+  const reqBtn = document.getElementById('splitter-url-request-btn');
+  // Show URL button to: local devs, unconfigured-CF-Access deploys, and
+  // authenticated visitors. Show the request button to everyone else.
+  const allowed = !!(access && (access.local || access.unconfigured || access.authed));
+  if (urlBtn) urlBtn.hidden = !allowed;
+  if (reqBtn) reqBtn.hidden = allowed;
+}
+
+function splitterOpenUrlRequestModal() {
+  const modal = document.getElementById('splitter-url-request-modal');
+  if (modal) modal.hidden = false;
 }
 
 let _splitterAuxEscBound = false;
@@ -6814,6 +6891,30 @@ function splitterSetupAuxModals() {
     if (e.key === 'Enter') splitterLoadFromUrl(urlInput.value.trim());
     if (e.key === 'Escape') splitterCloseAuxModal('url');
   };
+  // Request URL access — opens the explanatory modal
+  const reqBtn = document.getElementById('splitter-url-request-btn');
+  if (reqBtn) reqBtn.onclick = () => splitterOpenUrlRequestModal();
+  const reqSignin = document.getElementById('splitter-url-request-signin');
+  if (reqSignin) reqSignin.onclick = () => {
+    // Navigate to a CF-Access-protected URL to trigger the login flow.
+    // /api/yt is the gate; CF Access intercepts before the function runs,
+    // shows email-OTP login, then redirects back. After we land back
+    // here, splitterUpdateUrlAccessUI will see the authed identity.
+    const back = encodeURIComponent(location.pathname + location.search);
+    location.href = '/api/yt?_auth=1&_return=' + back;
+  };
+  const reqMail = document.getElementById('splitter-url-request-mailto');
+  if (reqMail) reqMail.onclick = () => {
+    location.href = 'mailto:sayantan.biswas7653@gmail.com?subject=' +
+      encodeURIComponent('fymuse URL access request') +
+      '&body=' + encodeURIComponent(
+        "Hi Shay,\n\nI'd like access to the URL feature on fymuse. " +
+        "Please add my email to the Cloudflare Access allowlist.\n\n" +
+        "My email: _____\nMy name: _____\n\nThanks!"
+      );
+  };
+  // First-load auth check (also re-runs on splitter view activation)
+  splitterUpdateUrlAccessUI();
   // Close handlers — backdrop, X buttons (data-close="history|url")
   document.querySelectorAll('[data-close]').forEach(el => {
     el.onclick = () => splitterCloseAuxModal(el.dataset.close);
