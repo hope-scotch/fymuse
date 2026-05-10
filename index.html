@@ -6760,8 +6760,9 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
     hopSec: 0.06,              // ~16 fps so fast runs aren't missed
     fftSize: 4096,
     numHarmonics: 4,           // HPS depth — kills octave errors
-    smoothFrames: 1,           // OFF: preserve every detected pitch change
-    minEventSec: 0.03,         // keep events as short as 30 ms
+    smoothFrames: 1,           // raw frames — let the stability filter do the work
+    stabilityFrames: 2,        // a new pitch must hold ≥ 2 frames (~120 ms) to commit
+    minEventSec: 0.07,         // 70 ms — drops single-frame glide chromatics
   });
   if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
     minHz: 35,  maxHz: 400,    // low B0 -> G4 covers most basses + sub
@@ -6769,6 +6770,7 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
     fftSize: 8192,             // bigger window for low-pitch resolution
     numHarmonics: 5,
     smoothFrames: 5,           // heavier smoothing kills spurious detections
+    stabilityFrames: 2,        // 2 frames at 0.20 s hop = 400 ms hold
     minEventSec: 0.18,         // 200 ms-ish, drops the noise
   });
   return splitterDetectChords(buffer);
@@ -6788,6 +6790,7 @@ async function splitterDetectMonophonicNotes(buffer, opts) {
     hopSec: 0.06, fftSize: 4096,
     numHarmonics: 4,
     smoothFrames: 1,
+    stabilityFrames: 1,   // a pitch must hold this many consecutive frames to commit
     minEventSec: 0.05,
   }, opts || {});
   const sr = buffer.sampleRate;
@@ -6880,7 +6883,10 @@ async function splitterDetectMonophonicNotes(buffer, opts) {
     }
   }
 
-  // Dedupe consecutive identical (semitone-quantized) notes into events
+  // Dedupe consecutive identical (semitone-quantized) notes into events,
+  // gated by a stability filter: a candidate new pitch must hold for
+  // `stabilityFrames` consecutive frames before it's committed. Single-frame
+  // pitches that pass through during a glissando / portamento don't fire.
   const useFlats = (typeof shouldUseFlats === 'function') ? shouldUseFlats(state.key, state.mode) : false;
   const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   const noteName = (midi) => {
@@ -6889,19 +6895,36 @@ async function splitterDetectMonophonicNotes(buffer, opts) {
     return (typeof indexToNote === 'function' ? indexToNote(pc, useFlats) : NOTE_NAMES[pc]) + oct;
   };
   const events = [];
+  const stabN = Math.max(1, opts.stabilityFrames | 0);
   let curMidi = null, curStart = 0;
+  let pendingMidi = null, pendingCount = 0, pendingStart = 0;
   for (let f = 0; f < numFrames; f++) {
     const m = smoothed[f];
     const tNow = f * opts.hopSec;
     if (m < 0) {
+      // Silence — close any open event + reset pending so the next note has to earn
+      // its stability fresh.
       if (curMidi !== null) { events.push({ start: curStart, end: tNow, label: noteName(curMidi), midi: curMidi }); curMidi = null; }
+      pendingMidi = null; pendingCount = 0;
       continue;
     }
     const q = Math.round(m);
-    if (curMidi === null) { curMidi = q; curStart = tNow; }
-    else if (q !== curMidi) {
-      events.push({ start: curStart, end: tNow, label: noteName(curMidi), midi: curMidi });
-      curMidi = q; curStart = tNow;
+    // Track how long the candidate "pending" pitch has held this run
+    if (q === pendingMidi) {
+      pendingCount++;
+    } else {
+      pendingMidi = q;
+      pendingCount = 1;
+      pendingStart = tNow;
+    }
+    // Commit the transition only after the pending pitch has been stable
+    // long enough AND it actually differs from the current one.
+    if (pendingCount >= stabN && pendingMidi !== curMidi) {
+      if (curMidi !== null) {
+        events.push({ start: curStart, end: pendingStart, label: noteName(curMidi), midi: curMidi });
+      }
+      curMidi = pendingMidi;
+      curStart = pendingStart;
     }
   }
   if (curMidi !== null) events.push({ start: curStart, end: numFrames * opts.hopSec, label: noteName(curMidi), midi: curMidi });
