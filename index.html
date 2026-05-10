@@ -815,16 +815,47 @@
   .sheet-control input[type="number"] { width: 56px; font-family: var(--font-mono); font-size: 12px; padding: 4px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
   .sheet-control select { font-family: var(--font-mono); font-size: 11.5px; padding: 4px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
   .sheet-control-unit { color: var(--muted); font-size: 10.5px; }
-  .sheet-grid-wrap { flex: 1; overflow-y: auto; padding: 4px 4px 8px; }
-  .sheet-grid { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
-  .sheet-bar { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; min-width: 0; flex-shrink: 0; }
-  .sheet-bar-num { font-family: var(--font-mono); font-size: 9.5px; color: var(--muted); letter-spacing: 1.2px; text-transform: uppercase; }
-  .sheet-bar-beats { display: grid; gap: 3px; }
-  .sheet-beat { padding: 6px 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all 0.12s; min-height: 30px; min-width: 36px; display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
-  .sheet-beat:hover { border-color: var(--accent); color: var(--accent); }
-  .sheet-beat.is-empty { color: var(--muted); opacity: 0.4; }
-  .sheet-beat.is-current { background: var(--accent); color: #1a1a1a; border-color: var(--accent); box-shadow: 0 0 8px rgba(245,165,36,0.5); }
-  .sheet-beat.is-downbeat { border-left: 2px solid var(--accent-2); }
+  .sheet-grid-wrap { flex: 1; overflow-y: auto; padding: 8px 4px 16px; }
+  /* Sheet-music styling: paper-feel lines, two bars per row, notes rendered
+     above an aligned beat ruler (1 e & a 2 e & a …). For drum stems each
+     active drum component gets its own lane stacked above the beat ruler. */
+  .sheet-paper { display: flex; flex-direction: column; gap: 18px; padding: 4px 6px; }
+  .sheet-line { padding: 14px 16px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.02); }
+  .sheet-line-header { font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: baseline; }
+  .sheet-line-header-meta { color: var(--muted); font-size: 9.5px; letter-spacing: 0.6px; text-transform: none; }
+  .sheet-row { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 10px; align-items: stretch; }
+  .sheet-row + .sheet-row { margin-top: 1px; }
+  .sheet-row-label { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-2); display: flex; align-items: center; padding-right: 8px; border-right: 1px dashed var(--border); white-space: nowrap; }
+  .sheet-row-label .sheet-row-label-key { color: var(--muted); font-size: 9.5px; }
+  .sheet-bar-section { display: grid; grid-template-columns: repeat(var(--cells, 8), 1fr); gap: 1px; padding: 0 6px; border-right: 2px solid var(--border); position: relative; }
+  .sheet-row:last-child .sheet-bar-section { border-right-width: 2px; }
+  .sheet-bar-section:last-child { border-right: none; }
+  .sheet-bar-section.is-empty { background: transparent; opacity: 0.15; }
+  .sheet-cell { padding: 3px 2px; min-height: 22px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px; color: var(--text); white-space: nowrap; box-sizing: border-box; overflow: hidden; }
+  /* Bottom ruler row: beat / sub-beat numbers (1 e & a 2 e & a …) */
+  .sheet-row-beats { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
+  .sheet-row-beats .sheet-cell { color: var(--muted); font-size: 9.5px; min-height: 16px; padding: 0; }
+  .sheet-row-beats .sheet-cell.is-downbeat { color: var(--accent-2); font-weight: 700; font-size: 10.5px; }
+  /* Note cells: clickable seek targets, tinted when they have a hit */
+  .sheet-cell-note { background: transparent; border: 1px solid transparent; border-radius: 3px; cursor: pointer; transition: all 0.12s; min-height: 26px; }
+  .sheet-cell-note.is-downbeat { border-left: 2px solid rgba(255,165,36,0.20); }
+  .sheet-cell-note:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .sheet-cell-note.has-hit { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .sheet-cell-note.is-current { background: var(--accent); color: #1a1a1a; border-color: var(--accent); box-shadow: 0 0 8px rgba(245,165,36,0.5); }
+  /* Drum lane variants — colors mirror the piano-roll drum-grid */
+  .sheet-row-drum .sheet-cell-note { font-size: 14px; min-height: 22px; }
+  .sheet-row-drum-cymbal      .sheet-row-label { color: #d4a017; }
+  .sheet-row-drum-hihat_open  .sheet-row-label,
+  .sheet-row-drum-hihat       .sheet-row-label { color: #f5a524; }
+  .sheet-row-drum-tom         .sheet-row-label { color: #6cc4ff; }
+  .sheet-row-drum-snare       .sheet-row-label { color: #ff7f7f; }
+  .sheet-row-drum-kick        .sheet-row-label { color: #b388ff; }
+  .sheet-row-drum-cymbal     .sheet-cell-note.has-hit { background: rgba(212,160,23,0.20); border-color: #d4a017; color: #d4a017; }
+  .sheet-row-drum-hihat_open .sheet-cell-note.has-hit { background: rgba(245,165,36,0.22); border-color: #f5a524; color: #f5a524; }
+  .sheet-row-drum-hihat      .sheet-cell-note.has-hit { background: rgba(245,165,36,0.20); border-color: #f5a524; color: #f5a524; }
+  .sheet-row-drum-tom        .sheet-cell-note.has-hit { background: rgba(108,196,255,0.22); border-color: #6cc4ff; color: #6cc4ff; }
+  .sheet-row-drum-snare      .sheet-cell-note.has-hit { background: rgba(255,127,127,0.22); border-color: #ff7f7f; color: #ff7f7f; }
+  .sheet-row-drum-kick       .sheet-cell-note.has-hit { background: rgba(179,136,255,0.22); border-color: #b388ff; color: #b388ff; }
   .notes-modal-track-wrap { flex: 1; overflow-x: auto; overflow-y: auto; padding: 16px 20px 24px; min-height: 200px; }
   .notes-modal-track { position: relative; min-width: 100%; min-height: 80px; }
   .notes-modal-events { position: relative; display: flex; align-items: flex-start; }
@@ -6249,6 +6280,20 @@ function splitterOpenNotesModal(stemId) {
   if (!stem) return;
   splitterModalState.open = true;
   splitterModalState.stemId = stemId;
+  // Hindustani sargam only makes sense for melodic content. Lock the
+  // notation toggle to vocals — for drums / bass / other, hide it and
+  // force notation back to Western so cached state from a previous
+  // vocals open doesn't leak through.
+  const isVocals = stemId === 'vocals';
+  const notationGroup = document.querySelector('.notes-modal-notation-group');
+  if (notationGroup) notationGroup.style.display = isVocals ? '' : 'none';
+  if (!isVocals) {
+    splitterModalState.notation = 'western';
+    document.querySelectorAll('.notes-modal-notation').forEach(b =>
+      b.classList.toggle('is-active', b.dataset.mode === 'western'));
+    const saGroup = document.getElementById('notes-modal-sa-group');
+    if (saGroup) saGroup.hidden = true;
+  }
   // Reset zoom to fit the full song nicely on first open per stem
   const dur = splitterState.duration || 1;
   const wrap = document.getElementById('notes-modal-track-wrap');
@@ -6564,75 +6609,166 @@ function splitterRenderSheet() {
   const cellSec = beatSec / subdiv;
   const cellsPerBar = bpb * subdiv;
   const dur = splitterState.duration || 1;
-  const totalCells = Math.max(cellsPerBar, Math.ceil(dur / cellSec));
-  const totalBars = Math.ceil(totalCells / cellsPerBar);
+  const totalBars = Math.max(1, Math.ceil(dur / (bpb * beatSec)));
 
-  const isDrumStem = splitterModalState.stemId === 'drums' || splitterModalState.stemId === 'percussive';
+  const stemId = splitterModalState.stemId;
+  const isDrumStem = stemId === 'drums' || stemId === 'percussive';
 
-  // For each cell, find the event with the most overlap with [cellStart, cellEnd).
-  function eventForRange(t0, t1) {
-    let best = null, bestOverlap = 0;
-    for (const ev of events) {
-      const overlap = Math.min(ev.end, t1) - Math.max(ev.start, t0);
-      if (overlap > bestOverlap) { bestOverlap = overlap; best = ev; }
-    }
-    return best;
-  }
-  // Drum cells often have multiple simultaneous hits (kick + hat together is
-  // the most common pattern in pop/rock). Collect every event whose ONSET
-  // falls inside the cell — we want hits, not sustained durations.
-  function drumEventsInCell(t0, t1) {
-    const seen = new Set();
-    const out = [];
-    for (const ev of events) {
-      if (ev.start >= t0 && ev.start < t1) {
-        const key = ev.type;
-        if (!seen.has(key)) { seen.add(key); out.push(ev); }
-      }
-    }
-    // Order by drum-row priority (cymbal → hat → snare → tom → kick) so the
-    // label reads consistently regardless of detection order.
-    const order = SPLITTER_DRUM_ROW_ORDER;
-    out.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
-    return out;
+  // Beat-ruler labels per subdivision: 1 / & / 2 / & for 8ths, 1 / e / & / a
+  // for 16ths, 1 / t / l for triplets, 1 / 2 / 3 / 4 for plain quarters.
+  const SUB_LABELS = {
+    1: ['1'],
+    2: ['', '&'],
+    3: ['', 't', 'l'],
+    4: ['', 'e', '&', 'a'],
+  };
+  function ruleLabel(beatIdx, subIdx) {
+    if (subIdx === 0) return String(beatIdx + 1);
+    return (SUB_LABELS[subdiv] || ['·'])[subIdx] || '·';
   }
 
-  let html = '';
-  for (let b = 0; b < totalBars; b++) {
+  // Pick the event whose ONSET falls inside [t0, t1). Onset-based (rather
+  // than overlap-based) so a long sustained note doesn't repeat across
+  // every subdivision — only the cell where it began gets its label.
+  function onsetEventInCell(t0, t1, list) {
+    for (const ev of (list || events)) {
+      if (ev.start >= t0 && ev.start < t1) return ev;
+    }
+    return null;
+  }
+
+  // Pre-bucket drum events by lane so we don't scan all events per cell
+  let drumLanes = null;
+  if (isDrumStem) {
+    drumLanes = {};
+    for (const t of SPLITTER_DRUM_ROW_ORDER) drumLanes[t] = [];
+    for (const ev of events) {
+      if (drumLanes[ev.type]) drumLanes[ev.type].push(ev);
+    }
+  }
+
+  // Detected song-key string for the line header (purely informative)
+  const keyStr = (() => {
+    const k = splitterState.detectedKey;
+    if (!k) return '';
+    const NOTE = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+    return NOTE[k.root] + (k.mode === 'minor' ? 'm' : '');
+  })();
+
+  // Build helpers for one bar's worth of cells (note row OR drum lane row)
+  function pitchedBarHTML(barIdx) {
     let cells = '';
     for (let c = 0; c < cellsPerBar; c++) {
-      const t = b * bpb * beatSec + c * cellSec;
+      const t = barIdx * bpb * beatSec + c * cellSec;
+      const ev = onsetEventInCell(t, t + cellSec);
       const isDownbeat = (c % subdiv === 0);
-      const isBarStart = (c === 0);
       let display = '';
-      let hasEvent = false;
-      let tooltip = splitterFormatTime(t);
-      if (isDrumStem) {
-        const drums = drumEventsInCell(t, t + cellSec);
-        if (drums.length) {
-          hasEvent = true;
-          display = drums.map(ev => ev.label).join('');
-          tooltip = drums.map(ev => SPLITTER_DRUM_ROW_NAMES[ev.type] || ev.type).join(' + ')
-            + ' · ' + splitterFormatTime(t);
-        }
-      } else {
-        const ev = eventForRange(t, t + cellSec);
-        if (ev) {
-          hasEvent = true;
-          display = (ev.midi != null) ? splitterFormatNote(ev.midi) : ev.label;
-          tooltip = display + ' · ' + splitterFormatTime(t);
-        }
-      }
+      if (ev) display = (ev.midi != null) ? splitterFormatNote(ev.midi) : ev.label;
       const safe = display.replace(/[<>&"']/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[ch]));
-      const klass = 'sheet-beat' + (hasEvent ? '' : ' is-empty') + (isBarStart && b > 0 ? ' is-downbeat' : '');
-      cells += '<button class="' + klass + '" data-time="' + t.toFixed(3) + '" data-end="' + (t + cellSec).toFixed(3) + '" title="' + tooltip + '">' + (safe || '·') + '</button>';
+      const klass = 'sheet-cell sheet-cell-note'
+        + (isDownbeat ? ' is-downbeat' : '')
+        + (ev ? ' has-hit' : '');
+      const tooltip = ev ? safe + ' · ' + splitterFormatTime(t) : splitterFormatTime(t);
+      cells += '<button class="' + klass + '" data-time="' + t.toFixed(3) + '" title="' + tooltip + '">'
+        + safe + '</button>';
     }
-    html += '<div class="sheet-bar"><div class="sheet-bar-num">Bar ' + (b + 1) + '</div>'
-      + '<div class="sheet-bar-beats" style="grid-template-columns: repeat(' + cellsPerBar + ', minmax(36px, 1fr));">'
-      + cells + '</div></div>';
+    return '<div class="sheet-bar-section" style="--cells:' + cellsPerBar + ';">' + cells + '</div>';
   }
+  function drumLaneBarHTML(barIdx, drumType) {
+    const list = drumLanes[drumType] || [];
+    let cells = '';
+    for (let c = 0; c < cellsPerBar; c++) {
+      const t = barIdx * bpb * beatSec + c * cellSec;
+      const ev = onsetEventInCell(t, t + cellSec, list);
+      const isDownbeat = (c % subdiv === 0);
+      const klass = 'sheet-cell sheet-cell-note'
+        + (isDownbeat ? ' is-downbeat' : '')
+        + (ev ? ' has-hit' : '');
+      const tooltip = ev
+        ? (SPLITTER_DRUM_ROW_NAMES[drumType] || drumType) + ' · ' + splitterFormatTime(t)
+        : splitterFormatTime(t);
+      cells += '<button class="' + klass + '" data-time="' + t.toFixed(3) + '" title="' + tooltip + '">'
+        + (ev ? '●' : '') + '</button>';
+    }
+    return '<div class="sheet-bar-section" style="--cells:' + cellsPerBar + ';">' + cells + '</div>';
+  }
+  function emptyBarHTML() {
+    return '<div class="sheet-bar-section is-empty"></div>';
+  }
+  function beatRulerBarHTML() {
+    let cells = '';
+    for (let c = 0; c < cellsPerBar; c++) {
+      const beatIdx = Math.floor(c / subdiv);
+      const subIdx = c % subdiv;
+      const isDownbeat = subIdx === 0;
+      cells += '<div class="sheet-cell' + (isDownbeat ? ' is-downbeat' : '') + '">'
+        + ruleLabel(beatIdx, subIdx) + '</div>';
+    }
+    return '<div class="sheet-bar-section" style="--cells:' + cellsPerBar + ';">' + cells + '</div>';
+  }
+
+  // For drum stems, only render lanes that actually contain events in the
+  // whole song (no point reserving a row for hi-hat-open if nothing fired).
+  const activeDrumLanes = isDrumStem
+    ? SPLITTER_DRUM_ROW_ORDER.filter(t => drumLanes[t] && drumLanes[t].length)
+    : null;
+
+  let html = '<div class="sheet-paper">';
+  for (let lineStart = 0; lineStart < totalBars; lineStart += 2) {
+    const barNumLabel = (totalBars > lineStart + 1)
+      ? 'Bars ' + (lineStart + 1) + '–' + Math.min(totalBars, lineStart + 2)
+      : 'Bar ' + (lineStart + 1);
+    html += '<div class="sheet-line">';
+    html += '<div class="sheet-line-header">'
+      + '<span>' + barNumLabel + '</span>'
+      + '<span class="sheet-line-header-meta">'
+        + tempo + ' bpm · ' + bpb + '/4'
+        + (keyStr && lineStart === 0 ? ' · key ' + keyStr : '')
+      + '</span>'
+      + '</div>';
+
+    if (isDrumStem) {
+      // One sheet-row per active drum lane, all stacked above the beat ruler
+      for (const drumType of activeDrumLanes) {
+        const labelText = SPLITTER_DRUM_ROW_NAMES[drumType] || drumType;
+        html += '<div class="sheet-row sheet-row-drum sheet-row-drum-' + drumType + '">';
+        html += '<div class="sheet-row-label">' + labelText + '</div>';
+        for (let bi = 0; bi < 2; bi++) {
+          const barIdx = lineStart + bi;
+          html += (barIdx >= totalBars) ? emptyBarHTML() : drumLaneBarHTML(barIdx, drumType);
+        }
+        html += '</div>';
+      }
+    } else {
+      // Single note row for vocals / bass / other
+      html += '<div class="sheet-row sheet-row-notes">';
+      const labelText = (stemId === 'other') ? 'Chords'
+                       : (stemId === 'vocals') ? 'Notes'
+                       : (stemId === 'bass') ? 'Bass'
+                       : 'Notes';
+      html += '<div class="sheet-row-label">' + labelText + '</div>';
+      for (let bi = 0; bi < 2; bi++) {
+        const barIdx = lineStart + bi;
+        html += (barIdx >= totalBars) ? emptyBarHTML() : pitchedBarHTML(barIdx);
+      }
+      html += '</div>';
+    }
+
+    // Beat ruler at the bottom of every line
+    html += '<div class="sheet-row sheet-row-beats">';
+    html += '<div class="sheet-row-label"><span class="sheet-row-label-key">beat</span></div>';
+    for (let bi = 0; bi < 2; bi++) {
+      const barIdx = lineStart + bi;
+      html += (barIdx >= totalBars) ? emptyBarHTML() : beatRulerBarHTML();
+    }
+    html += '</div>';
+
+    html += '</div>'; // close .sheet-line
+  }
+  html += '</div>';
+
   grid.innerHTML = html;
-  grid.querySelectorAll('.sheet-beat').forEach(btn => {
+  grid.querySelectorAll('.sheet-cell-note').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
       const t = parseFloat(btn.dataset.time);
@@ -6662,11 +6798,14 @@ function splitterSwitchTab(tab) {
 // from the modal RAF tick when sheet tab is active).
 function splitterUpdateSheetCursor() {
   const t = splitterCurrentTime();
-  const cells = document.querySelectorAll('.sheet-beat');
+  const tempo = Math.max(30, Math.min(300, splitterModalState.sheetTempo));
+  const subdiv = Math.max(1, Math.min(4, splitterModalState.sheetSubdiv));
+  const cellSec = (60 / tempo) / subdiv;
+  const cells = document.querySelectorAll('.sheet-cell-note');
   let activeCell = null;
   cells.forEach(c => {
     const start = parseFloat(c.dataset.time);
-    const end = parseFloat(c.dataset.end);
+    const end = start + cellSec;
     const inside = t >= start && t < end;
     c.classList.toggle('is-current', inside);
     if (inside) activeCell = c;
