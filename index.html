@@ -856,22 +856,19 @@
   .sheet-row-drum-tom        .sheet-cell-note.has-hit { background: rgba(108,196,255,0.22); border-color: #6cc4ff; color: #6cc4ff; }
   .sheet-row-drum-snare      .sheet-cell-note.has-hit { background: rgba(255,127,127,0.22); border-color: #ff7f7f; color: #ff7f7f; }
   .sheet-row-drum-kick       .sheet-cell-note.has-hit { background: rgba(179,136,255,0.22); border-color: #b388ff; color: #b388ff; }
-  /* Vocal-flow notation — closer to real sargam/lead-sheet writing.
-     Beat slots stretch to fit however many notes happened, with
-     proportional widths driven by note duration. Notes wrap onto
-     a second row when there are too many for one beat (fast runs);
-     row-gap separates wrapped lines so they don't overlap. */
-  .sheet-row-vocal-flow .sheet-bar-section { padding: 6px 6px 4px; gap: 0; grid-template-columns: repeat(var(--cells, 4), 1fr); align-items: flex-start; }
+  /* Vocal-flow notation — flows like text glyphs, not boxed cells.
+     Notes have no border / fill, just colored type that wraps inside a
+     beat slot. Hover + active states use background tint without
+     changing layout (so wrap doesn't shift on cursor highlight). */
+  .sheet-row-vocal-flow .sheet-bar-section { padding: 6px 4px 4px; gap: 0; grid-template-columns: repeat(var(--cells, 4), 1fr); align-items: flex-start; }
   .vsheet-bar { display: grid; }
-  .vsheet-beat { display: flex; align-items: center; justify-content: flex-start; gap: 3px; row-gap: 4px; padding: 4px 8px; min-height: 40px; border-right: 1px dashed rgba(255,255,255,0.07); position: relative; flex-wrap: wrap; }
+  .vsheet-beat { display: flex; align-items: center; justify-content: flex-start; gap: 6px; row-gap: 6px; padding: 8px 10px; min-height: 40px; border-right: 1px dashed rgba(255,255,255,0.06); position: relative; flex-wrap: wrap; }
   .vsheet-beat:last-child { border-right: none; }
-  /* Beat number is shown on the bottom ruler row; in-slot ::after
-     was overlapping wrapped notes. Keep none. */
-  .vsheet-note { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 6px; cursor: pointer; transition: all 0.12s; flex-shrink: 0; min-width: 26px; text-align: center; box-sizing: border-box; line-height: 1.2; }
-  .sheet-row-vocal-flow .vsheet-note:hover { background: var(--accent); color: #1a1a1a; box-shadow: 0 0 8px rgba(245,165,36,0.5); }
-  .sheet-row-vocal-flow .vsheet-note.is-current { background: var(--accent); color: #1a1a1a; border-color: var(--accent); box-shadow: 0 0 8px rgba(245,165,36,0.5); }
-  /* Grace note / kan-swar — small, italic-ish, slight upward shift */
-  .vsheet-note.is-grace { font-size: 10.5px; padding: 1px 4px; min-width: 18px; opacity: 0.8; transform: translateY(-3px); border-style: dashed; }
+  .vsheet-note { font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--accent); background: transparent; border: none; padding: 1px 4px; cursor: pointer; transition: background 0.10s, color 0.10s; flex-shrink: 0; min-width: 0; text-align: center; box-sizing: border-box; line-height: 1.25; border-radius: 3px; }
+  .sheet-row-vocal-flow .vsheet-note:hover { background: var(--accent-soft); }
+  .sheet-row-vocal-flow .vsheet-note.is-current { background: var(--accent); color: #1a1a1a; }
+  /* Grace note / kan-swar — smaller and slightly raised, no border */
+  .vsheet-note.is-grace { font-size: 11px; opacity: 0.78; transform: translateY(-2px); }
   /* Slide / meend connector — curved arc above the gap */
   .vsheet-connector { color: var(--accent-2); font-size: 16px; line-height: 1; padding: 0 2px; flex-shrink: 0; align-self: flex-start; margin-top: -2px; }
   .vsheet-connector-slide { color: #8be9fd; font-weight: 700; }
@@ -6943,24 +6940,34 @@ function splitterSwitchTab(tab) {
 }
 
 // Highlight whichever sheet cell the playhead is currently inside (called
-// from the modal RAF tick when sheet tab is active).
+// from the modal RAF tick when sheet tab is active). Picks a SINGLE best
+// match (the latest event whose start ≤ t and whose end + linger ≥ t) so
+// the highlight stays steadily on one note instead of flickering when
+// adjacent events overlap by a frame or two.
 function splitterUpdateSheetCursor() {
   const t = splitterCurrentTime();
   const tempo = Math.max(30, Math.min(300, splitterModalState.sheetTempo));
   const subdiv = Math.max(1, Math.min(4, splitterModalState.sheetSubdiv));
   const cellSec = (60 / tempo) / subdiv;
   const cells = document.querySelectorAll('.sheet-cell-note, .vsheet-note');
-  let activeCell = null;
+  // Find the single best-matching cell: the latest one whose [start, end+linger]
+  // contains t. Linger of 80 ms keeps short notes visibly highlighted past
+  // their hard end so the cursor doesn't blip off between notes.
+  const linger = 0.08;
+  let bestEl = null;
+  let bestStart = -Infinity;
   cells.forEach(c => {
     const start = parseFloat(c.dataset.time);
-    // For vocal-flow notes we also have data-end (event end) — use it when
-    // present so a held note stays highlighted across the cellSec boundary.
+    if (isNaN(start) || start > t + 0.001) return;
     const explicitEnd = parseFloat(c.dataset.end);
     const end = !isNaN(explicitEnd) ? explicitEnd : (start + cellSec);
-    const inside = t >= start && t < end;
-    c.classList.toggle('is-current', inside);
-    if (inside) activeCell = c;
+    if (t > end + linger) return;
+    if (start > bestStart) { bestStart = start; bestEl = c; }
   });
+  cells.forEach(c => {
+    c.classList.toggle('is-current', c === bestEl);
+  });
+  const activeCell = bestEl;
   // Auto-scroll the active cell into view while playing
   if (activeCell && splitterState.playing) {
     const wrap = document.getElementById('sheet-grid-wrap');
@@ -7625,9 +7632,13 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
       fftSize: 4096,
       numHarmonics: 4,           // HPS depth — kills octave errors
       smoothFrames: 1,           // raw frames
-      stabilityFrames: 2,        // pitch must hold ≥ 2 frames (~80 ms) — glide guard
+      stabilityFrames: 1,        // commit on first frame so fast runs (40-80 ms notes) survive
       minEventSec: 0.025,        // 25 ms — keep super-short ornaments + kan-swar
     });
+    // The post-cleaner is what protects against chromatic glide artifacts
+    // now that stability=1 lets every frame through. It only drops events
+    // that are unambiguously chromatic-in-between of a slide, so genuine
+    // fast-run notes (each landing on a distinct scale step) survive.
     return splitterMergeAdjacentSamePitch(splitterCleanGlideChromatics(raw));
   }
   if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
