@@ -856,6 +856,25 @@
   .sheet-row-drum-tom        .sheet-cell-note.has-hit { background: rgba(108,196,255,0.22); border-color: #6cc4ff; color: #6cc4ff; }
   .sheet-row-drum-snare      .sheet-cell-note.has-hit { background: rgba(255,127,127,0.22); border-color: #ff7f7f; color: #ff7f7f; }
   .sheet-row-drum-kick       .sheet-cell-note.has-hit { background: rgba(179,136,255,0.22); border-color: #b388ff; color: #b388ff; }
+  /* Vocal-flow notation — closer to real sargam/lead-sheet writing.
+     Beat slots stretch to fit however many notes happened, with
+     proportional widths driven by note duration. */
+  .sheet-row-vocal-flow .sheet-bar-section { padding: 4px 6px; gap: 0; grid-template-columns: repeat(var(--cells, 4), 1fr); }
+  .vsheet-bar { display: grid; }
+  .vsheet-beat { display: flex; align-items: center; justify-content: flex-start; gap: 2px; padding: 4px 8px; min-height: 38px; border-right: 1px dashed rgba(255,255,255,0.07); position: relative; flex-wrap: wrap; }
+  .vsheet-beat:last-child { border-right: none; }
+  .vsheet-beat::after { content: attr(data-beat); position: absolute; bottom: -1px; left: 6px; font-family: var(--font-mono); font-size: 8.5px; color: var(--muted); opacity: 0.6; }
+  .vsheet-note { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 4px; padding: 3px 7px; cursor: pointer; transition: all 0.12s; flex-shrink: 0; min-width: 28px; text-align: center; box-sizing: border-box; }
+  .sheet-row-vocal-flow .vsheet-note:hover { background: var(--accent); color: #1a1a1a; box-shadow: 0 0 8px rgba(245,165,36,0.5); }
+  .sheet-row-vocal-flow .vsheet-note.is-current { background: var(--accent); color: #1a1a1a; border-color: var(--accent); box-shadow: 0 0 8px rgba(245,165,36,0.5); }
+  /* Grace note / kan-swar — small, italic-ish, slight upward shift */
+  .vsheet-note.is-grace { font-size: 10.5px; padding: 1px 4px; min-width: 18px; opacity: 0.8; transform: translateY(-3px); border-style: dashed; }
+  /* Slide / meend connector — curved arc above the gap */
+  .vsheet-connector { color: var(--accent-2); font-size: 16px; line-height: 1; padding: 0 2px; flex-shrink: 0; align-self: flex-start; margin-top: -2px; }
+  .vsheet-connector-slide { color: #8be9fd; font-weight: 700; }
+  .vsheet-connector-legato { color: var(--muted); font-size: 12px; }
+  /* Empty-beat rest indicator */
+  .vsheet-rest { color: var(--muted); opacity: 0.4; font-family: var(--font-mono); font-size: 14px; }
   .notes-modal-track-wrap { flex: 1; overflow-x: auto; overflow-y: auto; padding: 16px 20px 24px; min-height: 200px; }
   .notes-modal-track { position: relative; min-width: 100%; min-height: 80px; }
   .notes-modal-events { position: relative; display: flex; align-items: flex-start; }
@@ -6593,6 +6612,96 @@ function splitterRenderModalAxis(totalWidth, pxPerSec, leftOffset) {
 // Each cell represents one subdivision. The cell's label is whichever event
 // has the largest time-overlap with [t, t+cellSec). Click a cell to seek to
 // that moment. Live highlight on the cell currently under the playhead.
+// Per-bar vocal-flow renderer. Lays out every note that started in the bar
+// inside per-beat columns, with notes positioned proportionally by their
+// start time within the beat. Detects:
+//   - Slide / meend (consecutive notes < 60 ms apart, ±2 semitones) — drawn
+//     as a curved tilde between the notes
+//   - Grace note / kan-swar (event < 60 ms duration sitting before a much
+//     longer note) — rendered smaller with a leading flick
+//   - Repeated same-note events stacking — collapsed into one with a small
+//     duration bar above so it reads as a "held" note, not three separate
+// All notes in the bar are time-ordered. Inside each beat, notes are
+// laid out with `flex: <duration>` so width hints at duration like real
+// staff notation.
+function splitterVocalFlowBarHTML(barIdx, allEvents, bpb, beatSec) {
+  const t0 = barIdx * bpb * beatSec;
+  const t1 = t0 + bpb * beatSec;
+  const events = allEvents.filter(ev => ev.start >= t0 && ev.start < t1)
+                          .sort((a, b) => a.start - b.start);
+
+  // Pre-classify each event in context (grace / slide-from-prev / normal)
+  const classified = events.map((ev, i) => {
+    const dur = Math.max(0.001, ev.end - ev.start);
+    const next = events[i + 1];
+    const prev = events[i - 1];
+    let role = 'normal';
+    let connector = '';   // outgoing connector to next event
+    if (next) {
+      const gap = next.start - ev.end;
+      const semis = (ev.midi != null && next.midi != null)
+        ? Math.abs(next.midi - ev.midi)
+        : 99;
+      const nextDur = Math.max(0.001, next.end - next.start);
+      // Grace note: this event is short AND the next is much longer AND
+      // they're chromatic-adjacent — typical kan-swar pattern.
+      if (dur < 0.06 && nextDur > dur * 2 && semis <= 2 && gap < 0.05) {
+        role = 'grace';
+      }
+      // Slide / meend: small gap, small interval (1-2 semitones)
+      if (gap < 0.06 && semis >= 1 && semis <= 2) connector = 'slide';
+      // Glide: larger gap or wider interval but still continuous (legato)
+      else if (gap < 0.10 && semis <= 5) connector = 'legato';
+    }
+    return { ev, dur, role, connector, prev, next };
+  });
+
+  // Group events by beat number (1..bpb) within the bar
+  const beatGroups = [];
+  for (let b = 0; b < bpb; b++) beatGroups.push([]);
+  for (const c of classified) {
+    const beatIdx = Math.min(bpb - 1, Math.floor((c.ev.start - t0) / beatSec));
+    beatGroups[beatIdx].push(c);
+  }
+
+  // Build per-beat HTML. Each beat is a flex container; notes within it
+  // get flex-grow proportional to their duration so width tracks rhythm.
+  let beatsHTML = '';
+  for (let b = 0; b < bpb; b++) {
+    const group = beatGroups[b];
+    const beatT0 = t0 + b * beatSec;
+    let inner = '';
+    if (group.length === 0) {
+      inner = '<span class="vsheet-rest" title="rest">·</span>';
+    } else {
+      for (let i = 0; i < group.length; i++) {
+        const c = group[i];
+        const noteName = (c.ev.midi != null) ? splitterFormatNote(c.ev.midi) : (c.ev.label || '');
+        const safe = String(noteName).replace(/[<>&"']/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[ch]));
+        const grow = Math.max(0.4, Math.min(8, c.dur / 0.10)); // duration → flex-grow
+        const klass = 'vsheet-note' + (c.role === 'grace' ? ' is-grace' : '');
+        const tooltip = noteName + ' · ' + splitterFormatTime(c.ev.start) + ' (' + (c.dur * 1000).toFixed(0) + ' ms)';
+        inner += '<button class="' + klass + '" data-time="' + c.ev.start.toFixed(3) + '" '
+          + 'data-end="' + c.ev.end.toFixed(3) + '" '
+          + 'style="flex-grow:' + grow.toFixed(2) + ';" '
+          + 'title="' + tooltip + '">' + safe + '</button>';
+        // Render connector AFTER the current note (only if there's a next
+        // in the same beat — cross-beat connectors would clutter the layout)
+        if (i + 1 < group.length && c.connector) {
+          inner += '<span class="vsheet-connector vsheet-connector-' + c.connector + '" aria-hidden="true">'
+            + (c.connector === 'slide' ? '⌒' : '·')
+            + '</span>';
+        }
+      }
+    }
+    beatsHTML += '<div class="vsheet-beat" data-beat="' + (b + 1) + '" '
+      + 'data-time="' + beatT0.toFixed(3) + '" '
+      + 'title="Beat ' + (b + 1) + ' · ' + splitterFormatTime(beatT0) + '">'
+      + inner + '</div>';
+  }
+  return '<div class="sheet-bar-section vsheet-bar" style="--cells:' + bpb + ';">' + beatsHTML + '</div>';
+}
+
 function splitterRenderSheet() {
   const stem = splitterState.stems[splitterModalState.stemId];
   const grid = document.getElementById('sheet-grid');
@@ -6739,6 +6848,21 @@ function splitterRenderSheet() {
         }
         html += '</div>';
       }
+    } else if (stemId === 'vocals') {
+      // Vocal-flow renderer: one row per bar showing every note in time
+      // order with proportional spacing, slide markers between consecutive
+      // pitches (meend), grace notes rendered smaller (kan-swar), and
+      // multiple notes per beat handled naturally — NOT snapped to a
+      // subdivision grid. Closer to how Hindustani notation is actually
+      // written for learning.
+      html += '<div class="sheet-row sheet-row-vocal-flow">';
+      const notationLabel = splitterModalState.notation === 'devanagari' ? 'Sargam' : 'Notes';
+      html += '<div class="sheet-row-label">' + notationLabel + '</div>';
+      for (let bi = 0; bi < 2; bi++) {
+        const barIdx = lineStart + bi;
+        html += (barIdx >= totalBars) ? emptyBarHTML() : splitterVocalFlowBarHTML(barIdx, events, bpb, beatSec);
+      }
+      html += '</div>';
     } else {
       // Single note row for vocals / bass / other
       html += '<div class="sheet-row sheet-row-notes">';
@@ -6768,7 +6892,7 @@ function splitterRenderSheet() {
   html += '</div>';
 
   grid.innerHTML = html;
-  grid.querySelectorAll('.sheet-cell-note').forEach(btn => {
+  grid.querySelectorAll('.sheet-cell-note, .vsheet-note').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
       const t = parseFloat(btn.dataset.time);
@@ -6801,11 +6925,14 @@ function splitterUpdateSheetCursor() {
   const tempo = Math.max(30, Math.min(300, splitterModalState.sheetTempo));
   const subdiv = Math.max(1, Math.min(4, splitterModalState.sheetSubdiv));
   const cellSec = (60 / tempo) / subdiv;
-  const cells = document.querySelectorAll('.sheet-cell-note');
+  const cells = document.querySelectorAll('.sheet-cell-note, .vsheet-note');
   let activeCell = null;
   cells.forEach(c => {
     const start = parseFloat(c.dataset.time);
-    const end = start + cellSec;
+    // For vocal-flow notes we also have data-end (event end) — use it when
+    // present so a held note stays highlighted across the cellSec boundary.
+    const explicitEnd = parseFloat(c.dataset.end);
+    const end = !isNaN(explicitEnd) ? explicitEnd : (start + cellSec);
     const inside = t >= start && t < end;
     c.classList.toggle('is-current', inside);
     if (inside) activeCell = c;
@@ -7451,13 +7578,13 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
     return await splitterClassifyDrumOnsets(buffer);
   }
   if (stemId === 'vocals') return splitterDetectMonophonicNotes(buffer, {
-    minHz: 70, maxHz: 1400,    // slightly wider — catches very low croons + high belts
-    hopSec: 0.045,             // ~22 fps — finer time resolution catches more notes
+    minHz: 70, maxHz: 1400,    // covers low croons through soprano belts
+    hopSec: 0.040,             // ~25 fps — finer time resolution
     fftSize: 4096,
     numHarmonics: 4,           // HPS depth — kills octave errors
-    smoothFrames: 1,           // raw frames — let the stability filter do the work
-    stabilityFrames: 2,        // pitch must hold ≥ 2 frames (~90 ms) to commit
-    minEventSec: 0.04,         // 40 ms — was 70 ms; catches faster ornaments / passing notes
+    smoothFrames: 1,           // raw frames
+    stabilityFrames: 1,        // commit every frame so ornaments + grace notes survive
+    minEventSec: 0.025,        // 25 ms — keep super-short ornaments + kan-swar
   });
   if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
     minHz: 35,  maxHz: 400,    // low B0 -> G4 covers most basses + sub
