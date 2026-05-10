@@ -7605,14 +7605,32 @@ async function splitterAnalyzeStems() {
       splitterState.detectedTempo = null;
     }
   }
-  // Phase 3: chord/note events (heavier — may take a few seconds per stem)
-  for (let i = 0; i < stems.length; i++) {
-    const def = stems[i];
+  // Phase 3: chord/note events (heavier — may take a few seconds per stem).
+  // Process 'other' (chord-bearing harmonic stem) BEFORE 'vocals' so the
+  // vocal post-filter can use chord context to discriminate scale tones
+  // from chromatic detector artifacts.
+  const stemsOrdered = stems.slice().sort((a, b) => {
+    const order = { drums: 1, bass: 2, other: 3, vocals: 4 };
+    return (order[a.id] || 99) - (order[b.id] || 99);
+  });
+  for (let i = 0; i < stemsOrdered.length; i++) {
+    const def = stemsOrdered[i];
     const stem = splitterState.stems[def.id];
     if (!stem || !stem.buffer) continue;
     splitterSetStatus('analysing ' + def.name + '…', 'busy', 0.997);
     await splitterYield();
     stem.events = await splitterAnalyseStemEvents(def.id, stem.buffer);
+    // After vocal detection, refine using chord context (drops short
+    // off-scale pitches that are almost always detector artifacts).
+    if (def.id === 'vocals') {
+      const otherStem = splitterState.stems['other'];
+      const chordEvents = (otherStem && otherStem.events) || [];
+      stem.events = splitterFilterVocalToScale(
+        stem.events,
+        chordEvents,
+        splitterState.detectedKey
+      );
+    }
     splitterRenderTimelineEvents(def.id);
   }
   splitterUpdateStemCursors();
@@ -7828,6 +7846,102 @@ async function splitterDetectMonophonicNotes(buffer, opts) {
 //   - or NOT chromatically between two stable neighbors,
 //   - or surrounded by gaps wider than 70 ms,
 //   - or jump in the OPPOSITE direction of the surrounding phrase.
+// ---- Key/scale-aware vocal filter ---------------------------------------
+// Uses the chord track (from the 'other' stem) — and falls back to the
+// song's overall detected key — to decide which pitch classes are "in"
+// the local scale at any moment. Short vocal events that land on
+// off-scale pitch classes are almost always detector artifacts (chromatic
+// glide leftovers, sympathetic resonance, breath noise tracked as pitch),
+// not intentional vocal notes. Drop them.
+//
+// Long off-scale events (≥100 ms) are KEPT — could be intentional
+// chromaticism (blue notes, chromatic passing tones the singer means).
+//
+// Idea credit: Shay. The chord that's playing tells us the local key
+// context, and singers stay diatonic ~95% of the time, so off-scale +
+// short = almost certainly noise.
+
+const SPLITTER_CHORD_SCALE_SEMIS = {
+  // Triads & extensions → diatonic scales
+  major:      [0, 2, 4, 5, 7, 9, 11],     // ionian
+  minor:      [0, 2, 3, 5, 7, 8, 10],     // aeolian / natural minor
+  dom7:       [0, 2, 4, 5, 7, 9, 10],     // mixolydian (dominant)
+  maj7:       [0, 2, 4, 5, 7, 9, 11],
+  m7b5:       [0, 1, 3, 5, 6, 8, 10],     // locrian
+  dim:        [0, 2, 3, 5, 6, 8, 9, 11],  // half-whole diminished
+  aug:        [0, 2, 4, 6, 8, 10],        // whole-tone
+};
+
+function splitterScaleForChord(label) {
+  if (!label) return null;
+  const cleaned = String(label).replace(/♯/g, '#').replace(/♭/g, 'b');
+  const noBass = cleaned.split('/')[0].trim();
+  const m = noBass.match(/^([A-G])([#b]?)(.*)$/);
+  if (!m) return null;
+  const NOTE_PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  let rootPc = NOTE_PC[m[1]];
+  if (rootPc == null) return null;
+  if (m[2] === '#') rootPc++;
+  if (m[2] === 'b') rootPc--;
+  rootPc = ((rootPc % 12) + 12) % 12;
+  const q = (m[3] || '').toLowerCase();
+  let scaleSemis;
+  if (q.includes('m7b5') || q.includes('ø') || q.includes('half'))           scaleSemis = SPLITTER_CHORD_SCALE_SEMIS.m7b5;
+  else if (q.startsWith('dim'))                                               scaleSemis = SPLITTER_CHORD_SCALE_SEMIS.dim;
+  else if (q.startsWith('aug') || q.includes('+'))                            scaleSemis = SPLITTER_CHORD_SCALE_SEMIS.aug;
+  else if (q.startsWith('maj7') || q.startsWith('m7') && q.indexOf('aj') > 0) scaleSemis = SPLITTER_CHORD_SCALE_SEMIS.maj7;
+  else if (q.startsWith('m') && !q.startsWith('maj'))                         scaleSemis = SPLITTER_CHORD_SCALE_SEMIS.minor;
+  else if (/^(7|9|11|13)/.test(q))                                            scaleSemis = SPLITTER_CHORD_SCALE_SEMIS.dom7;
+  else                                                                        scaleSemis = SPLITTER_CHORD_SCALE_SEMIS.major;
+  return new Set(scaleSemis.map(s => ((s + rootPc) % 12 + 12) % 12));
+}
+
+function splitterScaleForSongKey(songKey) {
+  if (!songKey || songKey.root == null) return null;
+  const semis = (songKey.mode === 'minor')
+    ? SPLITTER_CHORD_SCALE_SEMIS.minor
+    : SPLITTER_CHORD_SCALE_SEMIS.major;
+  return new Set(semis.map(s => ((s + songKey.root) % 12 + 12) % 12));
+}
+
+function splitterFilterVocalToScale(vocalEvents, chordEvents, songKey) {
+  if (!vocalEvents || vocalEvents.length === 0) return vocalEvents || [];
+  const sortedChords = (chordEvents || []).slice().sort((a, b) => a.start - b.start);
+  const songScale = splitterScaleForSongKey(songKey);
+
+  function activeScale(t) {
+    if (sortedChords.length) {
+      // Latest chord whose [start, end] contains t (binary search)
+      let lo = 0, hi = sortedChords.length - 1, best = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (sortedChords[mid].start <= t) { best = mid; lo = mid + 1; }
+        else hi = mid - 1;
+      }
+      if (best >= 0) {
+        const c = sortedChords[best];
+        if (c.end + 0.05 >= t) {
+          const sc = splitterScaleForChord(c.label);
+          if (sc) return sc;
+        }
+      }
+    }
+    return songScale; // fallback
+  }
+
+  return vocalEvents.filter(ev => {
+    if (ev.midi == null) return true;
+    const dur = ev.end - ev.start;
+    // Long events keep regardless — could be intentional chromaticism
+    if (dur >= 0.10) return true;
+    const scale = activeScale(ev.start + dur * 0.5);
+    if (!scale) return true; // no harmonic context — keep
+    const evPc = ((ev.midi % 12) + 12) % 12;
+    if (scale.has(evPc)) return true; // in-scale — keep
+    return false; // off-scale + short = artifact, drop
+  });
+}
+
 function splitterMergeAdjacentSamePitch(events) {
   // Merge consecutive events at the same MIDI pitch with a tiny gap
   // (< 80 ms). Happens after glide cleanup leaves two C4s where there
