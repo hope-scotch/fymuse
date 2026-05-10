@@ -66,7 +66,6 @@ class YtHandler(BaseHTTPRequestHandler):
             "-o", "-",
             "--no-playlist",
             "--no-warnings",
-            "--quiet",
             url,
         ]
         try:
@@ -77,13 +76,44 @@ class YtHandler(BaseHTTPRequestHandler):
             self._send_text(502, "spawn failed: %s" % e)
             return
 
+        # Buffer the FIRST chunk before we commit to a 200 response. If
+        # yt-dlp can't extract anything (auth wall / region block / format
+        # missing / IP block), we want to surface a real error rather than
+        # an empty 200.
+        first_chunk = proc.stdout.read(64 * 1024)
+        if not first_chunk:
+            # Drain stderr so we can report what actually went wrong.
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            err_bytes = b""
+            try:
+                err_bytes = proc.stderr.read() or b""
+            except Exception:
+                pass
+            err_text = err_bytes.decode("utf-8", errors="replace").strip()
+            rc = proc.returncode if proc.returncode is not None else -1
+            self._send_text(
+                502,
+                "yt-dlp produced no audio (exit %d). stderr:\n%s" % (rc, err_text or "(empty)"),
+            )
+            return
+
+        # We have bytes — start the streamed response.
         self.send_response(200)
-        self.send_header("Content-Type", "audio/*")
+        self.send_header("Content-Type", "audio/mp4")
         self.send_header("Access-Control-Allow-Origin", ALLOW_ORIGIN)
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         total = 0
         try:
+            try:
+                self.wfile.write(first_chunk)
+                total = len(first_chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                proc.kill()
+                return
             while True:
                 chunk = proc.stdout.read(64 * 1024)
                 if not chunk:
