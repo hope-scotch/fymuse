@@ -54,32 +54,59 @@ export async function onRequestGet({ request }) {
   }
 
   // 1) Resolve the audio stream URL via the InnerTube API.
-  let streamUrl;
-  let containerType = 'audio/mp4';
+  // YouTube blocks many Cloudflare datacenter IPs from the WEB client
+  // but is more permissive for TV / iOS / Android clients (they're
+  // expected to come from arbitrary networks). Try each in turn.
+  // The TV client is usually the most reliable from datacenter IPs
+  // because it doesn't need a po_token.
+  const safeFetch = (input, init) => fetch(input, init);
+  let yt;
   try {
-    // Cloudflare Workers' fetch / Headers / Request need the global as
-    // `this`; youtubei.js destructures them and loses the binding,
-    // throwing "Illegal invocation". Wrap them in fresh arrow-fn /
-    // class shims so the library can call them however it wants.
-    const safeFetch = (input, init) => fetch(input, init);
-    const yt = await Innertube.create({
+    yt = await Innertube.create({
       cache: new UniversalCache(false),
       generate_session_locally: true,
       fetch: safeFetch,
     });
-    const info = await yt.getBasicInfo(videoId);
-    // Prefer choosing best audio explicitly so we know what we got.
-    const format = info.chooseFormat({ type: 'audio', quality: 'best' });
-    if (!format) throw new Error('no audio-only adaptive format available');
-    streamUrl = format.decipher(yt.session.player);
-    if (format.mime_type) {
-      // e.g. 'audio/mp4; codecs="mp4a.40.2"' — strip params for the wire
-      containerType = format.mime_type.split(';')[0].trim() || containerType;
-    }
   } catch (e) {
     return new Response(
-      'YouTube extraction failed: ' + (e && e.message || e) +
-      '. YouTube may be rate-limiting Cloudflare IPs — try again or use the local server.',
+      'youtubei.js init failed: ' + (e && e.message || e),
+      { status: 502 },
+    );
+  }
+
+  const clientCandidates = ['TV', 'IOS', 'ANDROID', 'WEB'];
+  let streamUrl;
+  let containerType = 'audio/mp4';
+  let lastErr = null;
+  for (const client of clientCandidates) {
+    try {
+      const info = await yt.getBasicInfo(videoId, client);
+      const format = info.chooseFormat({ type: 'audio', quality: 'best' });
+      if (!format) {
+        lastErr = new Error('no audio-only format on ' + client);
+        continue;
+      }
+      streamUrl = format.decipher(yt.session.player);
+      if (!streamUrl) {
+        lastErr = new Error('decipher returned empty on ' + client);
+        continue;
+      }
+      if (format.mime_type) {
+        // e.g. 'audio/mp4; codecs="mp4a.40.2"' — strip params for the wire
+        containerType = format.mime_type.split(';')[0].trim() || containerType;
+      }
+      break; // success
+    } catch (e) {
+      lastErr = e;
+      // Keep trying other clients.
+    }
+  }
+  if (!streamUrl) {
+    return new Response(
+      'YouTube extraction failed on all clients (TV/iOS/Android/Web): ' +
+      (lastErr && lastErr.message || lastErr) +
+      '. YouTube is likely rate-limiting Cloudflare IPs for this video. ' +
+      'Try again in a minute, or use the local server (server.py + yt-dlp).',
       { status: 502 },
     );
   }

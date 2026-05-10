@@ -6599,21 +6599,23 @@ async function splitterLoadFromUrl(url) {
       );
       return;
     }
-    splitterSetStatus('extracting audio via yt-dlp…', 'busy', 0.04);
+    splitterSetStatus('extracting YouTube audio…', 'busy', 0.04);
     try {
       const ytUrl = '/api/yt?url=' + encodeURIComponent(url);
       const res = await fetch(ytUrl);
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
-        throw new Error('HTTP ' + res.status + (txt ? ' — ' + txt.slice(0, 200) : ''));
+        throw new Error('HTTP ' + res.status + (txt ? ' — ' + txt.slice(0, 400) : ''));
       }
       bytes = await res.arrayBuffer();
     } catch (e) {
-      splitterSetStatus(
-        'yt-dlp fetch failed: ' + (e.message || e) +
-        '. Make sure yt-dlp is installed (pip install --user yt-dlp) and server.py is running.',
-        'error'
-      );
+      // Localhost uses yt-dlp via server.py; CF uses youtubei.js.
+      // Pick the troubleshooting hint that matches the env.
+      const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      const hint = isLocal
+        ? ' Check that yt-dlp is installed (brew install yt-dlp / pip install --user yt-dlp) and server.py is running.'
+        : ' YouTube sometimes rate-limits Cloudflare IPs — try again in a minute, or run server.py locally.';
+      splitterSetStatus('YouTube fetch failed: ' + (e.message || e) + '.' + hint, 'error');
       return;
     }
   } else {
