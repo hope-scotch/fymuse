@@ -8,7 +8,28 @@ A single-file music-theory + songwriting + audio-analysis tool. Open `index.html
 - **For Splitter ML mode + YouTube URL load:** run `python3 server.py` and open `http://localhost:8765/`.
   - The server adds the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers that ONNX Runtime Web needs for multi-threaded WASM (~3–5 min per song instead of ~15–25 min single-threaded).
   - It also exposes `/api/yt?url=` and `/api/proxy?url=` so the Splitter's URL feature can pull from YouTube / SoundCloud / Bandcamp / direct audio hosts.
-  - Requires `yt-dlp` for YouTube extraction: `brew install yt-dlp ffmpeg` (or `pip install --user yt-dlp`).
+  - Requires `yt-dlp` for YouTube extraction: `brew install yt-dlp ffmpeg` (macOS) or `pip install --user yt-dlp` (any OS, plus install ffmpeg via your system package manager).
+
+## Sharing with band members / collaborators (Phase 1)
+
+The deployed site (`fymuse.pages.dev`) supports drag-drop and direct audio URLs for everyone — share the link freely. **YouTube / YT Music URLs only work in local mode** because Google blocks every known cloud datacenter IP from extracting audio.
+
+For collaborators who want the full one-click "paste YT URL → split" flow, the simplest path is to have them run their own local copy. Each laptop is its own residential IP, so YouTube treats them as normal browsers:
+
+```bash
+# One-time setup (per collaborator, ~2 minutes)
+brew install yt-dlp ffmpeg python    # macOS — use apt / choco on other OSes
+git clone https://github.com/<your-username>/fymuse.git
+cd fymuse
+
+# Each session
+python3 server.py
+# Then open http://localhost:8765/ in the browser
+```
+
+Bookmark `http://localhost:8765/` and use it like a website. No shared cookies, no shared infrastructure, no per-user account setup. Each member's YT extractions go through their own residential connection.
+
+If you want a "Phase 2" setup later — one always-on box that the whole band hits via a stable URL — see *Future ideas* in `MEMORY.md`.
 
 ## Deploy to Cloudflare Pages
 

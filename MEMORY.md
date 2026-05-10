@@ -452,6 +452,20 @@ bindModeButtons();         // legacy no-op
 - **Splitter: lower non-vocal sensitivity**. Bass: hop 0.15 → 0.20 s, smoothing 3 → 5 frames, min event 0.10 → 0.18 s. Chord detector (harmonic/other/original): added a 2-frame stability filter so single-frame mis-detections don't produce events; min event 0.4 → 0.7 s. Vocals untouched.
 - **Splitter notes modal: Hindustani sargam toggle**. 3-way segmented control in the modal header (`ABC` / `Sa Re` / `सा रे`). When non-Western, a `Sa = ?` dropdown appears. 12 swaras with komal/sudh/tivra naming: `Sa, re, Re, ga, Ga, Ma, Ma♯, Pa, dha, Dha, ni, Ni` (Latin) or `सा, रे॒, रे, ग॒, ग, म, म॑, प, ध॒, ध, नि॒, नि` (Devanagari). Octave indicators: `'` per octave above middle, `,` per octave below. Affects the keyboard column + monophonic event labels; chord names stay Western.
 - **Splitter notes modal: pinch-zoom + space-bar**. Two-finger touch (touchscreens) and Ctrl/Cmd+wheel (macOS trackpad pinch) zoom anchored to focal point. Space bar toggles play/pause when Splitter view is active and a song is loaded; ignored when typing in inputs/textareas.
+- **Cloud-side YT extraction: tried, removed (Phase-1 architecture frozen)**. Spent a long arc trying to make the URL → YouTube path work on the deployed Cloudflare Pages site. Walked through, in order:
+  1. **`/api/proxy` Pages Function** — generic CORS shim for direct audio URLs. Kept (still useful for non-YT hosts that block CORS).
+  2. **`/api/yt` Pages Function with `youtubei.js`** — pure-JS InnerTube reimplementation. Required `nodejs_compat` flag, `package.json`, `wrangler.toml`. Failed because Cloudflare datacenter IPs hit YouTube's "Sign in to confirm you're not a bot" challenge on most YT Music tracks; cycling through 11 player clients (TV, IOS, ANDROID_MUSIC, WEB_MUSIC, MWEB, etc.) bypassed *some* videos but not enough.
+  3. **Render sidecar (`yt-service/`)** — Docker container running real `yt-dlp` + ffmpeg, exposed via Render free tier, called by the Pages Function as a fallback through `YT_SERVICE_URL` env var. Same problem: Render's IPs got the same bot-check, and yt-dlp's stderr literally said `Sign in to confirm you're not a bot. Use --cookies-from-browser`.
+  4. **Cookie injection on Render via Secret Files** + multiple `--extractor-args` clients. Worked technically but meant putting Shay's authenticated YouTube cookies on a third-party host where every band visitor's extractions would attribute to his Google account (watch-history pollution + account-flag risk).
+  5. **Cloudflare Access (Zero Trust) ACL** to gate the URL feature to a hand-picked email allowlist + cookie injection. Working but heavy: requires per-user email-OTP login flow on every fresh session, requires Shay (or a burner Google account) to ship cookies that expire every 4-6 weeks, requires manual allowlist management. For 5 band members the ceremony outweighed the win.
+  
+  **Conclusion**: every cloud-IP architecture loses to YouTube's bot detection. Residential IPs don't have this problem, so the realistic answer is "run server.py locally on each user's machine." Walked all of the above back. What remains: deployed site = upload + direct-URL only. Local mode (server.py + yt-dlp) = full feature set including YT URLs.
+  
+  **Future ideas (not built):**
+  - **Phase 2 — always-on box at home / rehearsal space.** Raspberry Pi 5 (~$35) or any old laptop, runs `server.py` 24/7. Expose to the band via Cloudflare Tunnel (free) → stable URL like `https://fymuse.your-band.com`. Residential IP, full feature set, one machine to maintain. The clean answer for sharing with collaborators without per-person setup.
+  - **Phase 3 — desktop app.** Bundle `server.py` + `yt-dlp` + `ffmpeg` + a tiny WebView shell as Electron / Tauri. Each band member downloads `FYmuse.dmg` / `.exe`, opens it, no terminal required. Maximum UX, but real maintenance burden.
+  - **Phase 4 (anti-pattern)** — paid residential proxy network + cookie-pool rotation, à la cobalt.tools. Costs real money, breaks weekly, requires part-time SRE attention. We deliberately don't go here.
+
 - **Splitter: cache + history + URL load**. Every successful split is hashed (SHA-256 of the input bytes, with a size+sample fingerprint fallback) and stored in IndexedDB (`fymuse-splitter-cache` / `splits` store, keyed by hash). Re-dropping the same song hits cache instantly — no model run. New header buttons:
   - **History** — modal listing every past split (newest first) with name, size, key, sample-rate, age. Click to reload its stems. Per-row delete + "Clear all".
   - **URL** — paste a direct audio URL (must be CORS-allowed). `fetch()` the bytes, wrap in a synthetic `File`, run through the normal `splitterLoadFile` pipeline (so cache lookups still apply by content hash, not URL).
@@ -551,9 +565,9 @@ bindModeButtons();         // legacy no-op
 
 ## Known limitations / future ideas
 
+- **YouTube URL extraction is local-only.** YouTube blocks every known cloud datacenter IP from `yt-dlp` / `youtubei.js`-style extraction. The deployed site can't reliably do it; the local `server.py` (residential IP) can. See the "Cloud-side YT extraction: tried, removed" entry above for the full saga.
 - **No persistence** — everything in-memory per session. No save/load to disk or localStorage.
 - **No undo/redo** — destructive actions (Clear, Delete) are immediate.
-- **No MIDI export** — would be valuable for getting progressions into a DAW.
 - **Mobile not optimized** — works narrow but not ergonomic.
 - **Single open side panel** — Path Finder and Melody Mode are mutually exclusive (opening one closes the other). Info Sidebar is independent.
 - **Genre Graph in minor mode** is "best effort" — genres are authored with major-key Roman numerals, so switching to minor reinterprets degrees with minor scale spacing; some chord choices look unusual.
@@ -568,3 +582,14 @@ Reasonable next features:
 - Mobile responsive tuning
 - Onboarding tour overlay
 - Save/load `.fymuse` JSON project files
+
+### Phase 2: shared YT extraction without cloud bot-detection pain
+
+Right now Phase 1 = "deployed site for upload, local server.py for YT URLs." Each band member who wants the one-click YT flow runs their own `server.py`. To remove that per-user setup, the planned upgrades are:
+
+- **Self-hosted always-on box (recommended next step).** A Raspberry Pi 5 ($35 one-time) or any old laptop running `server.py` 24/7 at someone's home or the rehearsal space. Expose to the band via **Cloudflare Tunnel** (free, no port-forwarding needed, no static IP needed) → a stable HTTPS URL like `https://fymuse.your-band.com`. Residential IP solves YouTube. One machine to maintain. Whole band uses it like a normal website. ~30 min setup once. Annual cost: ~$5 of electricity.
+- **Desktop app distribution (further future).** Wrap `server.py + yt-dlp + ffmpeg + a WebView` shell as Electron or Tauri so each member downloads `FYmuse.dmg` / `FYmuse.exe`. No terminal, no Python install. Best UX, biggest maintenance lift.
+
+### Anti-pattern: cloud-side YT scraping
+
+Don't bother building this again. Tried Render free tier, Fly.io, Cloudflare Pages Functions with `youtubei.js`, multi-client fallback (TV / iOS / Android / Web / YT Music / Embedded), Cloudflare Access ACL gating, Render Secret Files for cookie injection — every variation loses to YouTube's bot detection within hours of going live. The only architectures that survive at scale are paid residential-proxy networks (~$50-200/month) or a fleet of rotating throwaway Google accounts; both involve part-time SRE attention. For a personal/band tool the math doesn't work.
