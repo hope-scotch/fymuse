@@ -858,13 +858,16 @@
   .sheet-row-drum-kick       .sheet-cell-note.has-hit { background: rgba(179,136,255,0.22); border-color: #b388ff; color: #b388ff; }
   /* Vocal-flow notation — closer to real sargam/lead-sheet writing.
      Beat slots stretch to fit however many notes happened, with
-     proportional widths driven by note duration. */
-  .sheet-row-vocal-flow .sheet-bar-section { padding: 4px 6px; gap: 0; grid-template-columns: repeat(var(--cells, 4), 1fr); }
+     proportional widths driven by note duration. Notes wrap onto
+     a second row when there are too many for one beat (fast runs);
+     row-gap separates wrapped lines so they don't overlap. */
+  .sheet-row-vocal-flow .sheet-bar-section { padding: 6px 6px 4px; gap: 0; grid-template-columns: repeat(var(--cells, 4), 1fr); align-items: flex-start; }
   .vsheet-bar { display: grid; }
-  .vsheet-beat { display: flex; align-items: center; justify-content: flex-start; gap: 2px; padding: 4px 8px; min-height: 38px; border-right: 1px dashed rgba(255,255,255,0.07); position: relative; flex-wrap: wrap; }
+  .vsheet-beat { display: flex; align-items: center; justify-content: flex-start; gap: 3px; row-gap: 4px; padding: 4px 8px; min-height: 40px; border-right: 1px dashed rgba(255,255,255,0.07); position: relative; flex-wrap: wrap; }
   .vsheet-beat:last-child { border-right: none; }
-  .vsheet-beat::after { content: attr(data-beat); position: absolute; bottom: -1px; left: 6px; font-family: var(--font-mono); font-size: 8.5px; color: var(--muted); opacity: 0.6; }
-  .vsheet-note { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 4px; padding: 3px 7px; cursor: pointer; transition: all 0.12s; flex-shrink: 0; min-width: 28px; text-align: center; box-sizing: border-box; }
+  /* Beat number is shown on the bottom ruler row; in-slot ::after
+     was overlapping wrapped notes. Keep none. */
+  .vsheet-note { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 6px; cursor: pointer; transition: all 0.12s; flex-shrink: 0; min-width: 26px; text-align: center; box-sizing: border-box; line-height: 1.2; }
   .sheet-row-vocal-flow .vsheet-note:hover { background: var(--accent); color: #1a1a1a; box-shadow: 0 0 8px rgba(245,165,36,0.5); }
   .sheet-row-vocal-flow .vsheet-note.is-current { background: var(--accent); color: #1a1a1a; border-color: var(--accent); box-shadow: 0 0 8px rgba(245,165,36,0.5); }
   /* Grace note / kan-swar — small, italic-ish, slight upward shift */
@@ -7577,15 +7580,18 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
   if (stemId === 'drums' || stemId === 'percussive') {
     return await splitterClassifyDrumOnsets(buffer);
   }
-  if (stemId === 'vocals') return splitterDetectMonophonicNotes(buffer, {
-    minHz: 70, maxHz: 1400,    // covers low croons through soprano belts
-    hopSec: 0.040,             // ~25 fps — finer time resolution
-    fftSize: 4096,
-    numHarmonics: 4,           // HPS depth — kills octave errors
-    smoothFrames: 1,           // raw frames
-    stabilityFrames: 1,        // commit every frame so ornaments + grace notes survive
-    minEventSec: 0.025,        // 25 ms — keep super-short ornaments + kan-swar
-  });
+  if (stemId === 'vocals') {
+    const raw = await splitterDetectMonophonicNotes(buffer, {
+      minHz: 70, maxHz: 1400,    // covers low croons through soprano belts
+      hopSec: 0.040,             // ~25 fps — finer time resolution
+      fftSize: 4096,
+      numHarmonics: 4,           // HPS depth — kills octave errors
+      smoothFrames: 1,           // raw frames
+      stabilityFrames: 2,        // pitch must hold ≥ 2 frames (~80 ms) — glide guard
+      minEventSec: 0.025,        // 25 ms — keep super-short ornaments + kan-swar
+    });
+    return splitterMergeAdjacentSamePitch(splitterCleanGlideChromatics(raw));
+  }
   if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
     minHz: 35,  maxHz: 400,    // low B0 -> G4 covers most basses + sub
     hopSec: 0.20,              // bass moves slowly — fewer frames is fine
@@ -7751,6 +7757,76 @@ async function splitterDetectMonophonicNotes(buffer, opts) {
   }
   if (curMidi !== null) events.push({ start: curStart, end: numFrames * opts.hopSec, label: noteName(curMidi), midi: curMidi });
   return events.filter(ev => (ev.end - ev.start) >= opts.minEventSec);
+}
+
+// ---- Glide / chromatic-passing-tone cleaner -----------------------------
+// When the singer slides from one note to a neighbor (whole-step or
+// minor-third), the HPS detector inevitably catches the chromatic
+// pitches in between for a frame or two. Without filtering, you hear
+// (or see) "C → C♯ → D" as three separate notes when the singer only
+// intended C → D.
+//
+// This pass walks the event list and drops any short event B (< 70 ms)
+// where:
+//   - both neighbors A and C are stable (≥ 80 ms each)
+//   - A → C interval is small (≤ 3 semitones, monotonic)
+//   - B sits ON the chromatic path between A and C
+//   - gaps from A → B and B → C are both tiny (< 70 ms — i.e., truly
+//     in the slide window, not a separate articulation)
+//
+// Real ornaments / kan-swar survive because they're either:
+//   - longer than 70 ms,
+//   - or NOT chromatically between two stable neighbors,
+//   - or surrounded by gaps wider than 70 ms,
+//   - or jump in the OPPOSITE direction of the surrounding phrase.
+function splitterMergeAdjacentSamePitch(events) {
+  // Merge consecutive events at the same MIDI pitch with a tiny gap
+  // (< 80 ms). Happens after glide cleanup leaves two C4s where there
+  // was a C4-C♯4-C4 sequence, and also for legitimate one-held-note
+  // that flickered through the detector.
+  if (!events || events.length < 2) return events || [];
+  const out = [events[0]];
+  for (let i = 1; i < events.length; i++) {
+    const prev = out[out.length - 1];
+    const cur = events[i];
+    if (prev.midi != null && prev.midi === cur.midi && (cur.start - prev.end) < 0.08) {
+      // Extend prev to include cur
+      out[out.length - 1] = Object.assign({}, prev, { end: Math.max(prev.end, cur.end) });
+    } else {
+      out.push(cur);
+    }
+  }
+  return out;
+}
+
+function splitterCleanGlideChromatics(events) {
+  if (!events || events.length < 3) return events || [];
+  const keep = new Array(events.length).fill(true);
+  for (let i = 1; i < events.length - 1; i++) {
+    const A = events[i - 1], B = events[i], C = events[i + 1];
+    if (B.midi == null || A.midi == null || C.midi == null) continue;
+    const aDur = A.end - A.start;
+    const bDur = B.end - B.start;
+    const cDur = C.end - C.start;
+    if (bDur >= 0.07) continue;                 // B not short enough — keep
+    if (aDur < 0.08 || cDur < 0.08) continue;   // surroundings not stable — keep
+    const ac = C.midi - A.midi;
+    if (Math.abs(ac) > 3 || ac === 0) continue; // surroundings not adjacent — keep
+    const dirSign = Math.sign(ac);
+    // B must lie strictly between A and C in pitch (monotonic path)
+    const aBSign = Math.sign(B.midi - A.midi);
+    const bCSign = Math.sign(C.midi - B.midi);
+    if (aBSign !== dirSign && B.midi !== A.midi) continue;
+    if (bCSign !== dirSign && B.midi !== C.midi) continue;
+    if (Math.abs(B.midi - A.midi) > Math.abs(ac)) continue;
+    if (Math.abs(C.midi - B.midi) > Math.abs(ac)) continue;
+    // Tight gaps — must really be inside the slide window
+    const gapAB = B.start - A.end;
+    const gapBC = C.start - B.end;
+    if (gapAB > 0.07 || gapBC > 0.07) continue;
+    keep[i] = false; // it's a glide artifact — drop
+  }
+  return events.filter((_, i) => keep[i]);
 }
 
 // ---- Drum-component classifier ------------------------------------------
