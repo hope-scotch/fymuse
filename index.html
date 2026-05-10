@@ -848,6 +848,26 @@
   .pr-event { position: absolute; background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 3px; padding: 0 5px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; color: var(--accent); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; transition: background 0.12s, box-shadow 0.12s, color 0.12s; box-sizing: border-box; }
   .pr-event:hover { background: var(--accent); color: #1a1a1a; box-shadow: 0 0 8px rgba(245,165,36,0.5); z-index: 3; }
   .pr-event.is-current { background: var(--accent); color: #1a1a1a; box-shadow: 0 0 12px rgba(245,165,36,0.7); z-index: 3; }
+  /* Drum-grid lane colors — each drum component gets a distinct hue so the
+     grid reads at a glance. Colors share saturation+lightness so velocity
+     opacity remains the dominant variable. */
+  .drum-key { font-family: var(--font-mono); font-weight: 700; font-size: 10.5px; padding: 0 8px; display: flex; align-items: center; color: var(--text-2); border-bottom: 1px solid var(--border); }
+  .drum-key-cymbal     { color: #d4a017; }
+  .drum-key-hihat_open { color: #f5a524; }
+  .drum-key-hihat      { color: #f5a524; }
+  .drum-key-tom        { color: #6cc4ff; }
+  .drum-key-snare      { color: #ff7f7f; }
+  .drum-key-kick       { color: #b388ff; }
+  .drum-row { background: var(--panel-2); border-bottom: 1px solid var(--border); }
+  .drum-row.is-alt { background: var(--panel-3); }
+  .drum-event { justify-content: center; padding: 0; font-size: 11px; }
+  .drum-event-cymbal     { background: rgba(212,160,23,0.25); border-color: #d4a017; color: #d4a017; }
+  .drum-event-hihat_open { background: rgba(245,165,36,0.30); border-color: #f5a524; color: #f5a524; }
+  .drum-event-hihat      { background: rgba(245,165,36,0.30); border-color: #f5a524; color: #f5a524; }
+  .drum-event-tom        { background: rgba(108,196,255,0.30); border-color: #6cc4ff; color: #6cc4ff; }
+  .drum-event-snare      { background: rgba(255,127,127,0.30); border-color: #ff7f7f; color: #ff7f7f; }
+  .drum-event-kick       { background: rgba(179,136,255,0.30); border-color: #b388ff; color: #b388ff; }
+  .drum-event:hover      { filter: brightness(1.4); box-shadow: 0 0 8px rgba(255,255,255,0.18); z-index: 3; }
   .stem-name { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
   .stem-name i { color: var(--accent-2); font-size: 18px; }
   .stem-name small { display: block; font-family: var(--font-sans); font-weight: 400; color: var(--muted); font-size: 10.5px; letter-spacing: 0; text-transform: none; line-height: 1.2; }
@@ -6073,6 +6093,13 @@ function splitterEventsToMIDI(stemId, events) {
   const tempo = Math.max(30, Math.min(300, splitterModalState.sheetTempo || 120));
   const microsPerQuarter = Math.round(60000000 / tempo);
   const ticksPerSec = (tempo / 60) * ticksPerQuarter;
+  // Drum stems → channel 10 (status byte index 9). Pitched stems → channel 1
+  // (index 0). DAWs interpret channel-10 notes via the General-MIDI drum
+  // map (kick=36, snare=38, hat=42 etc.) — pitched stems use the regular
+  // chromatic interpretation.
+  const isDrum = stemId === 'drums' || stemId === 'percussive';
+  const noteOnByte  = isDrum ? 0x99 : 0x90;
+  const noteOffByte = isDrum ? 0x89 : 0x80;
 
   // Variable-length quantity encoder (delta times in MIDI use VLQ)
   function vlq(n) {
@@ -6093,7 +6120,8 @@ function splitterEventsToMIDI(stemId, events) {
     else if (ev.pitches && ev.pitches.length) pitches = ev.pitches.slice();
     for (const p of pitches) {
       if (p < 0 || p > 127) continue;
-      noteEvents.push({ tick: startTick, type: 'on',  note: p, vel: ev.midi != null ? 96 : 80 });
+      const vel = ev.velocity != null ? ev.velocity : (ev.midi != null ? 96 : 80);
+      noteEvents.push({ tick: startTick, type: 'on',  note: p, vel });
       noteEvents.push({ tick: endTick,   type: 'off', note: p, vel: 0 });
     }
   }
@@ -6123,7 +6151,7 @@ function splitterEventsToMIDI(stemId, events) {
   for (const ev of noteEvents) {
     const delta = ev.tick - lastTick;
     track.push.apply(track, vlq(delta));
-    track.push(ev.type === 'on' ? 0x90 : 0x80, ev.note & 0x7F, ev.vel & 0x7F);
+    track.push(ev.type === 'on' ? noteOnByte : noteOffByte, ev.note & 0x7F, ev.vel & 0x7F);
     lastTick = ev.tick;
   }
   // End of Track
@@ -6308,6 +6336,77 @@ const SPLITTER_PR_ROW_H = 18;     // px per MIDI row
 const SPLITTER_PR_KEYS_W = 64;    // px width of the sticky keyboard column
 const SPLITTER_PR_BLACK_PCS = new Set([1, 3, 6, 8, 10]); // C#, D#, F#, G#, A#
 
+// Drum-grid layout: 6 fixed lanes (cymbal / hat-open / hat / tom / snare / kick)
+// from top to bottom. Same column infrastructure as the piano roll (sticky
+// keyboard column on the left, scrollable event grid on the right) but with
+// a small fixed row count and drum-specific labels.
+function splitterRenderDrumGrid(events, totalWidth, pxPerSec, eventsEl, trackEl, cursorEl) {
+  const rowH = SPLITTER_PR_ROW_H;
+  const rows = SPLITTER_DRUM_ROW_ORDER;
+  const numRows = rows.length;
+  const totalHeight = numRows * rowH;
+  const rowIndex = {};
+  rows.forEach((t, i) => { rowIndex[t] = i; });
+  // Hat events from the analyzer come in two sub-types; both render on
+  // the hat lanes but if a row is empty in the data we still show it.
+
+  // Sticky drum-label column
+  const keys = rows.map((type) =>
+    '<div class="pr-key drum-key drum-key-' + type + '" '
+    + 'style="height:' + rowH + 'px;">'
+    + SPLITTER_DRUM_ROW_NAMES[type] + '</div>'
+  );
+
+  // Row backgrounds (alternating shading)
+  const rowBgs = rows.map((type, i) =>
+    '<div class="pr-row drum-row drum-row-' + type + (i % 2 ? ' is-alt' : '') + '" '
+    + 'style="top:' + (i * rowH) + 'px;height:' + rowH + 'px;width:' + totalWidth + 'px;"></div>'
+  );
+
+  // Event bars
+  const bars = events.map((ev) => {
+    const r = rowIndex[ev.type];
+    if (r == null) return '';
+    const top = r * rowH + 1;
+    const left = ev.start * pxPerSec;
+    const w = Math.max(8, (ev.end - ev.start) * pxPerSec);
+    const safe = String(ev.label || '').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
+    const tooltip = (SPLITTER_DRUM_ROW_NAMES[ev.type] || ev.type)
+      + ' · ' + splitterFormatTime(ev.start)
+      + (ev.velocity ? ' · vel ' + ev.velocity : '');
+    // Velocity-driven opacity so loud hits visually pop
+    const alpha = 0.55 + Math.min(1, (ev.velocity || 96) / 127) * 0.45;
+    return '<div class="pr-event drum-event drum-event-' + ev.type + '" '
+      + 'data-time="' + ev.start.toFixed(3) + '" '
+      + 'style="left:' + left.toFixed(1) + 'px;top:' + top + 'px;'
+      + 'width:' + (w - 1).toFixed(1) + 'px;height:' + (rowH - 2) + 'px;'
+      + 'opacity:' + alpha.toFixed(2) + ';" '
+      + 'title="' + tooltip + '">' + safe + '</div>';
+  }).join('');
+
+  if (eventsEl) {
+    eventsEl.style.width = (totalWidth + SPLITTER_PR_KEYS_W) + 'px';
+    eventsEl.style.height = totalHeight + 'px';
+    eventsEl.innerHTML =
+      '<div class="pr-keys-col" style="height:' + totalHeight + 'px;">' + keys.join('') + '</div>'
+      + '<div class="pr-event-col" style="left:' + SPLITTER_PR_KEYS_W + 'px;width:' + totalWidth + 'px;height:' + totalHeight + 'px;">'
+      +   '<div class="pr-rows">' + rowBgs.join('') + '</div>'
+      +   '<div class="pr-events-grid">' + bars + '</div>'
+      + '</div>';
+    eventsEl.querySelectorAll('.pr-event').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        const t = parseFloat(el.dataset.time);
+        if (!isNaN(t)) splitterSeek(t);
+      };
+    });
+  }
+  if (trackEl) trackEl.style.minWidth = (totalWidth + SPLITTER_PR_KEYS_W) + 'px';
+  if (cursorEl) cursorEl.style.height = (totalHeight + 6) + 'px';
+
+  splitterRenderModalAxis(totalWidth, pxPerSec, SPLITTER_PR_KEYS_W);
+}
+
 function splitterRenderNotesModal() {
   if (!splitterModalState.open) return;
   const stem = splitterState.stems[splitterModalState.stemId];
@@ -6332,6 +6431,13 @@ function splitterRenderNotesModal() {
     if (trackEl) trackEl.style.minWidth = totalWidth + 'px';
     splitterRenderModalAxis(totalWidth, pxPerSec, 0);
     return;
+  }
+
+  // Drum stems use a fixed-row drum-machine grid instead of the chromatic
+  // piano-roll layout (drum MIDI numbers are sparse; collapsing to per-type
+  // lanes is more readable + closer to how DAWs display GM drum tracks).
+  if (splitterModalState.stemId === 'drums' || splitterModalState.stemId === 'percussive') {
+    return splitterRenderDrumGrid(events, totalWidth, pxPerSec, eventsEl, trackEl, cursorEl);
   }
 
   // Resolve a MIDI for every event — note events store .midi already; chord
@@ -6461,6 +6567,8 @@ function splitterRenderSheet() {
   const totalCells = Math.max(cellsPerBar, Math.ceil(dur / cellSec));
   const totalBars = Math.ceil(totalCells / cellsPerBar);
 
+  const isDrumStem = splitterModalState.stemId === 'drums' || splitterModalState.stemId === 'percussive';
+
   // For each cell, find the event with the most overlap with [cellStart, cellEnd).
   function eventForRange(t0, t1) {
     let best = null, bestOverlap = 0;
@@ -6470,22 +6578,53 @@ function splitterRenderSheet() {
     }
     return best;
   }
+  // Drum cells often have multiple simultaneous hits (kick + hat together is
+  // the most common pattern in pop/rock). Collect every event whose ONSET
+  // falls inside the cell — we want hits, not sustained durations.
+  function drumEventsInCell(t0, t1) {
+    const seen = new Set();
+    const out = [];
+    for (const ev of events) {
+      if (ev.start >= t0 && ev.start < t1) {
+        const key = ev.type;
+        if (!seen.has(key)) { seen.add(key); out.push(ev); }
+      }
+    }
+    // Order by drum-row priority (cymbal → hat → snare → tom → kick) so the
+    // label reads consistently regardless of detection order.
+    const order = SPLITTER_DRUM_ROW_ORDER;
+    out.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
+    return out;
+  }
 
   let html = '';
   for (let b = 0; b < totalBars; b++) {
     let cells = '';
     for (let c = 0; c < cellsPerBar; c++) {
       const t = b * bpb * beatSec + c * cellSec;
-      const ev = eventForRange(t, t + cellSec);
-      const isDownbeat = (c % subdiv === 0); // first cell of each beat
+      const isDownbeat = (c % subdiv === 0);
       const isBarStart = (c === 0);
       let display = '';
-      if (ev) {
-        display = (ev.midi != null) ? splitterFormatNote(ev.midi) : ev.label;
+      let hasEvent = false;
+      let tooltip = splitterFormatTime(t);
+      if (isDrumStem) {
+        const drums = drumEventsInCell(t, t + cellSec);
+        if (drums.length) {
+          hasEvent = true;
+          display = drums.map(ev => ev.label).join('');
+          tooltip = drums.map(ev => SPLITTER_DRUM_ROW_NAMES[ev.type] || ev.type).join(' + ')
+            + ' · ' + splitterFormatTime(t);
+        }
+      } else {
+        const ev = eventForRange(t, t + cellSec);
+        if (ev) {
+          hasEvent = true;
+          display = (ev.midi != null) ? splitterFormatNote(ev.midi) : ev.label;
+          tooltip = display + ' · ' + splitterFormatTime(t);
+        }
       }
       const safe = display.replace(/[<>&"']/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[ch]));
-      const klass = 'sheet-beat' + (ev ? '' : ' is-empty') + (isBarStart && b > 0 ? ' is-downbeat' : '');
-      const tooltip = ev ? safe + ' · ' + splitterFormatTime(t) : splitterFormatTime(t);
+      const klass = 'sheet-beat' + (hasEvent ? '' : ' is-empty') + (isBarStart && b > 0 ? ' is-downbeat' : '');
       cells += '<button class="' + klass + '" data-time="' + t.toFixed(3) + '" data-end="' + (t + cellSec).toFixed(3) + '" title="' + tooltip + '">' + (safe || '·') + '</button>';
     }
     html += '<div class="sheet-bar"><div class="sheet-bar-num">Bar ' + (b + 1) + '</div>'
@@ -7169,7 +7308,9 @@ async function splitterAnalyzeStems() {
 // monophonic note tracker for bass/vocals (HPS-based for accuracy on fast
 // runs and harmonic suppression), skip drums.
 async function splitterAnalyseStemEvents(stemId, buffer) {
-  if (stemId === 'drums' || stemId === 'percussive') return [];
+  if (stemId === 'drums' || stemId === 'percussive') {
+    return await splitterClassifyDrumOnsets(buffer);
+  }
   if (stemId === 'vocals') return splitterDetectMonophonicNotes(buffer, {
     minHz: 80, maxHz: 1200,    // covers low bass voice E2 -> high soprano D6
     hopSec: 0.06,              // ~16 fps so fast runs aren't missed
@@ -7344,6 +7485,243 @@ async function splitterDetectMonophonicNotes(buffer, opts) {
   }
   if (curMidi !== null) events.push({ start: curStart, end: numFrames * opts.hopSec, label: noteName(curMidi), midi: curMidi });
   return events.filter(ev => (ev.end - ev.start) >= opts.minEventSec);
+}
+
+// ---- Drum-component classifier ------------------------------------------
+// Heuristic decision tree on per-onset spectral features. No ML model; just
+// onset detection + 6-band spectral energies + spectral centroid + decay
+// slope + spectral flatness, fed through a hand-tuned classifier that maps
+// each hit to one of {kick, snare, hihat (closed), hihat_open, tom, cymbal}.
+//
+// Output events shape: {start, end, label, type, midi, pitches, velocity} so
+// the existing piano-roll / sheet / MIDI-export pipelines work without core
+// changes; renderers branch on stemId === 'drums' for drum-grid layout.
+//
+// `midi` carries the General MIDI drum note number — when MIDI export sees
+// stemId === 'drums', it switches to channel 10 so a DAW interprets the
+// notes as drum kit instead of pitched notes.
+const SPLITTER_DRUM_GM = {
+  kick:       36,   // Bass Drum 1
+  snare:      38,   // Acoustic Snare
+  hihat:      42,   // Closed Hi-Hat
+  hihat_open: 46,   // Open Hi-Hat
+  tom:        45,   // Low-Mid Tom (generic)
+  cymbal:     49,   // Crash Cymbal 1
+};
+const SPLITTER_DRUM_LABELS = {
+  kick: 'K', snare: 'S', hihat: 'H', hihat_open: 'H°', tom: 'T', cymbal: 'C',
+};
+// Display order in the drum grid (top-to-bottom). Cymbal at top, kick at bottom
+// matches the typical way drum machines show stems in a vertical grid.
+const SPLITTER_DRUM_ROW_ORDER = ['cymbal', 'hihat_open', 'hihat', 'tom', 'snare', 'kick'];
+const SPLITTER_DRUM_ROW_NAMES = {
+  cymbal: 'Cymbal', hihat_open: 'Hat (open)', hihat: 'Hat', tom: 'Tom', snare: 'Snare', kick: 'Kick',
+};
+
+async function splitterClassifyDrumOnsets(buffer) {
+  const sr = buffer.sampleRate;
+  const audio = splitterMixToMono(buffer);
+  if (!audio || audio.length < 2048) return [];
+
+  // 1. Onset detection via spectral flux on the drums stem
+  const fftSize = 1024;
+  const hopSize = 256;
+  const onsets = splitterDetectDrumOnsets(audio, sr, fftSize, hopSize);
+  if (!onsets.length) return [];
+
+  // 2. For each onset, extract a feature window + classify
+  const winSec = 0.30; // 300 ms post-onset window for spectral analysis
+  const winSamples = Math.floor(winSec * sr);
+  const events = [];
+  for (let i = 0; i < onsets.length; i++) {
+    const t = onsets[i];
+    const startSample = Math.floor(t * sr);
+    const endSample = Math.min(audio.length, startSample + winSamples);
+    if (endSample - startSample < 256) continue;
+    const window = audio.subarray(startSample, endSample);
+    const features = splitterDrumFeatures(window, sr);
+    const cls = splitterClassifyDrumWindow(features);
+    // Visual length: cap at ~180 ms or until next onset, whichever is earlier
+    const nextT = onsets[i + 1] != null ? onsets[i + 1] : t + 0.30;
+    const visEnd = Math.min(t + 0.18, nextT - 0.005);
+    events.push({
+      start:    t,
+      end:      Math.max(t + 0.04, visEnd),
+      label:    SPLITTER_DRUM_LABELS[cls.type] || '?',
+      type:     cls.type,
+      midi:     SPLITTER_DRUM_GM[cls.type] || 60,
+      pitches:  [SPLITTER_DRUM_GM[cls.type] || 60],
+      velocity: cls.velocity || 96,
+    });
+  }
+  return events;
+}
+
+function splitterDetectDrumOnsets(audio, sr, fftSize, hopSize) {
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const win = new Float32Array(fftSize);
+  for (let i = 0; i < fftSize; i++) {
+    win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (fftSize - 1));
+  }
+  const halfN = fftSize >> 1;
+  const numFrames = Math.floor((audio.length - fftSize) / hopSize) + 1;
+  if (numFrames < 4) return [];
+  const flux = new Float32Array(numFrames);
+  const prevMag = new Float32Array(halfN);
+  for (let f = 0; f < numFrames; f++) {
+    const off = f * hopSize;
+    for (let i = 0; i < fftSize; i++) {
+      re[i] = (audio[off + i] || 0) * win[i];
+      im[i] = 0;
+    }
+    splitterFFT(re, im);
+    let s = 0;
+    for (let k = 1; k < halfN; k++) {
+      const mag = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+      const d = mag - prevMag[k];
+      if (d > 0) s += d;
+      prevMag[k] = mag;
+    }
+    flux[f] = s;
+  }
+  // Adaptive threshold using global p50 + p90, plus a local mean window
+  const sorted = Array.from(flux).slice().sort((a, b) => a - b);
+  const p50 = sorted[Math.floor(sorted.length * 0.50)];
+  const p90 = sorted[Math.floor(sorted.length * 0.90)];
+  const baseline = p50 + 0.45 * (p90 - p50);
+  const halfWin = 10; // ±10 frames ≈ ±60 ms at sr=44100
+  const minSepSec = 0.05;
+  const minSepFrames = Math.max(1, Math.floor((minSepSec * sr) / hopSize));
+  const onsetTimes = [];
+  let lastOnsetFrame = -minSepFrames;
+  for (let f = 1; f < numFrames - 1; f++) {
+    if (flux[f] <= flux[f - 1] || flux[f] < flux[f + 1]) continue;
+    let localMean = 0, n = 0;
+    const a = Math.max(0, f - halfWin);
+    const b = Math.min(numFrames - 1, f + halfWin);
+    for (let k = a; k <= b; k++) { localMean += flux[k]; n++; }
+    localMean /= n;
+    const threshold = Math.max(baseline, localMean * 1.55);
+    if (flux[f] >= threshold && (f - lastOnsetFrame) >= minSepFrames) {
+      onsetTimes.push((f * hopSize) / sr);
+      lastOnsetFrame = f;
+    }
+  }
+  return onsetTimes;
+}
+
+function splitterDrumFeatures(window, sr) {
+  // Power-of-two zero-padded FFT of the window
+  let fftSize = 1;
+  while (fftSize < window.length) fftSize <<= 1;
+  fftSize = Math.min(fftSize, 4096);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const winLen = Math.min(window.length, fftSize);
+  for (let i = 0; i < winLen; i++) {
+    const w = winLen > 1 ? 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (winLen - 1)) : 1;
+    re[i] = window[i] * w;
+  }
+  splitterFFT(re, im);
+
+  const halfN = fftSize >> 1;
+  const mag = new Float32Array(halfN);
+  for (let k = 1; k < halfN; k++) {
+    mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+  }
+  const binHz = sr / fftSize;
+
+  // Energy-band proportions (sub / bass / lowMid / mid / high / vhigh)
+  const bands = { sub: 0, bass: 0, lowMid: 0, mid: 0, high: 0, vhigh: 0 };
+  let centroidNum = 0, centroidDen = 0;
+  for (let k = 1; k < halfN; k++) {
+    const f = k * binHz;
+    const power = mag[k] * mag[k];
+    if      (f < 80)    bands.sub    += power;
+    else if (f < 200)   bands.bass   += power;
+    else if (f < 500)   bands.lowMid += power;
+    else if (f < 2000)  bands.mid    += power;
+    else if (f < 5000)  bands.high   += power;
+    else                bands.vhigh  += power;
+    centroidNum += f * mag[k];
+    centroidDen += mag[k];
+  }
+  const totalPower = bands.sub + bands.bass + bands.lowMid + bands.mid + bands.high + bands.vhigh;
+  const inv = totalPower > 1e-12 ? 1 / totalPower : 0;
+  for (const k in bands) bands[k] *= inv;
+  const centroid = centroidDen > 0 ? centroidNum / centroidDen : 0;
+
+  // Spectral flatness in the 1-10 kHz range — high = noisy (snare wires,
+  // cymbals); low = tonal (kick, tom).
+  let logSum = 0, linSum = 0, n = 0;
+  const lowK = Math.max(1, Math.floor(1000 / binHz));
+  const hiK  = Math.min(halfN - 1, Math.floor(10000 / binHz));
+  for (let k = lowK; k <= hiK; k++) {
+    const m = Math.max(1e-10, mag[k]);
+    logSum += Math.log(m);
+    linSum += m;
+    n++;
+  }
+  const flatness = n > 0 && linSum > 0 ? Math.exp(logSum / n) / (linSum / n) : 0;
+
+  // Decay ratio: late RMS / early RMS. Closer to 1 = sustained (cymbal,
+  // open hat, sometimes tom). Closer to 0 = quick attack-decay (kick,
+  // closed hat, snare).
+  const earlyEnd = Math.min(window.length, Math.floor(0.05 * sr));
+  const lateStart = Math.max(earlyEnd, window.length - Math.floor(0.10 * sr));
+  let earlyRms = 0, lateRms = 0;
+  for (let i = 0; i < earlyEnd; i++) earlyRms += window[i] * window[i];
+  earlyRms = Math.sqrt(earlyRms / Math.max(1, earlyEnd));
+  for (let i = lateStart; i < window.length; i++) lateRms += window[i] * window[i];
+  lateRms = Math.sqrt(lateRms / Math.max(1, window.length - lateStart));
+  const decay = earlyRms > 1e-6 ? lateRms / earlyRms : 0;
+
+  // Peak amplitude (used for velocity)
+  let peak = 0;
+  for (let i = 0; i < window.length; i++) {
+    const v = Math.abs(window[i]);
+    if (v > peak) peak = v;
+  }
+
+  return Object.assign({}, bands, { centroid, flatness, decay, peak });
+}
+
+function splitterClassifyDrumWindow(f) {
+  // Order-sensitive decision tree. Most distinctive checks first.
+
+  // 1) Cymbal: long sustain + HF dominant + noisy
+  if (f.decay > 0.45 && (f.high + f.vhigh) > 0.50 && f.flatness > 0.28) {
+    return { type: 'cymbal', velocity: splitterDrumVelocity(f.peak) };
+  }
+  // 2) Hi-hat: HF dominant, high centroid; split open vs closed by decay
+  if ((f.high + f.vhigh) > 0.55 && f.centroid > 4500) {
+    const type = f.decay > 0.32 ? 'hihat_open' : 'hihat';
+    return { type, velocity: splitterDrumVelocity(f.peak) };
+  }
+  // 3) Kick: low frequencies dominant, low centroid
+  if ((f.sub + f.bass) > 0.55 && f.centroid < 800) {
+    return { type: 'kick', velocity: splitterDrumVelocity(f.peak) };
+  }
+  // 4) Snare: significant mid + broadband noise (snare wires) + HF presence
+  if ((f.mid + f.high) > 0.42 && f.flatness > 0.20 && f.centroid > 1400) {
+    return { type: 'snare', velocity: splitterDrumVelocity(f.peak) };
+  }
+  // 5) Tom: low-mid tonal, NOT super noisy
+  if ((f.bass + f.lowMid) > 0.45 && f.centroid < 1500 && f.flatness < 0.30) {
+    return { type: 'tom', velocity: splitterDrumVelocity(f.peak) };
+  }
+  // Fallback: pick by spectral centroid
+  if (f.centroid < 500)  return { type: 'kick',   velocity: splitterDrumVelocity(f.peak) };
+  if (f.centroid < 2000) return { type: 'tom',    velocity: splitterDrumVelocity(f.peak) };
+  if (f.centroid < 5000) return { type: 'snare',  velocity: splitterDrumVelocity(f.peak) };
+                          return { type: 'hihat',  velocity: splitterDrumVelocity(f.peak) };
+}
+
+function splitterDrumVelocity(peak) {
+  // Map peak amplitude (0-1) → MIDI velocity in [40, 127]
+  const v = Math.round(40 + Math.min(1, peak * 1.5) * 87);
+  return Math.max(40, Math.min(127, v));
 }
 
 // ---- Offline song-key detection (Krumhansl-Schmuckler) -------------------
