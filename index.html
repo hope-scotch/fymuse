@@ -6041,7 +6041,7 @@ function splitterStartModalCursor() {
 }
 
 function splitterSetupNotesModal() {
-  // Wire close button + backdrop click + ESC + zoom buttons + zoom slider. Idempotent.
+  // Wire close button + backdrop click + zoom buttons + zoom slider. Idempotent.
   const closeBtn = document.getElementById('notes-modal-close');
   if (closeBtn) closeBtn.onclick = () => splitterCloseNotesModal();
   const backdrop = document.getElementById('notes-modal-backdrop');
@@ -6056,9 +6056,81 @@ function splitterSetupNotesModal() {
       splitterRenderNotesModal();
     };
   }
+
+  // Pinch-zoom on the timeline — works on touch screens (2-finger pinch) and
+  // macOS trackpads (which fire 'wheel' events with ctrlKey when you pinch).
+  const trackWrap = document.getElementById('notes-modal-track-wrap');
+  if (trackWrap) {
+    let pinchStart = null;
+    trackWrap.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        const t1 = e.touches[0], t2 = e.touches[1];
+        pinchStart = {
+          distance: Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY),
+          pxPerSec: splitterModalState.pxPerSec,
+          anchor: (t1.clientX + t2.clientX) / 2,
+        };
+      }
+    }, { passive: true });
+    trackWrap.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && pinchStart) {
+        e.preventDefault();
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const d = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        if (pinchStart.distance > 0) {
+          splitterZoomAround(pinchStart.pxPerSec * (d / pinchStart.distance), pinchStart.anchor);
+        }
+      }
+    }, { passive: false });
+    trackWrap.addEventListener('touchend', () => { pinchStart = null; });
+    trackWrap.addEventListener('touchcancel', () => { pinchStart = null; });
+    // Trackpad pinch -> wheel + ctrlKey on macOS (and also when user holds Ctrl + scrolls)
+    trackWrap.addEventListener('wheel', (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      // Smooth exponential zoom — deltaY > 0 means pinch out / scroll down = zoom out
+      const factor = Math.exp(-e.deltaY * 0.01);
+      splitterZoomAround(splitterModalState.pxPerSec * factor, e.clientX);
+    }, { passive: false });
+  }
+
+  // Global key handler — Escape closes modal, Space toggles play/pause in
+  // Splitter view (but never while focus is in a form control so typing
+  // a Builder rhythm-name or filter-input doesn't trigger playback).
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && splitterModalState.open) splitterCloseNotesModal();
+    if (e.key === 'Escape' && splitterModalState.open) {
+      splitterCloseNotesModal();
+      return;
+    }
+    if (e.key === ' ' || e.code === 'Space') {
+      const t = (document.activeElement && document.activeElement.tagName) || '';
+      const ce = document.activeElement && document.activeElement.isContentEditable;
+      if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || ce) return;
+      if (!state.genre || !state.genre.isSplitter) return;
+      if (!splitterState.fileBuffer || !Object.keys(splitterState.stems).length) return;
+      e.preventDefault();
+      splitterTogglePlay();
+    }
   });
+}
+
+// Zoom while keeping the time under `anchorScreenX` stable on screen.
+// Used by both pinch-zoom and ctrl-wheel zoom so the point you're focused
+// on doesn't jump when you stretch the timeline.
+function splitterZoomAround(newPxPerSec, anchorScreenX) {
+  newPxPerSec = Math.max(SPLITTER_ZOOM_MIN, Math.min(SPLITTER_ZOOM_MAX, newPxPerSec));
+  if (Math.abs(newPxPerSec - splitterModalState.pxPerSec) < 0.01) return;
+  const wrap = document.getElementById('notes-modal-track-wrap');
+  if (!wrap) { splitterSetModalZoom(newPxPerSec); return; }
+  const rect = wrap.getBoundingClientRect();
+  const screenX = anchorScreenX - rect.left;
+  // Time at the anchor under the OLD zoom
+  const oldTrackX = wrap.scrollLeft + screenX - SPLITTER_PR_KEYS_W;
+  const tAnchor = oldTrackX / splitterModalState.pxPerSec;
+  splitterSetModalZoom(newPxPerSec);
+  // Re-scroll so the same time stays under the anchor
+  const newTrackX = tAnchor * splitterModalState.pxPerSec;
+  wrap.scrollLeft = Math.max(0, newTrackX + SPLITTER_PR_KEYS_W - screenX);
 }
 
 function splitterSetMode(newMode) {
