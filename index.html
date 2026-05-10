@@ -631,7 +631,11 @@
   .splitter-mixer { display: flex; flex-direction: column; gap: 10px; }
   .splitter-mixer[hidden] { display: none; }
   .stem-track { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.15s, border-color 0.15s; }
-  .stem-track-controls { display: grid; grid-template-columns: 160px auto 1fr 56px; align-items: center; gap: 14px; }
+  .stem-track-controls { display: grid; grid-template-columns: 160px auto 1fr 56px auto; align-items: center; gap: 14px; }
+  .stem-midi-btn { padding: 5px 10px; background: var(--panel); color: var(--text-2); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.4px; display: inline-flex; align-items: center; gap: 5px; transition: all 0.12s; white-space: nowrap; }
+  .stem-midi-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .stem-track:not(.has-events) .stem-midi-btn { opacity: 0.4; pointer-events: none; }
+  .stem-track:not(.has-events) .stem-midi-btn[title]::after { content: ' (no events)'; }
   .stem-track.is-soloed { border-color: var(--accent); background: var(--panel); }
   .stem-track.is-muted { opacity: 0.55; }
   /* Per-stem timeline: waveform background + chord/note events + playhead cursor */
@@ -677,6 +681,32 @@
   .notes-modal-close { width: 32px; height: 32px; padding: 0; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s; }
   .notes-modal-close:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
   .notes-modal-help { padding: 8px 20px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); }
+
+  /* Modal tabs (Piano Roll | Sheet) */
+  .modal-tabs { display: flex; gap: 2px; padding: 8px 14px 0; border-bottom: 1px solid var(--border); }
+  .modal-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px 10px; background: transparent; border: none; color: var(--text-2); font-size: 12.5px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.12s; font-family: var(--font-sans); }
+  .modal-tab:hover { color: var(--accent); }
+  .modal-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+  .modal-tab i { font-size: 16px; }
+  .modal-tab-content[hidden] { display: none; }
+  .modal-tab-content.sheet-content { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px; flex: 1; min-height: 0; overflow: hidden; }
+
+  /* Sheet view: tempo / bpb / cell controls + bar grid */
+  .sheet-controls { display: flex; align-items: center; gap: 14px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
+  .sheet-control { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); font-family: var(--font-mono); }
+  .sheet-control input[type="number"] { width: 56px; font-family: var(--font-mono); font-size: 12px; padding: 4px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+  .sheet-control select { font-family: var(--font-mono); font-size: 11.5px; padding: 4px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+  .sheet-control-unit { color: var(--muted); font-size: 10.5px; }
+  .sheet-grid-wrap { flex: 1; overflow-y: auto; padding: 4px 4px 8px; }
+  .sheet-grid { display: flex; flex-wrap: wrap; gap: 10px; align-content: flex-start; }
+  .sheet-bar { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; min-width: 0; flex-shrink: 0; }
+  .sheet-bar-num { font-family: var(--font-mono); font-size: 9.5px; color: var(--muted); letter-spacing: 1.2px; text-transform: uppercase; }
+  .sheet-bar-beats { display: grid; gap: 3px; }
+  .sheet-beat { padding: 6px 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all 0.12s; min-height: 30px; min-width: 36px; display: flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+  .sheet-beat:hover { border-color: var(--accent); color: var(--accent); }
+  .sheet-beat.is-empty { color: var(--muted); opacity: 0.4; }
+  .sheet-beat.is-current { background: var(--accent); color: #1a1a1a; border-color: var(--accent); box-shadow: 0 0 8px rgba(245,165,36,0.5); }
+  .sheet-beat.is-downbeat { border-left: 2px solid var(--accent-2); }
   .notes-modal-track-wrap { flex: 1; overflow-x: auto; overflow-y: auto; padding: 16px 20px 24px; min-height: 200px; }
   .notes-modal-track { position: relative; min-width: 100%; min-height: 80px; }
   .notes-modal-events { position: relative; display: flex; align-items: flex-start; }
@@ -1079,12 +1109,37 @@
       </div>
       <button class="notes-modal-close" id="notes-modal-close" title="Close (Esc)"><i class="ph-duotone ph-x"></i></button>
     </div>
-    <div class="notes-modal-help">Click an event to jump to that moment · scroll horizontally · zoom to spread out dense sections</div>
-    <div class="notes-modal-track-wrap" id="notes-modal-track-wrap">
+    <div class="modal-tabs">
+      <button class="modal-tab is-active" data-tab="piano-roll" title="Pitched view (vertical = pitch)"><i class="ph-duotone ph-piano-keys sz-sm"></i> Piano Roll</button>
+      <button class="modal-tab" data-tab="sheet" title="Beat-by-beat sheet notation"><i class="ph-duotone ph-list-numbers sz-sm"></i> Sheet</button>
+    </div>
+    <div class="notes-modal-help" id="notes-modal-help">Click an event to jump to that moment · scroll horizontally · zoom to spread out dense sections</div>
+    <div class="notes-modal-track-wrap modal-tab-content" data-tab="piano-roll" id="notes-modal-track-wrap">
       <div class="notes-modal-track" id="notes-modal-track">
         <div class="notes-modal-events" id="notes-modal-events"></div>
         <div class="notes-modal-cursor" id="notes-modal-cursor"></div>
         <div class="notes-modal-axis" id="notes-modal-axis"></div>
+      </div>
+    </div>
+    <div class="modal-tab-content sheet-content" data-tab="sheet" id="sheet-content" hidden>
+      <div class="sheet-controls">
+        <label class="sheet-control">Tempo
+          <input type="number" id="sheet-tempo" value="120" min="30" max="300" step="1">
+          <span class="sheet-control-unit">BPM</span>
+        </label>
+        <label class="sheet-control">Beats / bar
+          <input type="number" id="sheet-bpb" value="4" min="2" max="16" step="1">
+        </label>
+        <label class="sheet-control">Cell
+          <select id="sheet-subdiv">
+            <option value="1">¼ note (1 cell / beat)</option>
+            <option value="2">⅛ note (2 cells / beat)</option>
+            <option value="4">¹⁄₁₆ note (4 cells / beat)</option>
+          </select>
+        </label>
+      </div>
+      <div class="sheet-grid-wrap" id="sheet-grid-wrap">
+        <div class="sheet-grid" id="sheet-grid"></div>
       </div>
     </div>
   </div>
@@ -5821,15 +5876,129 @@ function splitterCurrentTime() {
   return splitterState.pausedAt || 0;
 }
 
+// ---- MIDI export: per-stem .mid file ------------------------------------
+// Emits a Standard MIDI File (format 0, single track) containing the
+// detected events as note-on / note-off pairs. Monophonic stems (vocals,
+// bass) get one note per event. Chord stems (harmonic, other) get all
+// chord tones expanded as a chord triggered together.
+function splitterEventsToMIDI(stemId, events) {
+  const ticksPerQuarter = 480;
+  const tempo = Math.max(30, Math.min(300, splitterModalState.sheetTempo || 120));
+  const microsPerQuarter = Math.round(60000000 / tempo);
+  const ticksPerSec = (tempo / 60) * ticksPerQuarter;
+
+  // Variable-length quantity encoder (delta times in MIDI use VLQ)
+  function vlq(n) {
+    if (n <= 0) return [0];
+    const bytes = [n & 0x7F];
+    n >>>= 7;
+    while (n > 0) { bytes.unshift((n & 0x7F) | 0x80); n >>>= 7; }
+    return bytes;
+  }
+
+  // Flatten all events into note-on/note-off pairs at absolute ticks
+  const noteEvents = [];
+  for (const ev of events) {
+    const startTick = Math.max(0, Math.round(ev.start * ticksPerSec));
+    const endTick   = Math.max(startTick + 1, Math.round(ev.end * ticksPerSec));
+    let pitches = [];
+    if (ev.midi != null) pitches = [ev.midi];
+    else if (ev.pitches && ev.pitches.length) pitches = ev.pitches.slice();
+    for (const p of pitches) {
+      if (p < 0 || p > 127) continue;
+      noteEvents.push({ tick: startTick, type: 'on',  note: p, vel: ev.midi != null ? 96 : 80 });
+      noteEvents.push({ tick: endTick,   type: 'off', note: p, vel: 0 });
+    }
+  }
+  // Sort: ascending tick; note-offs before note-ons at the same tick so
+  // back-to-back same-pitch events don't accidentally cancel each other.
+  noteEvents.sort((a, b) => a.tick - b.tick || (a.type === 'off' ? -1 : 1));
+
+  // Build the track byte stream
+  const track = [];
+  // Track name meta event
+  const nameStr = (splitterState.fileName || 'song').replace(/\.[^.]+$/, '') + ' - ' + stemId;
+  const nameBytes = Array.from(new TextEncoder().encode(nameStr));
+  track.push.apply(track, vlq(0));
+  track.push(0xFF, 0x03);
+  track.push.apply(track, vlq(nameBytes.length));
+  track.push.apply(track, nameBytes);
+  // Set Tempo
+  track.push.apply(track, vlq(0));
+  track.push(0xFF, 0x51, 0x03,
+    (microsPerQuarter >> 16) & 0xFF, (microsPerQuarter >> 8) & 0xFF, microsPerQuarter & 0xFF);
+  // Time Signature (4/4 with sheet beats-per-bar)
+  const num = Math.max(2, Math.min(16, splitterModalState.sheetBeatsPerBar || 4));
+  track.push.apply(track, vlq(0));
+  track.push(0xFF, 0x58, 0x04, num, 0x02, 0x18, 0x08); // num/4, 24 ticks/click, 8 32nds per quarter
+  // Note events
+  let lastTick = 0;
+  for (const ev of noteEvents) {
+    const delta = ev.tick - lastTick;
+    track.push.apply(track, vlq(delta));
+    track.push(ev.type === 'on' ? 0x90 : 0x80, ev.note & 0x7F, ev.vel & 0x7F);
+    lastTick = ev.tick;
+  }
+  // End of Track
+  track.push.apply(track, vlq(0));
+  track.push(0xFF, 0x2F, 0x00);
+
+  // Wrap in MTrk + MThd
+  const trackBytes = Uint8Array.from(track);
+  const mtrk = new Uint8Array(8 + trackBytes.length);
+  mtrk[0] = 0x4D; mtrk[1] = 0x54; mtrk[2] = 0x72; mtrk[3] = 0x6B; // "MTrk"
+  mtrk[4] = (trackBytes.length >>> 24) & 0xFF;
+  mtrk[5] = (trackBytes.length >>> 16) & 0xFF;
+  mtrk[6] = (trackBytes.length >>> 8)  & 0xFF;
+  mtrk[7] =  trackBytes.length         & 0xFF;
+  mtrk.set(trackBytes, 8);
+
+  const mthd = new Uint8Array(14);
+  mthd[0] = 0x4D; mthd[1] = 0x54; mthd[2] = 0x68; mthd[3] = 0x64; // "MThd"
+  mthd[4] = 0; mthd[5] = 0; mthd[6] = 0; mthd[7] = 6;             // chunk length = 6
+  mthd[8] = 0; mthd[9] = 0;                                       // format 0
+  mthd[10] = 0; mthd[11] = 1;                                     // 1 track
+  mthd[12] = (ticksPerQuarter >> 8) & 0xFF;
+  mthd[13] =  ticksPerQuarter       & 0xFF;
+
+  const out = new Uint8Array(mthd.length + mtrk.length);
+  out.set(mthd, 0);
+  out.set(mtrk, mthd.length);
+  return out;
+}
+
+function splitterDownloadMIDI(stemId) {
+  const stem = splitterState.stems[stemId];
+  if (!stem || !stem.events || !stem.events.length) {
+    splitterSetStatus('No events to export for ' + stemId, 'idle');
+    return;
+  }
+  const bytes = splitterEventsToMIDI(stemId, stem.events);
+  const blob = new Blob([bytes], { type: 'audio/midi' });
+  const url = URL.createObjectURL(blob);
+  const baseName = (splitterState.fileName || 'song').replace(/\.[^.]+$/, '');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = baseName + ' - ' + stemId + '.mid';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 // ---- Notes modal — full per-stem event timeline with vertical stacking ---
 const splitterModalState = {
   open: false,
   stemId: null,
   pxPerSec: 60,            // zoom level
   rafId: null,
-  notation: 'western',     // 'western' | 'sargam' | 'devanagari'
+  notation: 'western',     // 'western' | 'devanagari'
   sa: 0,                   // tonic pitch class (0=C..11=B) when notation != western
   saAutoDetected: true,    // true until user manually picks Sa via the dropdown
+  tab: 'piano-roll',       // 'piano-roll' | 'sheet'
+  sheetTempo: 120,         // BPM
+  sheetBeatsPerBar: 4,
+  sheetSubdiv: 1,          // 1 = quarter, 2 = 8th, 4 = 16th
 };
 
 // 12 swaras (semitones from Sa) in Devanagari with komal/tivra diacritics:
@@ -5877,6 +6046,8 @@ function splitterOpenNotesModal(stemId) {
     if (saSelect) saSelect.value = String(splitterModalState.sa);
   }
   splitterUpdateSaAutoBadge();
+  // Reset to piano-roll tab on every open so users see the visual first
+  splitterSwitchTab('piano-roll');
 
   const def = splitterStems().find(s => s.id === stemId);
   const isMono = (stemId === 'bass' || stemId === 'vocals');
@@ -6080,31 +6251,142 @@ function splitterRenderModalAxis(totalWidth, pxPerSec, leftOffset) {
   axis.innerHTML = ticks.join('');
 }
 
+// ---- Sheet view: beat-by-beat grid -------------------------------------
+// Each cell represents one subdivision. The cell's label is whichever event
+// has the largest time-overlap with [t, t+cellSec). Click a cell to seek to
+// that moment. Live highlight on the cell currently under the playhead.
+function splitterRenderSheet() {
+  const stem = splitterState.stems[splitterModalState.stemId];
+  const grid = document.getElementById('sheet-grid');
+  if (!grid) return;
+  if (!stem || !stem.events || !stem.events.length) {
+    grid.innerHTML = '<div class="notes-modal-empty">No events detected for this stem.</div>';
+    return;
+  }
+  const events = stem.events;
+  const tempo = Math.max(30, Math.min(300, splitterModalState.sheetTempo));
+  const bpb = Math.max(2, Math.min(16, splitterModalState.sheetBeatsPerBar));
+  const subdiv = Math.max(1, Math.min(4, splitterModalState.sheetSubdiv));
+  const beatSec = 60 / tempo;
+  const cellSec = beatSec / subdiv;
+  const cellsPerBar = bpb * subdiv;
+  const dur = splitterState.duration || 1;
+  const totalCells = Math.max(cellsPerBar, Math.ceil(dur / cellSec));
+  const totalBars = Math.ceil(totalCells / cellsPerBar);
+
+  // For each cell, find the event with the most overlap with [cellStart, cellEnd).
+  function eventForRange(t0, t1) {
+    let best = null, bestOverlap = 0;
+    for (const ev of events) {
+      const overlap = Math.min(ev.end, t1) - Math.max(ev.start, t0);
+      if (overlap > bestOverlap) { bestOverlap = overlap; best = ev; }
+    }
+    return best;
+  }
+
+  let html = '';
+  for (let b = 0; b < totalBars; b++) {
+    let cells = '';
+    for (let c = 0; c < cellsPerBar; c++) {
+      const t = b * bpb * beatSec + c * cellSec;
+      const ev = eventForRange(t, t + cellSec);
+      const isDownbeat = (c % subdiv === 0); // first cell of each beat
+      const isBarStart = (c === 0);
+      let display = '';
+      if (ev) {
+        display = (ev.midi != null) ? splitterFormatNote(ev.midi) : ev.label;
+      }
+      const safe = display.replace(/[<>&"']/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[ch]));
+      const klass = 'sheet-beat' + (ev ? '' : ' is-empty') + (isBarStart && b > 0 ? ' is-downbeat' : '');
+      const tooltip = ev ? safe + ' · ' + splitterFormatTime(t) : splitterFormatTime(t);
+      cells += '<button class="' + klass + '" data-time="' + t.toFixed(3) + '" data-end="' + (t + cellSec).toFixed(3) + '" title="' + tooltip + '">' + (safe || '·') + '</button>';
+    }
+    html += '<div class="sheet-bar"><div class="sheet-bar-num">Bar ' + (b + 1) + '</div>'
+      + '<div class="sheet-bar-beats" style="grid-template-columns: repeat(' + cellsPerBar + ', minmax(36px, 1fr));">'
+      + cells + '</div></div>';
+  }
+  grid.innerHTML = html;
+  grid.querySelectorAll('.sheet-beat').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const t = parseFloat(btn.dataset.time);
+      if (!isNaN(t)) splitterSeek(t);
+    };
+  });
+}
+
+function splitterSwitchTab(tab) {
+  splitterModalState.tab = tab;
+  document.querySelectorAll('.modal-tab').forEach(b =>
+    b.classList.toggle('is-active', b.dataset.tab === tab));
+  document.querySelectorAll('.modal-tab-content').forEach(c =>
+    c.hidden = c.dataset.tab !== tab);
+  // Help text differs per tab
+  const help = document.getElementById('notes-modal-help');
+  if (help) {
+    help.textContent = tab === 'sheet'
+      ? 'Click a cell to jump there · adjust tempo + cells/beat to taste · current beat highlights as it plays'
+      : 'Click an event to jump to that moment · scroll horizontally · zoom to spread out dense sections';
+  }
+  if (tab === 'sheet') splitterRenderSheet();
+  else splitterRenderNotesModal();
+}
+
+// Highlight whichever sheet cell the playhead is currently inside (called
+// from the modal RAF tick when sheet tab is active).
+function splitterUpdateSheetCursor() {
+  const t = splitterCurrentTime();
+  const cells = document.querySelectorAll('.sheet-beat');
+  let activeCell = null;
+  cells.forEach(c => {
+    const start = parseFloat(c.dataset.time);
+    const end = parseFloat(c.dataset.end);
+    const inside = t >= start && t < end;
+    c.classList.toggle('is-current', inside);
+    if (inside) activeCell = c;
+  });
+  // Auto-scroll the active cell into view while playing
+  if (activeCell && splitterState.playing) {
+    const wrap = document.getElementById('sheet-grid-wrap');
+    if (wrap) {
+      const cellRect = activeCell.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      if (cellRect.bottom > wrapRect.bottom - 20 || cellRect.top < wrapRect.top + 20) {
+        activeCell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }
+}
+
 function splitterStartModalCursor() {
   if (splitterModalState.rafId) cancelAnimationFrame(splitterModalState.rafId);
   function tick() {
     if (!splitterModalState.open) return;
-    const cursor = document.getElementById('notes-modal-cursor');
-    const t = splitterCurrentTime();
-    const cursorX = SPLITTER_PR_KEYS_W + t * splitterModalState.pxPerSec;
-    if (cursor) cursor.style.left = cursorX.toFixed(1) + 'px';
-    // Highlight whichever event the playhead is currently inside
-    const stem = splitterState.stems[splitterModalState.stemId];
-    if (stem && stem.events) {
-      const eventEls = document.querySelectorAll('.pr-event');
-      eventEls.forEach(el => {
-        const evStart = parseFloat(el.dataset.time);
-        const ev = stem.events.find(e => Math.abs(e.start - evStart) < 0.01);
-        const inside = ev && t >= ev.start && t < ev.end;
-        el.classList.toggle('is-current', !!inside);
-      });
-    }
-    // Auto-scroll horizontally to keep cursor near 1/3 from left while playing
-    const wrap = document.getElementById('notes-modal-track-wrap');
-    if (wrap && splitterState.playing) {
-      const visW = wrap.clientWidth;
-      if (cursorX < wrap.scrollLeft + 60 || cursorX > wrap.scrollLeft + visW - 60) {
-        wrap.scrollLeft = Math.max(0, cursorX - visW / 3);
+    if (splitterModalState.tab === 'sheet') {
+      splitterUpdateSheetCursor();
+    } else {
+      const cursor = document.getElementById('notes-modal-cursor');
+      const t = splitterCurrentTime();
+      const cursorX = SPLITTER_PR_KEYS_W + t * splitterModalState.pxPerSec;
+      if (cursor) cursor.style.left = cursorX.toFixed(1) + 'px';
+      // Highlight whichever piano-roll event the playhead is currently inside
+      const stem = splitterState.stems[splitterModalState.stemId];
+      if (stem && stem.events) {
+        const eventEls = document.querySelectorAll('.pr-event');
+        eventEls.forEach(el => {
+          const evStart = parseFloat(el.dataset.time);
+          const ev = stem.events.find(e => Math.abs(e.start - evStart) < 0.01);
+          const inside = ev && t >= ev.start && t < ev.end;
+          el.classList.toggle('is-current', !!inside);
+        });
+      }
+      // Auto-scroll horizontally to keep cursor near 1/3 from left while playing
+      const wrap = document.getElementById('notes-modal-track-wrap');
+      if (wrap && splitterState.playing) {
+        const visW = wrap.clientWidth;
+        if (cursorX < wrap.scrollLeft + 60 || cursorX > wrap.scrollLeft + visW - 60) {
+          wrap.scrollLeft = Math.max(0, cursorX - visW / 3);
+        }
       }
     }
     splitterModalState.rafId = requestAnimationFrame(tick);
@@ -6121,6 +6403,26 @@ function splitterSetupNotesModal() {
   document.querySelectorAll('.notes-modal-zoom').forEach(btn => {
     btn.onclick = () => splitterModalZoom(btn.dataset.zoom);
   });
+  // Tab toggle (Piano Roll | Sheet)
+  document.querySelectorAll('.modal-tab').forEach(btn => {
+    btn.onclick = () => splitterSwitchTab(btn.dataset.tab);
+  });
+  // Sheet controls — re-render on any input change
+  const sheetTempo  = document.getElementById('sheet-tempo');
+  const sheetBpb    = document.getElementById('sheet-bpb');
+  const sheetSubdiv = document.getElementById('sheet-subdiv');
+  if (sheetTempo) sheetTempo.oninput = () => {
+    splitterModalState.sheetTempo = parseFloat(sheetTempo.value) || 120;
+    if (splitterModalState.tab === 'sheet') splitterRenderSheet();
+  };
+  if (sheetBpb) sheetBpb.oninput = () => {
+    splitterModalState.sheetBeatsPerBar = parseInt(sheetBpb.value, 10) || 4;
+    if (splitterModalState.tab === 'sheet') splitterRenderSheet();
+  };
+  if (sheetSubdiv) sheetSubdiv.onchange = () => {
+    splitterModalState.sheetSubdiv = parseInt(sheetSubdiv.value, 10) || 1;
+    if (splitterModalState.tab === 'sheet') splitterRenderSheet();
+  };
   const slider = document.getElementById('notes-modal-zoom-slider');
   if (slider) {
     slider.oninput = () => {
@@ -6299,6 +6601,7 @@ function splitterRebuildMixerSkeleton() {
           <input type="range" class="stem-volume" data-stem="${s.id}" min="0" max="100" value="80" title="Volume">
         </div>
         <span class="stem-vu" id="stem-vu-${s.id}">80%</span>
+        <button class="stem-midi-btn" data-stem="${s.id}" title="Download .mid file for this stem"><i class="ph-duotone ph-file-arrow-down sz-sm"></i> MIDI</button>
       </div>
       <div class="stem-timeline" data-stem="${s.id}" id="stem-timeline-${s.id}" title="Click to jump to that position">
         <svg class="stem-timeline-waveform" id="stem-wave-${s.id}" preserveAspectRatio="none" viewBox="0 0 1000 100"></svg>
@@ -6312,6 +6615,13 @@ function splitterRebuildMixerSkeleton() {
   });
   mixer.querySelectorAll('.stem-volume').forEach(slider => {
     slider.oninput = () => splitterSetVolume(slider.dataset.stem, parseFloat(slider.value));
+  });
+  // MIDI export button (stopPropagation so the click doesn't open the modal)
+  mixer.querySelectorAll('.stem-midi-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      splitterDownloadMIDI(btn.dataset.stem);
+    };
   });
   // Click anywhere on a stem timeline = jump global playhead to that point.
   // stopPropagation prevents the click from bubbling up to the stem tile,
@@ -6706,8 +7016,10 @@ async function splitterDetectChords(buffer) {
 
   const events = [];
   let curLabel = null;
+  let curPitches = null;
   let curStart = 0;
   let pendingLabel = null;   // candidate label for the 2-frame stability filter
+  let pendingPitches = null;
   let pendingCount = 0;
 
   for (let f = 0; f < numFrames; f++) {
@@ -6726,31 +7038,40 @@ async function splitterDetectChords(buffer) {
     const tNow = f * hopSec;
     if (maxV < 0.01) {
       // Silence — close any open event
-      if (curLabel) { events.push({ start: curStart, end: tNow, label: curLabel }); curLabel = null; }
+      if (curLabel) { events.push({ start: curStart, end: tNow, label: curLabel, pitches: curPitches }); curLabel = null; curPitches = null; }
       pendingLabel = null;
+      pendingPitches = null;
       pendingCount = 0;
       continue;
     }
     for (let i = 0; i < 12; i++) chroma[i] /= maxV;
     const results = listenerScoreChroma(chroma);
     if (!results.length) continue;
-    const label = listenerCandidateToChord(results[0]).name;
+    const top = results[0];
+    const chord = listenerCandidateToChord(top);
+    const label = chord.name;
+    // Compute MIDI pitches for the chord — root in octave 4 + each interval.
+    // Stored on the event so MIDI export can emit full chord tones.
+    const rootMidi = 60 + top.root;
+    const pitches = chord.type.intervals.map(iv => rootMidi + iv);
     // 2-frame stability: a candidate label has to win two frames in a row
     // before we commit. Eliminates flicker from single-frame mis-detections.
     if (label !== pendingLabel) {
       pendingLabel = label;
+      pendingPitches = pitches;
       pendingCount = 1;
     } else {
       pendingCount++;
     }
     if (pendingCount >= 2 && pendingLabel !== curLabel) {
-      if (curLabel) events.push({ start: curStart, end: tNow, label: curLabel });
+      if (curLabel) events.push({ start: curStart, end: tNow, label: curLabel, pitches: curPitches });
       curLabel = pendingLabel;
+      curPitches = pendingPitches;
       curStart = tNow;
     }
     if ((f & 31) === 0) await splitterYield();
   }
-  if (curLabel) events.push({ start: curStart, end: numFrames * hopSec, label: curLabel });
+  if (curLabel) events.push({ start: curStart, end: numFrames * hopSec, label: curLabel, pitches: curPitches });
   // Drop events shorter than 0.7 s — chord changes that brief are usually noise / mid-transition
   return events.filter(ev => (ev.end - ev.start) >= 0.7);
 }
