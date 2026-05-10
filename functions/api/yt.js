@@ -39,7 +39,30 @@ function extractVideoId(rawUrl) {
   return null;
 }
 
-export async function onRequestGet({ request }) {
+// Proxy a request through to the configured yt-dlp Fly service. Returns
+// null if YT_SERVICE_URL isn't set; otherwise returns the streamed Response
+// (or throws on error).
+async function tryFlyService(env, target) {
+  const base = env && env.YT_SERVICE_URL;
+  if (!base) return null;
+  const cleanBase = base.replace(/\/+$/, '');
+  const upstreamUrl = cleanBase + '/?url=' + encodeURIComponent(target);
+  const upstream = await fetch(upstreamUrl, { redirect: 'follow' });
+  if (!upstream.ok) {
+    const detail = await upstream.text().catch(() => '');
+    throw new Error('Fly service HTTP ' + upstream.status + (detail ? ' — ' + detail.slice(0, 200) : ''));
+  }
+  const out = new Headers();
+  out.set('Content-Type', upstream.headers.get('Content-Type') || 'audio/*');
+  const lenHeader = upstream.headers.get('Content-Length');
+  if (lenHeader) out.set('Content-Length', lenHeader);
+  out.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  out.set('Access-Control-Allow-Origin', '*');
+  out.set('Cache-Control', 'no-store');
+  return new Response(upstream.body, { status: 200, headers: out });
+}
+
+export async function onRequestGet({ request, env }) {
   const reqUrl = new URL(request.url);
   const target = reqUrl.searchParams.get('url');
   if (!target) {
@@ -117,11 +140,25 @@ export async function onRequestGet({ request }) {
     }
   }
   if (!streamUrl) {
+    // Fly fallback — try the yt-dlp sidecar if it's configured.
+    if (env && env.YT_SERVICE_URL) {
+      try {
+        const flyResponse = await tryFlyService(env, target);
+        if (flyResponse) return flyResponse;
+      } catch (e) {
+        return new Response(
+          'youtubei.js failed on all clients (' + (lastErr && lastErr.message || lastErr) + '). ' +
+          'Fly fallback also failed: ' + (e && e.message || e),
+          { status: 502 },
+        );
+      }
+    }
     return new Response(
-      'YouTube extraction failed on all clients (TV/iOS/Android/Web): ' +
+      'YouTube extraction failed on all clients: ' +
       (lastErr && lastErr.message || lastErr) +
       '. YouTube is likely rate-limiting Cloudflare IPs for this video. ' +
-      'Try again in a minute, or use the local server (server.py + yt-dlp).',
+      'Configure YT_SERVICE_URL (Fly.io sidecar) for a more reliable fallback, ' +
+      'or use the local server (server.py + yt-dlp).',
       { status: 502 },
     );
   }

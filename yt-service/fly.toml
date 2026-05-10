@@ -1,0 +1,37 @@
+# Fly.io app config for the FYmuse yt-dlp sidecar.
+#
+# `fly launch` may rewrite this on first run. The values here are tuned
+# for the free allowance: shared-cpu-1x with 256 MB RAM, auto-stop when
+# idle so you don't burn machine-time when nobody's using it.
+#
+# Deploy:
+#   cd yt-service
+#   fly launch        # first time only — picks region, creates app
+#   fly deploy        # redeploys
+#   fly logs          # watch logs
+#
+# After deploy, get the URL: `fly status` shows it as <app>.fly.dev.
+
+app = "fymuse-yt"
+primary_region = "sin"   # Singapore — change to your nearest (sin/ord/lhr/fra/syd/etc.)
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  path = "/healthz"
+  protocol = "http"
+  timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
