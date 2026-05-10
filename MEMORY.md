@@ -1,8 +1,8 @@
 # FYMuse — Project Memory
 
-A single-file music theory and songwriting tool. Helps you explore chord progressions across genres, compose with rhythm subdivisions, write song sections with lyrics, and find connections between any two chords.
+A single-file music theory + songwriting + audio-analysis tool. Explore chord progressions across genres, compose with rhythm subdivisions, write song sections with lyrics, find connections between any two chords, listen to live audio for real-time chord detection, and split full songs into stems with per-stem chord/note analysis.
 
-Open `index.html` in any modern browser. No build step.
+Open `index.html` directly in any modern browser for everything except the Splitter's ML mode (which needs cross-origin isolation — see Local dev / Deploy below).
 
 ---
 
@@ -10,12 +10,20 @@ Open `index.html` in any modern browser. No build step.
 
 ```
 FYMuse/
-├── index.html    # The whole app — single HTML file (~250KB)
-├── logo.png      # FYmuse brand mark (orange wordmark with hex/music-note glyph)
+├── index.html    # The whole app — single HTML file (~340KB)
+├── logo.png      # FYmuse brand mark (cropped FYMUSE wordmark, orange)
+├── server.py     # Tiny local dev server (sets COOP/COEP for ML mode)
+├── _headers      # Cloudflare Pages response headers (auto-applied on deploy)
+├── README.md     # User-facing readme: run/deploy instructions
 └── MEMORY.md     # This file
 ```
 
-The HTML file contains everything: HTML structure, CSS, JS, music theory engine, audio synthesis, UI rendering. External dependencies are loaded from CDNs. `logo.png` is referenced via relative path so the page works locally and from any host.
+The HTML file contains everything: HTML structure, CSS, JS, music theory engine, audio synthesis, UI rendering, DSP pipelines (HPSS, FFT, STFT, HPS, Krumhansl-Schmuckler), and ML-mode loaders. External dependencies are loaded from CDNs.
+
+## Local dev / deploy
+
+- **Most features work from `file://`** — open `index.html` directly.
+- **Splitter ML mode** needs SharedArrayBuffer = COOP/COEP headers. For local dev: `python3 server.py` then open `http://localhost:8765/`. For production: Cloudflare Pages picks up the `_headers` file automatically — no build step, just push the repo.
 
 ---
 
@@ -35,7 +43,7 @@ Internet required on first load; thereafter the page works offline if cached.
 ```
 ┌─ HEADER ─────────────────────────────────────────────────────────────────────┐
 │ [logo.png] │ [Playground][Path Finder][Melody Mode][Custom Chord]         │
-│            │ [Listener][Songwriter][Sidebar] │ Key │ Sound                │
+│            │ [Listener][Splitter][Songwriter][Sidebar] │ Key │ Sound      │
 │ Tempo Loop Metronome │ Genre pills (Pop, Rock, …)                         │
 ├─ MAIN ────────────────────────────────────────────────┬─ INFO SIDEBAR ──────┤
 │  GRAPH PANEL or PLAYGROUND VIEW                       │  Mood filter        │
@@ -54,7 +62,8 @@ Three overlay panels (sit on top of the main layout, fixed-position):
 Main view modes (mutually exclusive — they swap children of `#graph-panel`):
 - **Genre graph** (default) — chord nodes + transition arrows for the selected genre
 - **Playground** — every musically useful chord in the current key, by category
-- **Listener** — real-time mic chord detection + suggestions (full-width, no info-sidebar)
+- **Listener** — real-time mic chord detection + suggestions, OR uploaded audio file (full-width, no info-sidebar)
+- **Splitter** — upload a song, split into stems, multi-track playback + per-stem chord/note analysis (full-width, no info-sidebar)
 
 Toggleable layout columns:
 - **Info Sidebar** (right column, inline) — hidden/shown via the "Sidebar" header button. When hidden, main panel reflows wider.
@@ -166,7 +175,73 @@ Each card has a quick-add **+** button on hover that pushes the chord to the Bui
 - **Click any chord card → opens chord detail panel** (existing info-sidebar machinery). `openListenerChordDetail(chord)` derives the Roman numeral via `findRomanForChord`, sets `state.selectedChord`, adds `body.has-chord-detail`, calls `renderChordDetail()`. Click the same card again to close (toggle), or click another to swap. CSS shows the info-sidebar in listener mode only when `.has-chord-detail` is set, and hides every section except `#chord-detail-panel`. Active card gets an orange highlight (`is-active-detail`). An **X close button** sits at the top-right of `#chord-detail-panel` (only shown in listener view) for explicit close. Non-diatonic chords flash an inline tip ("change Key to see voicings") instead of opening an empty detail. Highlights synced via `syncListenerActiveCard()`.
 - Mic auto-stops on: leaving Listener view (any other genre pill / Playground / etc — handled inside `renderAll` by checking `listenerState.active && !state.genre.isListener`) and on tab hide (`visibilitychange`).
 - View skeleton is built lazily on first activation by `buildListenerViewSkeleton(root)`, which inserts a `<div id="listener-view">` inside `#graph-panel`. `showListenerView()` mirrors `showPlaygroundView()` — toggles sibling `#graph-panel` children to `display:none` while the listener view is active. `renderListener()` (called from `renderAll`) restores any prior detection if the user toggles in/out.
-- State: `listenerState` — `{active, audioCtx, micStream, source, fftAnalyser, timeAnalyser, fftBuffer, timeBuffer, rafId, smoothChroma, history, lastShown, …}`.
+- **Audio file upload mode** — alternative to live mic. "Upload audio" button + hidden `<input type="file" accept="audio/*">` + drag-drop on the listener view. `listenerLoadFile(file)` decodes via `AudioContext.decodeAudioData` and creates a `BufferSource` that feeds the same FFT/time analysers AND `ctx.destination` (so the user hears it). A small file player UI under the level meter — play/pause / filename / progress bar / time / X close. Mic and file are mutually exclusive: uploading auto-stops the mic; mic toggle is disabled while a file is loaded. Same chord-detection chain runs unchanged.
+- State: `listenerState` — `{active, audioCtx, micStream, source, fftAnalyser, timeAnalyser, fftBuffer, timeBuffer, rafId, smoothChroma, history, lastShown, mode, fileBuffer, fileSource, filePlaying, fileStartCtxTime, fileOffset, …}`.
+
+### Splitter (full main view — like Listener / Playground)
+Upload a song, split it into stems, multi-track playback with per-stem volume / mute / solo + scrolling notation. Modeled like Playground (`GENRES.splitter` with `isSplitter:true`); takes over `#graph-panel` via `showSplitterView()` + lazy `buildSplitterViewSkeleton()`.
+
+**Quality modes** (toggle in the header):
+- **Fast (DSP)** — default. On-device HPSS-based pseudo-separation. ~30s for a 3-min song. 4 stems: original / harmonic / bass / drums. Approximate quality — drums vs harmonic separates well; isolating individual instruments out of the harmonic bucket isn't possible with DSP alone.
+- **Accurate (ML — Demucs)** — lazy-loads ONNX Runtime Web from jsdelivr (~3 MB) + the `demucs-web` ES module from esm.sh, then fetches the 172 MB `htdemucs_embedded.onnx` from Hugging Face's static hosting (one-time, browser-cached). Inference runs entirely in the browser (WebGPU when available, WASM otherwise). 5 stems: original / vocals / drums / bass / other. ~3-5 min per 3-min song with multi-thread WASM (needs COOP/COEP via `server.py` or `_headers`); ~15-25 min single-thread fallback.
+
+An auto-detected environment warning explains exactly which speed tier the user will get (file:// vs HTTP-with-COOP/COEP vs WebGPU).
+
+**DSP separation pipeline** (`splitterProcess`):
+1. Mix to mono.
+2. **HPSS pass 1** via `splitterHPSSFloat` — Driedger-Müller harmonic/percussive source separation. STFT (2048-pt, 512 hop) → magnitude spectrogram → median filter along time (kernel 31 → harmonic ref) and along frequency (kernel 31 → percussive ref) → soft Wiener masks `H = h^p / (h^p + p^p)` with p=3 → apply masks to magnitudes, iSTFT each → harmonic₁ + percussive₁.
+3. **HPSS pass 2** runs on percussive₁: any sustained content that leaked into the percussive bucket gets recovered as pass-2 harmonic and merged back into the final harmonic stem. Final percussive = pass 2 percussive (a tighter drum stem).
+4. **Bass extraction**: lowpass the original mix at 280 Hz (BiquadFilter via `OfflineAudioContext`), then HPSS on that low band → take the harmonic output. So Bass = harmonic content of the bass band, not lowpass-of-harmonic — kicks get caught by HPSS percussive instead of leaking through.
+
+**ML separation pipeline** (`splitterProcessML`):
+- `splitterEnsureMLLibsLoaded` injects ORT via `<script>` tag (UMD) and ES-imports `demucs-web` from esm.sh. Configures `ort.env.wasm.numThreads` based on SharedArrayBuffer availability. Tries WebGPU adapter first, falls back to WASM execution provider.
+- `DemucsProcessor.separate(left, right)` returns `{drums, bass, other, vocals}` as L/R Float32Array pairs.
+- Progress callbacks map cleanly to the existing progress bar (download phase 5–15%, model load 16–19%, inference 20–98%).
+- Each output becomes a stereo `AudioBuffer` and feeds the same mixer as DSP mode.
+
+**Multi-track mixer + transport**:
+- Each stem has a `BufferSource` + `GainNode`. All sources start at the same `ctx.currentTime` so they're sample-aligned.
+- Mute / solo / volume per stem update each gain instantaneously. Solo logic: any stem soloed → only soloed (non-muted) stems play.
+- Master transport: play/pause/stop, filename, gradient progress bar, current/total time, X close.
+- **Click-to-seek** on the master bar AND on every stem timeline. `splitterSeek(targetSec)` stops sources, sets `pausedAt`, resumes from new offset (if was playing) or just updates UI.
+- Space bar = play/pause when Splitter view is active and a song is loaded (ignored when typing in inputs/textareas/contenteditable).
+
+**Per-stem timeline strip** (under each track's controls row):
+- 44 px tall. Three layers:
+  1. **Waveform** — 400 buckets of normalized peak amplitude rendered as SVG rects at 20% opacity in `--accent-2`, bumped to 28% `--accent` when soloed.
+  2. **Click-to-seek** — clicking anywhere = seek the global playhead to that time. `stopPropagation` so it doesn't open the notes modal.
+  3. **Cursor** — animated 2px orange line synced to playback via `splitterUpdateStemCursors()` in the RAF tick.
+- Inline event labels (chord/note names) are deliberately NOT rendered on the strip — the strip stays clean. Click the stem to open the notes modal where every event is visible.
+
+**Click any stem → notes modal** (a true piano roll):
+- Vertical axis = MIDI pitch (lower notes lower on screen, higher notes higher), horizontal axis = time.
+- **Sticky-left keyboard column** (64 px) labels every MIDI row. Black-key rows are darker; C rows highlighted bold so octaves are easy to count. Stays put during horizontal scroll.
+- Each detected event = a horizontal bar at its MIDI row spanning [start, end] in time. Hover lifts and brightens; the event the playhead is currently inside fills solid orange (`is-current`). Click an event → seek there.
+- For chord events (no single pitch), the chord's root letter+accidental is parsed via `splitterChordRootMidi()` and the bar lands at that root in octave 4 — so different roots stay correctly ordered vertically.
+- **Horizontal-stretch slider** (10–2000 px/sec) + `−` / `+` buttons + percentage readout. Single source of truth: `splitterSetModalZoom`.
+- **Pinch-zoom**: 2-finger touch on touchscreens, OR Ctrl/Cmd+wheel on trackpads (macOS pinches naturally fire wheel events with `ctrlKey:true`). Both anchor zoom to the focal point (touch midpoint or cursor X) so the time under the user's focus stays put while everything else stretches around it. `splitterZoomAround(newPxPerSec, anchorScreenX)`.
+- **Auto-scroll** during playback keeps the cursor about 1/3 from the left edge of the visible window.
+- **Time axis** below the events with ticks snapped to a "nice" interval (0.5 / 1 / 2 / 5 / 10 / 15 / 30 / 60 sec) chosen based on zoom.
+- **Notation toggle** — three-way segmented control: `ABC` (Western, default) | `Sa Re` (Hindustani sargam, Latin) | `सा रे` (sargam, Devanagari). Affects keyboard column + monophonic event bar labels (chord names stay Western — chords aren't a sargam concept). Tooltip on each bar still shows the original Western label so the user can cross-reference.
+- **`Sa = ?` dropdown** appears when notation is non-Western. 12 options C..B. Auto-set from the song's detected key on first open per song; an `AUTO` cyan badge appears next to the dropdown until the user manually overrides.
+
+**Per-stem analysis pipeline** (`splitterAnalyzeStems`):
+- After processing finishes, runs three phases with status updates:
+  1. Waveform peaks (cheap, ~1 s).
+  2. **Song key detection** via `splitterDetectSongKey(originalBuffer)` — Krumhansl-Schmuckler key finding. 2048-pt FFT @ 50% overlap, per-frame chroma normalized then accumulated, Pearson correlation against the 24 canonical key templates (12 major + 12 minor probe-tone profiles, Krumhansl 1990). Returns `{root, mode, confidence}`. Stored on `splitterState.detectedKey`. Synthetic test: C/G/F♯/Am/Dm all detect at 0.91-0.95 confidence.
+  3. **Per-stem event detection**, dispatched by stem id:
+     - `harmonic` / `other` / `original` → `splitterDetectChords`. 4096-pt FFT, 0.5 s hop. Kernel chroma → `listenerScoreChroma`. **2-frame stability filter**: a chord candidate has to win two frames in a row before it's committed (suppresses single-frame mis-detections). Min event 0.7 s.
+     - `vocals` → `splitterDetectMonophonicNotes` with **aggressive** settings: 0.06 s hop (~16 fps), no smoothing (`smoothFrames: 1`), 30 ms min event. Catches fast runs.
+     - `bass` → same engine with **conservative** settings: 0.20 s hop, 8192 FFT (better low-pitch resolution), 5-frame median, 180 ms min event.
+     - `drums` / `percussive` → skipped (no chord/note semantic).
+
+**Monophonic pitch detection — Harmonic Product Spectrum** (`splitterDetectMonophonicNotes`):
+- Per frame: forward FFT → magnitude spectrum → for each candidate fundamental bin `b` in `[minHz, maxHz]`, compute the HPS product `mag[b] * mag[2b] * mag[3b] * mag[4b] * ...`. The product peaks at the true fundamental because all its harmonics line up there. Standard fix for vocal pitch tracking — vastly more reliable than raw spectrum argmax which can lock onto octave harmonics.
+- **Parabolic peak interpolation** in log-magnitude around the best bin gives sub-bin (cents-accurate) frequency precision before quantizing to nearest semitone.
+- **Adaptive silence/unvoiced gate**: per-song HPS-peak-strength median × 0.15 = strength threshold. Frames below that are dropped (silence, breath, unvoiced consonants like "s/f/t" with no clear pitch). Adapts to recording level automatically.
+- Optional N-frame median smoothing (skips silence in window). Bass uses 5; vocals use 1 (off) to preserve every fast pitch change.
+
+**State**: `splitterState` — `{audioCtx, fileBuffer, fileName, stems, processing, status, playing, startCtxTime, pausedAt, duration, rafId, mode ('dsp'|'ml'), mlReady, mlProcessor, mlModelLoaded, detectedKey, …}`. `splitterModalState` — `{open, stemId, pxPerSec, rafId, notation ('western'|'sargam'|'devanagari'), sa, saAutoDetected}`.
 
 ### Custom Chord (right-side overlay panel)
 - Toggled from the header button (mutually exclusive with Path Finder, Melody Mode)
@@ -373,6 +448,25 @@ bindModeButtons();         // legacy no-op
 
 ## Recent change history (newest first)
 
+- **Splitter: auto-detect song key → set Sa**. Krumhansl-Schmuckler against the 24 canonical major/minor probe-tone profiles. Aggregates chroma over the full song (per-frame normalized so loud sections don't dominate), Pearson-correlates against each profile rotated to all 12 roots, picks the best fit. Result `{root, mode, confidence}` lives on `splitterState.detectedKey`. The notes modal applies the detected root as the default Sa whenever the user hasn't manually overridden via the dropdown; a small `AUTO` badge near the Sa selector indicates auto-pick. Synthetic tests pass C/G/F♯/Am/Dm at 0.91-0.95 confidence.
+- **Splitter: lower non-vocal sensitivity**. Bass: hop 0.15 → 0.20 s, smoothing 3 → 5 frames, min event 0.10 → 0.18 s. Chord detector (harmonic/other/original): added a 2-frame stability filter so single-frame mis-detections don't produce events; min event 0.4 → 0.7 s. Vocals untouched.
+- **Splitter notes modal: Hindustani sargam toggle**. 3-way segmented control in the modal header (`ABC` / `Sa Re` / `सा रे`). When non-Western, a `Sa = ?` dropdown appears. 12 swaras with komal/sudh/tivra naming: `Sa, re, Re, ga, Ga, Ma, Ma♯, Pa, dha, Dha, ni, Ni` (Latin) or `सा, रे॒, रे, ग॒, ग, म, म॑, प, ध॒, ध, नि॒, नि` (Devanagari). Octave indicators: `'` per octave above middle, `,` per octave below. Affects the keyboard column + monophonic event labels; chord names stay Western.
+- **Splitter notes modal: pinch-zoom + space-bar**. Two-finger touch (touchscreens) and Ctrl/Cmd+wheel (macOS trackpad pinch) zoom anchored to focal point. Space bar toggles play/pause when Splitter view is active and a song is loaded; ignored when typing in inputs/textareas.
+- **Splitter notes modal: horizontal-stretch slider**. Continuous range slider 10-2000 px/sec between the `−`/`+` buttons. Single source of truth (`splitterSetModalZoom`) keeps slider, buttons, percentage readout, and renderer in sync.
+- **Splitter: HPS-based vocal pitch tracker** (`splitterDetectMonophonicNotes`). Generic monophonic detector tuned per stem. Vocals: 0.06 s hop (~16 fps, 6.5× denser than before), Harmonic Product Spectrum with 4 harmonics for true-fundamental selection (kills octave errors common in voice tracking), parabolic peak interpolation in log-magnitude for sub-bin frequency precision, smoothing OFF (preserves every fast pitch change), 30 ms min event. Bass: same engine with 0.15 s hop, 8192 FFT, 5-harmonic HPS, 3-frame median, 100 ms min event. Adaptive silence gate (HPS-peak-strength median × 0.15) drops unvoiced frames automatically.
+- **Splitter notes modal: real piano roll**. Replaced the stack-style "auto-pack into rows by collision" layout with vertical position = MIDI pitch. Sticky-left keyboard column shows note labels per row (black-key rows shaded, C rows bold). Each event = horizontal bar at its MIDI row spanning [start, end]. Range auto-fits detected events ±2 semitones. For chord events, `splitterChordRootMidi()` parses the root letter+accidental from the label and places the bar at that root in octave 4.
+- **Splitter notes modal: scrollable, zoomable timeline**. Click a stem (anywhere except interactive bits) opens a fullscreen overlay with a horizontally scrollable timeline. Time axis with ticks at "nice" intervals. Zoom buttons. Click an event to seek. Animated cursor follows playback; auto-scrolls to keep cursor visible. Closes on X / backdrop / ESC.
+- **Splitter: per-stem timelines with waveform + click-to-seek**. Each stem-track is now a 2-row tile: controls + 44 px waveform strip. SVG rects rendered at low opacity (cyan 20% / orange 28% when soloed). Click anywhere on a timeline (or the master transport bar) to jump the global playhead. RAF-driven cursor on every timeline.
+- **Cloudflare Pages**: added `_headers` (sets `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp`) so the deployed site is cross-origin isolated and ML mode runs at full multi-thread speed automatically. README updated with deploy steps.
+- **Splitter: ML mode (Demucs ONNX)**. New Quality toggle: Fast (DSP) | Accurate (ML — Demucs). Lazy-loads ONNX Runtime Web from jsdelivr and the `demucs-web` ES module from esm.sh on first use. Fetches the 172 MB `htdemucs_embedded.onnx` from Hugging Face's static hosting (HF used as a CDN — audio never leaves the browser; inference is local via WebGPU/WASM). Stem layout switches to original/vocals/drums/bass/other. Environment-aware warn box explains expected speed: file:// → single-thread WASM (15-25 min/song); HTTP w/ COOP/COEP → multi-thread WASM (~3-5 min); WebGPU available → ~2-4 min. Added `server.py` for local dev with the right headers.
+- **Splitter: tighter HPSS** — 2-pass + bigger kernels + bass-band HPSS. Median kernels 17→31 (sharper sustained-vs-transient discrimination). Mask power 2→3 (sharper Wiener masks). Pass 1 → harmonic₁ + percussive₁; pass 2 runs HPSS again on percussive₁, recovers any sustained content that leaked. Bass extraction now: lowpass mix at 280 Hz, then HPSS on that low band → harmonic — kicks get caught in pass 2 percussive instead of leaking through.
+- **Splitter: progress bar + percentage during processing**. Splitter status pill now shows a colored gradient bar with percentage that walks: mix 2% → STFT 28% → median-h 52% → median-p 74% → soft masks 78% → iSTFT-h 90% → iSTFT-p 99% → bass 100%.
+- **Header: tighter spacing + icon-only buttons on narrower viewports**. Compressed button padding/font/gap. At ≤1500 px viewport, button labels hide (icons only) and KEY/SOUND labels disappear so the whole header collapses onto one row.
+- **Header: shrink logo to natural size** so tools sit on the same row as the logo. `flex: 0 0 auto` on H1, `height: 48px` + `width: auto` on the logo.
+- **Splitter v0 scaffold + HPSS DSP separation**. New "Splitter" header tool button + full main view. Modeled like Listener (`GENRES.splitter` with `isSplitter:true`). Scaffold ships file upload, sync transport, 4-track mixer with per-stem mute/solo/volume. v0 commit had stub processing (all stems share original buffer); follow-up commit added real HPSS-based DSP separation with the Driedger-Müller algorithm — STFT → median-filter spectrogram horizontally (harmonic) and vertically (percussive) → soft Wiener masks → iSTFT each. Hand-rolled radix-2 FFT (~50 lines, no deps), STFT/iSTFT with Hann window + 75% overlap-add. Bass = lowpass(harmonic, 220Hz) via OfflineAudioContext.
+- **Listener fix**: upload-button + drag-drop handlers were being wired in `setupListener()` (page init) but the elements live inside `buildListenerViewSkeleton` (lazy on first activation). Moved all dynamic-element wiring into the skeleton builder.
+- **Listener: audio file upload mode** (alternative to live mic). Upload button + drag-drop. `decodeAudioData` → `BufferSource` → analysers + destination. Small file player UI with play/pause/progress/X close. Mic and file mutually exclusive.
+- **Listener: removed the Voices section** (bass/chord/top tiles). Chroma loop simplified back to a single tight pass.
 - **Listener tuning auto-correction disabled** (over-correction risk). The previous compensation used `Math.round(offsetSemis)` on the kernel PC mapping. Since the offset is capped at ±50 cents (= 0.5 semis), `Math.round` was effectively a step function: 0 below 50¢, ±1 whole semitone at the boundary — guaranteed wrong-note shift at the edge. Removed the PC shift entirely. The estimation logic stays and surfaces in the UI as a passive `input ±N¢` readout (only when |offset| ≥ 12¢) so the user can decide to retune their gear.
 - **Instrument signal chains improved for 6 voices**. Piano + Clean Electric Guitar untouched (sounded good). Synth → "Poly Synth" with `PolySynth(MonoSynth)` + filter envelope + chorus + reverb. Electric Piano tuned to harmonicity 1.999 (metallic tine) with tremolo + chorus + room. Acoustic Guitar switched to `PolySynth(MonoSynth)` with strong filter envelope (true pluck) + body resonance peaks at 220 Hz / 1.5 kHz. Strings now have vibrato + deeper chorus + 4s hall + 100 Hz highpass. Organ switched to `PolySynth(FMSynth)` (harmonicity 2 = octave drawbar) + Leslie emulation (vibrato + tremolo). Distorted Guitar got a pre-distortion mid-boost (Tube-Screamer "honk") + ping-pong delay stereo widener.
 - **Listener accuracy — Tier 2 + log-frequency CQT-style chroma (Tier 3 #8)**:
