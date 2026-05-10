@@ -663,6 +663,8 @@
   .notes-modal-sa-group[hidden] { display: none; }
   .notes-modal-sa-label { font-size: 11px; color: var(--muted); font-family: var(--font-mono); letter-spacing: 0.4px; }
   .notes-modal-sa-select { font-family: var(--font-mono); font-size: 11.5px; padding: 3px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+  .notes-modal-sa-auto { font-family: var(--font-mono); font-size: 9.5px; color: var(--accent-2); padding: 1px 5px; background: var(--accent-2-soft); border: 1px solid var(--accent-2); border-radius: 3px; letter-spacing: 0.6px; text-transform: uppercase; cursor: help; }
+  .notes-modal-sa-auto[hidden] { display: none; }
   .notes-modal-zoom-group { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
   .notes-modal-zoom { width: 28px; height: 26px; padding: 0; background: transparent; border: none; color: var(--text-2); font-size: 16px; font-weight: 700; cursor: pointer; border-radius: 5px; transition: all 0.12s; }
   .notes-modal-zoom:hover { color: var(--accent); background: var(--accent-soft); }
@@ -1068,6 +1070,7 @@
           <option value="10">A♯</option>
           <option value="11">B</option>
         </select>
+        <span class="notes-modal-sa-auto" id="notes-modal-sa-auto" title="Auto-detected from the song's key">auto</span>
       </div>
       <div class="notes-modal-zoom-group">
         <button class="notes-modal-zoom" data-zoom="-" title="Stretch less (zoom out)">−</button>
@@ -5827,6 +5830,7 @@ const splitterModalState = {
   rafId: null,
   notation: 'western',     // 'western' | 'sargam' | 'devanagari'
   sa: 0,                   // tonic pitch class (0=C..11=B) when notation != western
+  saAutoDetected: true,    // true until user manually picks Sa via the dropdown
 };
 
 // 12 swaras (semitones from Sa). Komal/sudh/tivra naming convention:
@@ -5869,6 +5873,13 @@ function splitterOpenNotesModal(stemId) {
   const wrap = document.getElementById('notes-modal-track-wrap');
   const visibleW = wrap ? Math.max(600, wrap.clientWidth - 40) : 1200;
   splitterModalState.pxPerSec = Math.max(30, Math.min(200, visibleW / dur));
+  // Auto-set Sa from detected key (unless user has overridden via the dropdown)
+  if (splitterModalState.saAutoDetected && splitterState.detectedKey) {
+    splitterModalState.sa = splitterState.detectedKey.root | 0;
+    const saSelect = document.getElementById('notes-modal-sa-select');
+    if (saSelect) saSelect.value = String(splitterModalState.sa);
+  }
+  splitterUpdateSaAutoBadge();
 
   const def = splitterStems().find(s => s.id === stemId);
   const isMono = (stemId === 'bass' || stemId === 'vocals');
@@ -6128,6 +6139,7 @@ function splitterSetupNotesModal() {
         b.classList.toggle('is-active', b.dataset.mode === splitterModalState.notation));
       const saGroup = document.getElementById('notes-modal-sa-group');
       if (saGroup) saGroup.hidden = (splitterModalState.notation === 'western');
+      splitterUpdateSaAutoBadge();
       splitterRenderNotesModal();
     };
   });
@@ -6136,6 +6148,8 @@ function splitterSetupNotesModal() {
   if (saSelect) {
     saSelect.onchange = () => {
       splitterModalState.sa = parseInt(saSelect.value, 10) || 0;
+      splitterModalState.saAutoDetected = false; // user manually picked Sa
+      splitterUpdateSaAutoBadge();
       splitterRenderNotesModal();
     };
   }
@@ -6195,6 +6209,18 @@ function splitterSetupNotesModal() {
       splitterTogglePlay();
     }
   });
+}
+
+// Show / hide the small "auto" badge next to the Sa selector. Visible only
+// when (a) we're in a sargam mode AND (b) Sa was auto-picked from the
+// detected song key (not manually overridden).
+function splitterUpdateSaAutoBadge() {
+  const badge = document.getElementById('notes-modal-sa-auto');
+  if (!badge) return;
+  const visible = splitterModalState.notation !== 'western'
+    && splitterModalState.saAutoDetected
+    && !!splitterState.detectedKey;
+  badge.hidden = !visible;
 }
 
 // Zoom while keeping the time under `anchorScreenX` stable on screen.
@@ -6391,12 +6417,25 @@ async function splitterAnalyzeStems() {
     stem.waveformPeaks = splitterExtractPeaks(stem.buffer, 400);
   }
   splitterRenderAllTimelines();
-  // Phase 2: chord/note events (heavier — may take a few seconds per stem)
+  // Phase 2: detect song key from the original mix (used to auto-set Sa in
+  // the notes modal). Quick: ~1-2 s on typical hardware.
+  const keyBuffer = splitterState.fileBuffer; // analyse the full original mix
+  if (keyBuffer) {
+    splitterSetStatus('detecting key…', 'busy', 0.996);
+    await splitterYield();
+    try {
+      splitterState.detectedKey = await splitterDetectSongKey(keyBuffer);
+    } catch (e) {
+      console.warn('[Splitter] key detection failed', e);
+      splitterState.detectedKey = null;
+    }
+  }
+  // Phase 3: chord/note events (heavier — may take a few seconds per stem)
   for (let i = 0; i < stems.length; i++) {
     const def = stems[i];
     const stem = splitterState.stems[def.id];
     if (!stem || !stem.buffer) continue;
-    splitterSetStatus('analysing ' + def.name + '…', 'busy', 0.995);
+    splitterSetStatus('analysing ' + def.name + '…', 'busy', 0.997);
     await splitterYield();
     stem.events = await splitterAnalyseStemEvents(def.id, stem.buffer);
     splitterRenderTimelineEvents(def.id);
@@ -6560,6 +6599,90 @@ async function splitterDetectMonophonicNotes(buffer, opts) {
   }
   if (curMidi !== null) events.push({ start: curStart, end: numFrames * opts.hopSec, label: noteName(curMidi), midi: curMidi });
   return events.filter(ev => (ev.end - ev.start) >= opts.minEventSec);
+}
+
+// ---- Offline song-key detection (Krumhansl-Schmuckler) -------------------
+// Aggregate chroma across the whole song, then correlate against the 24
+// canonical key profiles (12 major + 12 minor) using empirically-derived
+// pitch-class probe-tone weights (Krumhansl 1990). Returns {root, mode,
+// confidence}. Used to auto-set Sa in the notes modal.
+const SPLITTER_KS_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+const SPLITTER_KS_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+
+async function splitterDetectSongKey(buffer) {
+  // Fast pass: 2048-pt FFT, 50% overlap. For a 3-min song ~7800 frames,
+  // each pass is light (kernel chroma sum). ~1-2 s on a typical CPU.
+  const fftSize = 2048;
+  const hopSize = 1024;
+  const sr = buffer.sampleRate;
+  const audio = (buffer.numberOfChannels === 1)
+    ? buffer.getChannelData(0)
+    : splitterMixToMono(buffer);
+  if (audio.length < fftSize) return { root: 0, mode: 'major', confidence: 0 };
+  const numFrames = Math.floor((audio.length - fftSize) / hopSize) + 1;
+  const kernels = buildListenerNoteKernels(sr, fftSize);
+  const window = splitterHannWindow(fftSize);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const numBins = fftSize / 2 + 1;
+  const mags = new Float32Array(numBins);
+
+  // Accumulate chroma across entire song
+  const totalChroma = new Float32Array(12);
+  for (let f = 0; f < numFrames; f++) {
+    const start = f * hopSize;
+    for (let i = 0; i < fftSize; i++) { re[i] = audio[start + i] * window[i]; im[i] = 0; }
+    splitterFFT(re, im);
+    for (let i = 0; i < numBins; i++) mags[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+    // Per-frame chroma normalization (so loud sections don't dominate)
+    const frameChroma = new Float32Array(12);
+    for (const k of kernels) {
+      let energy = 0;
+      for (let j = 0; j < k.bins.length; j++) energy += mags[k.bins[j][0]] * k.bins[j][1];
+      frameChroma[k.pc] += energy;
+    }
+    let maxV = 0;
+    for (let i = 0; i < 12; i++) if (frameChroma[i] > maxV) maxV = frameChroma[i];
+    if (maxV > 0) {
+      for (let i = 0; i < 12; i++) totalChroma[i] += frameChroma[i] / maxV;
+    }
+    if ((f & 63) === 0) await splitterYield();
+  }
+  // Normalize aggregate
+  let total = 0;
+  for (let i = 0; i < 12; i++) total += totalChroma[i];
+  if (total <= 0) return { root: 0, mode: 'major', confidence: 0 };
+  for (let i = 0; i < 12; i++) totalChroma[i] /= total;
+
+  // Pearson correlation between observed chroma (rotated by -root) and each profile
+  function pearson(observed, profile) {
+    let mO = 0, mP = 0;
+    for (let i = 0; i < 12; i++) { mO += observed[i]; mP += profile[i]; }
+    mO /= 12; mP /= 12;
+    let num = 0, denO = 0, denP = 0;
+    for (let i = 0; i < 12; i++) {
+      const dO = observed[i] - mO;
+      const dP = profile[i] - mP;
+      num += dO * dP;
+      denO += dO * dO;
+      denP += dP * dP;
+    }
+    return (denO === 0 || denP === 0) ? 0 : num / Math.sqrt(denO * denP);
+  }
+
+  let bestRoot = 0, bestMode = 'major', bestScore = -Infinity, secondBest = -Infinity;
+  for (let root = 0; root < 12; root++) {
+    const rotated = new Float32Array(12);
+    for (let i = 0; i < 12; i++) rotated[i] = totalChroma[(i + root) % 12];
+    const majorScore = pearson(rotated, SPLITTER_KS_MAJOR);
+    const minorScore = pearson(rotated, SPLITTER_KS_MINOR);
+    if (majorScore > bestScore) { secondBest = bestScore; bestScore = majorScore; bestRoot = root; bestMode = 'major'; }
+    else if (majorScore > secondBest) { secondBest = majorScore; }
+    if (minorScore > bestScore) { secondBest = bestScore; bestScore = minorScore; bestRoot = root; bestMode = 'minor'; }
+    else if (minorScore > secondBest) { secondBest = minorScore; }
+  }
+  const confidence = Math.max(0, Math.min(1, bestScore - secondBest));
+  return { root: bestRoot, mode: bestMode, confidence };
 }
 
 // ---- Offline chord detection ---------------------------------------------
@@ -7153,6 +7276,8 @@ async function splitterLoadFile(file) {
   splitterCloseStems();
   splitterState.fileBuffer = null;
   splitterState.fileName = null;
+  splitterState.detectedKey = null;
+  splitterModalState.saAutoDetected = true; // re-enable auto-Sa for the new song
   splitterSetStatus('decoding "' + file.name + '"…', 'busy');
   // Ensure audio context
   if (!splitterState.audioCtx) {
