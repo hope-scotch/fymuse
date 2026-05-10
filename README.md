@@ -4,23 +4,30 @@ A single-file music-theory + songwriting + audio-analysis tool. Open `index.html
 
 ## Run locally
 
-- **Plain double-click `index.html`** — works for everything *except* the Splitter's ML (Demucs) mode, which needs cross-origin isolation.
-- **For Splitter ML mode locally:** run `python3 server.py` and open `http://localhost:8765/`. The included server adds the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers that ONNX Runtime Web needs for multi-threaded WASM (~3–5 min per song instead of ~15–25 min single-threaded).
-- **For "Load from URL" with YouTube links locally:** install yt-dlp (`pip install --user yt-dlp` and `brew install ffmpeg` if you're on macOS), then run `server.py`. It exposes `/api/yt?url=` which spawns yt-dlp under the hood.
+- **Plain double-click `index.html`** — works for everything *except* the Splitter's ML mode and the URL feature for YouTube links.
+- **For Splitter ML mode + YouTube URL load:** run `python3 server.py` and open `http://localhost:8765/`.
+  - The server adds the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers that ONNX Runtime Web needs for multi-threaded WASM (~3–5 min per song instead of ~15–25 min single-threaded).
+  - It also exposes `/api/yt?url=` and `/api/proxy?url=` so the Splitter's URL feature can pull from YouTube / SoundCloud / Bandcamp / direct audio hosts.
+  - Requires `yt-dlp` for YouTube extraction: `brew install yt-dlp ffmpeg` (or `pip install --user yt-dlp`).
 
 ## Deploy to Cloudflare Pages
 
 1. Push this repo to GitHub/GitLab.
 2. In Cloudflare Pages, create a new project from the repo.
-3. **Build command:** `npm install`
+3. **Build command:** *(leave blank — no build step)*
 4. **Output directory:** `/` (or leave blank).
-5. **Compatibility flags** (Settings → Functions → Compatibility flags): add `nodejs_compat`. The `wrangler.toml` in this repo already declares it, so manual configuration is only a fallback.
-6. Deploy.
+5. Deploy.
 
-The `_headers` file sets COOP/COEP automatically so multi-threaded WASM works out of the box. The Pages Functions in `functions/api/` add:
+The `_headers` file sets COOP/COEP automatically so the deployed site has full multi-threaded WASM out of the box. The Pages Function in `functions/api/proxy.js` adds a same-origin CORS proxy for direct audio URLs.
 
-- `/api/proxy?url=<encoded>` — generic CORS proxy for direct audio file URLs.
-- `/api/yt?url=<encoded>` — YouTube extractor (uses [`youtubei.js`](https://github.com/LuanRT/YouTube.js); pure JS, no subprocess). YouTube Music URLs work; other extractor-needed sites do not — those need yt-dlp on a real container.
+**What works on the deployed site:**
+- Drag-drop / Upload audio files (any format the browser can decode)
+- URL load from direct audio links (mp3, wav, m4a, etc.) — including CORS-blocked hosts via `/api/proxy`
+- Full Splitter pipeline (Demucs ML separation, key detection, per-stem chord/note analysis)
+- All chord theory tools (Playground, Path Finder, Melody Mode, Songwriter, Listener)
+
+**What doesn't work on the deployed site:**
+- YouTube / YT Music / SoundCloud / Bandcamp URLs — these need yt-dlp running on a residential IP. YouTube blocks all known cloud datacenter IPs. Use local mode (`server.py`) for these.
 
 ## Files
 
@@ -28,12 +35,9 @@ The `_headers` file sets COOP/COEP automatically so multi-threaded WASM works ou
 |---|---|
 | `index.html` | The whole app (HTML + CSS + JS). |
 | `logo.png` | Brand mark used in the header. |
-| `server.py` | Tiny local dev server (COOP/COEP + `/api/proxy` + `/api/yt` via yt-dlp). |
+| `server.py` | Tiny local dev server. COOP/COEP for ML mode + `/api/proxy` for direct URL CORS bypass + `/api/yt` for yt-dlp YouTube extraction. |
 | `_headers` | Cloudflare Pages response-header config. |
-| `wrangler.toml` | CF Pages Functions runtime config (`nodejs_compat`). |
-| `package.json` | Declares `youtubei.js` dependency for the deployed `/api/yt` endpoint. |
 | `functions/api/proxy.js` | CF Pages Function: same-origin proxy for direct audio URLs. |
-| `functions/api/yt.js` | CF Pages Function: YouTube audio extractor via youtubei.js. |
 | `MEMORY.md` | Engineering notes / architecture / change history. |
 
 ## Splitter ML mode notes
