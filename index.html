@@ -655,10 +655,15 @@
   .notes-modal-title { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
   .notes-modal-title i { color: var(--accent-2); font-size: 22px; }
   .notes-modal-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
-  .notes-modal-zoom-group { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; padding: 3px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
+  .notes-modal-zoom-group { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; }
   .notes-modal-zoom { width: 28px; height: 26px; padding: 0; background: transparent; border: none; color: var(--text-2); font-size: 16px; font-weight: 700; cursor: pointer; border-radius: 5px; transition: all 0.12s; }
   .notes-modal-zoom:hover { color: var(--accent); background: var(--accent-soft); }
-  .notes-modal-zoom-level { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); min-width: 42px; text-align: center; }
+  .notes-modal-zoom-slider { width: 140px; cursor: pointer; -webkit-appearance: none; appearance: none; background: transparent; }
+  .notes-modal-zoom-slider::-webkit-slider-runnable-track { height: 4px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 2px; }
+  .notes-modal-zoom-slider::-moz-range-track { height: 4px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 2px; }
+  .notes-modal-zoom-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; background: var(--accent); border: 2px solid var(--text); border-radius: 50%; margin-top: -6px; cursor: pointer; }
+  .notes-modal-zoom-slider::-moz-range-thumb { width: 14px; height: 14px; background: var(--accent); border: 2px solid var(--text); border-radius: 50%; cursor: pointer; }
+  .notes-modal-zoom-level { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); min-width: 50px; text-align: center; }
   .notes-modal-close { width: 32px; height: 32px; padding: 0; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s; }
   .notes-modal-close:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
   .notes-modal-help { padding: 8px 20px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); }
@@ -1035,9 +1040,10 @@
       <h3 class="notes-modal-title" id="notes-modal-title">Notes</h3>
       <span class="notes-modal-meta" id="notes-modal-meta"></span>
       <div class="notes-modal-zoom-group">
-        <button class="notes-modal-zoom" data-zoom="-" title="Zoom out">−</button>
+        <button class="notes-modal-zoom" data-zoom="-" title="Stretch less (zoom out)">−</button>
+        <input type="range" class="notes-modal-zoom-slider" id="notes-modal-zoom-slider" min="10" max="2000" value="60" step="1" title="Stretch the timeline horizontally">
+        <button class="notes-modal-zoom" data-zoom="+" title="Stretch more (zoom in)">+</button>
         <span class="notes-modal-zoom-level" id="notes-modal-zoom-level">100%</span>
-        <button class="notes-modal-zoom" data-zoom="+" title="Zoom in">+</button>
       </div>
       <button class="notes-modal-close" id="notes-modal-close" title="Close (Esc)"><i class="ph-duotone ph-x"></i></button>
     </div>
@@ -5830,11 +5836,22 @@ function splitterCloseNotesModal() {
   if (modal) modal.hidden = true;
 }
 
+const SPLITTER_ZOOM_MIN = 10;
+const SPLITTER_ZOOM_MAX = 2000;
+
 function splitterModalZoom(direction) {
   const factor = direction === '+' ? 1.5 : 1 / 1.5;
   let newZoom = splitterModalState.pxPerSec * factor;
-  newZoom = Math.max(20, Math.min(600, newZoom));
-  splitterModalState.pxPerSec = newZoom;
+  newZoom = Math.max(SPLITTER_ZOOM_MIN, Math.min(SPLITTER_ZOOM_MAX, newZoom));
+  splitterSetModalZoom(newZoom);
+}
+
+// Single source of truth for zoom — keeps slider, +/- buttons, percentage
+// readout, and the renderer all in sync.
+function splitterSetModalZoom(pxPerSec) {
+  splitterModalState.pxPerSec = Math.max(SPLITTER_ZOOM_MIN, Math.min(SPLITTER_ZOOM_MAX, pxPerSec));
+  const slider = document.getElementById('notes-modal-zoom-slider');
+  if (slider) slider.value = Math.round(splitterModalState.pxPerSec);
   splitterRenderNotesModal();
 }
 
@@ -5876,9 +5893,11 @@ function splitterRenderNotesModal() {
   const cursorEl = document.getElementById('notes-modal-cursor');
   const trackEl = document.getElementById('notes-modal-track');
 
-  // Update zoom readout regardless
+  // Update zoom readout + slider position regardless
   const zoomEl = document.getElementById('notes-modal-zoom-level');
   if (zoomEl) zoomEl.textContent = Math.round((pxPerSec / 60) * 100) + '%';
+  const sliderEl = document.getElementById('notes-modal-zoom-slider');
+  if (sliderEl && document.activeElement !== sliderEl) sliderEl.value = Math.round(pxPerSec);
 
   if (events.length === 0) {
     if (eventsEl) eventsEl.innerHTML = '<div class="notes-modal-empty">No events detected for this stem.</div>';
@@ -6022,7 +6041,7 @@ function splitterStartModalCursor() {
 }
 
 function splitterSetupNotesModal() {
-  // Wire close button + backdrop click + ESC + zoom buttons. Idempotent.
+  // Wire close button + backdrop click + ESC + zoom buttons + zoom slider. Idempotent.
   const closeBtn = document.getElementById('notes-modal-close');
   if (closeBtn) closeBtn.onclick = () => splitterCloseNotesModal();
   const backdrop = document.getElementById('notes-modal-backdrop');
@@ -6030,6 +6049,13 @@ function splitterSetupNotesModal() {
   document.querySelectorAll('.notes-modal-zoom').forEach(btn => {
     btn.onclick = () => splitterModalZoom(btn.dataset.zoom);
   });
+  const slider = document.getElementById('notes-modal-zoom-slider');
+  if (slider) {
+    slider.oninput = () => {
+      splitterModalState.pxPerSec = Math.max(SPLITTER_ZOOM_MIN, Math.min(SPLITTER_ZOOM_MAX, parseInt(slider.value, 10) || 60));
+      splitterRenderNotesModal();
+    };
+  }
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && splitterModalState.open) splitterCloseNotesModal();
   });
