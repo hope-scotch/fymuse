@@ -636,6 +636,45 @@
   .stem-track .stem-name { cursor: pointer; }
   .stem-track:hover .stem-name { color: var(--accent); }
 
+  /* Generic aux modal (history, URL prompt) */
+  .splitter-aux-modal { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; }
+  .splitter-aux-modal[hidden] { display: none; }
+  .splitter-aux-backdrop { position: absolute; inset: 0; background: rgba(8,8,15,0.74); backdrop-filter: blur(6px); }
+  .splitter-aux-panel { position: relative; width: min(720px, 92vw); max-height: 80vh; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden; }
+  .splitter-aux-panel-narrow { width: min(560px, 92vw); }
+  .splitter-aux-header { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--panel-2); }
+  .splitter-aux-header h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .splitter-aux-header h3 i { color: var(--accent-2); font-size: 20px; }
+  .splitter-aux-meta { font-family: var(--font-mono); font-size: 11px; color: var(--muted); flex: 1; }
+  .splitter-aux-clear { padding: 5px 9px; background: var(--panel); color: var(--text-2); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; }
+  .splitter-aux-clear:hover { color: var(--dominant); border-color: var(--dominant); }
+  .splitter-aux-close { width: 30px; height: 30px; padding: 0; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .splitter-aux-close:hover { color: var(--accent); border-color: var(--accent); }
+  .splitter-aux-help { padding: 10px 18px; font-size: 11.5px; color: var(--muted); border-bottom: 1px solid var(--border); line-height: 1.5; }
+  .splitter-aux-help em { color: var(--text-2); font-style: normal; font-weight: 600; }
+
+  /* History list */
+  .splitter-history-list { flex: 1; overflow-y: auto; padding: 8px 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .splitter-history-empty { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 12.5px; }
+  .splitter-history-item { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; transition: border-color 0.12s; }
+  .splitter-history-item:hover { border-color: var(--accent); }
+  .splitter-history-info { min-width: 0; }
+  .splitter-history-name { font-size: 13px; color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .splitter-history-sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .splitter-history-load { padding: 6px 10px; background: var(--accent); color: #1a1a1a; border: none; border-radius: 5px; font-weight: 600; font-size: 11.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: filter 0.12s; }
+  .splitter-history-load:hover { filter: brightness(1.1); }
+  .splitter-history-delete { width: 30px; height: 30px; padding: 0; background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .splitter-history-delete:hover { color: var(--dominant); border-color: var(--dominant); }
+
+  /* URL prompt */
+  .splitter-url-form { display: flex; gap: 8px; padding: 16px 18px; }
+  .splitter-url-input { flex: 1; min-width: 0; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 5px; font-family: var(--font-mono); font-size: 12.5px; }
+  .splitter-url-input:focus { border-color: var(--accent); outline: none; }
+  .splitter-url-form .primary { padding: 8px 16px; background: var(--accent); color: #1a1a1a; border: none; border-radius: 5px; font-weight: 600; cursor: pointer; }
+  .splitter-url-form .primary:hover { filter: brightness(1.1); }
+  .splitter-url-error { margin: 0 18px 16px; padding: 10px 12px; background: rgba(239,68,68,0.08); border: 1px solid #ef4444; border-radius: 5px; color: #ff8888; font-size: 11.5px; line-height: 1.5; }
+  .splitter-url-error[hidden] { display: none; }
+
   /* Processing modal — overlays during separation + analysis */
   .processing-modal { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; }
   .processing-modal[hidden] { display: none; }
@@ -1108,6 +1147,38 @@
       <li data-phase="analyse"><span class="processing-mark">○</span> <span class="processing-label">Analysing per-stem chords / notes</span></li>
     </ul>
     <p class="processing-hint" id="processing-hint">First-run model download takes a while. After that, only inference time matters.</p>
+  </div>
+</div>
+
+<!-- Splitter history modal — browse / reload / delete past splits -->
+<div class="splitter-aux-modal" id="splitter-history-modal" hidden>
+  <div class="splitter-aux-backdrop" data-close="history"></div>
+  <div class="splitter-aux-panel">
+    <div class="splitter-aux-header">
+      <h3><i class="ph-duotone ph-clock-counter-clockwise"></i> Split history</h3>
+      <span class="splitter-aux-meta" id="splitter-history-meta"></span>
+      <button class="splitter-aux-clear" id="splitter-history-clear" hidden><i class="ph-duotone ph-trash sz-sm"></i> Clear all</button>
+      <button class="splitter-aux-close" data-close="history" title="Close (Esc)"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div class="splitter-aux-help">Click any song to instantly reload its stems — no Demucs, no waiting.</div>
+    <div class="splitter-history-list" id="splitter-history-list"></div>
+  </div>
+</div>
+
+<!-- Splitter URL prompt — load from a direct audio link -->
+<div class="splitter-aux-modal" id="splitter-url-modal" hidden>
+  <div class="splitter-aux-backdrop" data-close="url"></div>
+  <div class="splitter-aux-panel splitter-aux-panel-narrow">
+    <div class="splitter-aux-header">
+      <h3><i class="ph-duotone ph-link"></i> Load from URL</h3>
+      <button class="splitter-aux-close" data-close="url" title="Close (Esc)"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div class="splitter-aux-help">Paste a direct link to an audio file (.mp3 / .wav / .m4a / .ogg / .flac). The server must allow cross-origin fetch (most CDNs do; YouTube / Spotify / SoundCloud do <em>not</em> — those need a backend).</div>
+    <div class="splitter-url-form">
+      <input type="url" class="splitter-url-input" id="splitter-url-input" placeholder="https://example.com/song.mp3" spellcheck="false" autocomplete="off">
+      <button class="primary" id="splitter-url-load" type="button">Load</button>
+    </div>
+    <div class="splitter-url-error" id="splitter-url-error" hidden></div>
   </div>
 </div>
 
@@ -5749,6 +5820,8 @@ function buildSplitterViewSkeleton(root) {
         <div class="splitter-controls">
           <button class="primary" id="splitter-upload-btn" title="Upload a song (or drag-drop one here)"><i class="ph-duotone ph-upload-simple sz-sm"></i> Upload song</button>
           <input type="file" id="splitter-file-input" accept="audio/*" hidden>
+          <button class="secondary" id="splitter-url-btn" title="Load from a direct audio URL"><i class="ph-duotone ph-link sz-sm"></i> URL</button>
+          <button class="secondary" id="splitter-history-btn" title="Browse previously processed songs"><i class="ph-duotone ph-clock-counter-clockwise sz-sm"></i> History</button>
         </div>
       </div>
     </div>
@@ -6389,6 +6462,183 @@ function splitterStartModalCursor() {
     splitterModalState.rafId = requestAnimationFrame(tick);
   }
   tick();
+}
+
+// ---- History modal: browse / reload / delete past splits ---------------
+async function splitterOpenHistoryModal() {
+  const list = await splitterCacheList();
+  list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  const wrap = document.getElementById('splitter-history-list');
+  const meta = document.getElementById('splitter-history-meta');
+  const clearBtn = document.getElementById('splitter-history-clear');
+  const modal = document.getElementById('splitter-history-modal');
+
+  let totalBytes = 0;
+  for (const e of list) totalBytes += (e.bytes || 0);
+
+  if (!list.length) {
+    if (wrap) wrap.innerHTML = '<div class="splitter-history-empty">No saved splits yet — process a song to start filling this list.</div>';
+    if (meta) meta.textContent = '';
+    if (clearBtn) clearBtn.hidden = true;
+  } else {
+    const esc = (s) => String(s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
+    if (wrap) wrap.innerHTML = list.map(e => {
+      const date = new Date(e.createdAt || 0);
+      const dateStr = date.toLocaleString();
+      const dur = splitterFormatTime(e.duration || 0);
+      const mb = ((e.bytes || 0) / 1048576).toFixed(1) + ' MB';
+      const stemCount = e.stems ? Object.keys(e.stems).length : 0;
+      return '<div class="splitter-history-item" data-hash="' + esc(e.hash) + '">'
+        + '<div class="splitter-history-info">'
+        +   '<div class="splitter-history-name">' + esc(e.fileName || '(untitled)') + '</div>'
+        +   '<div class="splitter-history-sub">' + dur + ' · ' + stemCount + ' stems · ' + mb + ' · ' + dateStr + '</div>'
+        + '</div>'
+        + '<button class="splitter-history-load" data-hash="' + esc(e.hash) + '"><i class="ph-duotone ph-play sz-sm"></i> Load</button>'
+        + '<button class="splitter-history-delete" data-hash="' + esc(e.hash) + '" title="Delete this split"><i class="ph-duotone ph-trash sz-sm"></i></button>'
+        + '</div>';
+    }).join('');
+    if (meta) meta.textContent = list.length + ' song' + (list.length !== 1 ? 's' : '') + ' · ' + (totalBytes / 1048576).toFixed(1) + ' MB';
+    if (clearBtn) clearBtn.hidden = false;
+    // Wire load + delete
+    if (wrap) {
+      wrap.querySelectorAll('.splitter-history-load').forEach(btn => {
+        btn.onclick = async () => {
+          const hash = btn.dataset.hash;
+          const entry = await splitterCacheGet(hash);
+          if (!entry) return;
+          splitterCloseAuxModal('history');
+          await splitterReloadFromHistory(entry);
+        };
+      });
+      wrap.querySelectorAll('.splitter-history-delete').forEach(btn => {
+        btn.onclick = async () => {
+          const hash = btn.dataset.hash;
+          if (!confirm('Delete this saved split?')) return;
+          await splitterCacheDelete(hash);
+          splitterOpenHistoryModal(); // refresh
+        };
+      });
+    }
+  }
+  if (modal) modal.hidden = false;
+}
+
+// Reload a previously processed song without going through file upload —
+// used by the History modal's "Load" buttons.
+async function splitterReloadFromHistory(entry) {
+  if (!splitterState.audioCtx) {
+    const Ctor = (typeof Tone !== 'undefined' && Tone.context && Tone.context.rawContext)
+      ? null : (window.AudioContext || window.webkitAudioContext);
+    if (Tone && Tone.context && Tone.context.rawContext) {
+      splitterState.audioCtx = Tone.context.rawContext;
+      if (splitterState.audioCtx.state === 'suspended') await splitterState.audioCtx.resume();
+    } else if (Ctor) {
+      splitterState.audioCtx = new Ctor();
+    }
+  }
+  splitterStopAll();
+  splitterCloseStems();
+  splitterState.fileName = entry.fileName || 'cached song';
+  splitterState.duration = entry.duration || 0;
+  splitterState.fileHash = entry.hash;
+  splitterSetStatus('loading "' + (entry.fileName || 'cached') + '" from history…', 'busy', 0.5);
+  await splitterLoadFromCache(entry);
+  // No real fileBuffer — use one of the stems as a stand-in so existing UI
+  // checks (which test fileBuffer existence) keep working.
+  const firstId = Object.keys(splitterState.stems)[0];
+  splitterState.fileBuffer = (firstId && splitterState.stems[firstId]) ? splitterState.stems[firstId].buffer : null;
+  splitterSetStatus('ready · ' + splitterFormatTime(entry.duration || 0) + ' · cached', 'ready');
+  splitterUpdateStatusUI();
+}
+
+// ---- URL prompt: load from a direct audio link --------------------------
+function splitterOpenUrlModal() {
+  const modal = document.getElementById('splitter-url-modal');
+  const err = document.getElementById('splitter-url-error');
+  const input = document.getElementById('splitter-url-input');
+  if (err) err.hidden = true;
+  if (modal) modal.hidden = false;
+  if (input) { input.value = ''; setTimeout(() => input.focus(), 80); }
+}
+
+async function splitterLoadFromUrl(url) {
+  const errEl = document.getElementById('splitter-url-error');
+  const showErr = (msg) => { if (errEl) { errEl.innerHTML = msg; errEl.hidden = false; } };
+  if (!url || !/^https?:\/\//i.test(url)) {
+    showErr('Please paste a full <code>https://…</code> URL.');
+    return;
+  }
+  // Ensure audio context
+  if (!splitterState.audioCtx) {
+    const ctx = (typeof Tone !== 'undefined' && Tone.context && Tone.context.rawContext)
+      ? Tone.context.rawContext
+      : new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    splitterState.audioCtx = ctx;
+  }
+  splitterCloseAuxModal('url');
+  splitterSetStatus('fetching ' + url + '…', 'busy', 0.02);
+  let bytes;
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+    bytes = await res.arrayBuffer();
+  } catch (e) {
+    splitterSetStatus('fetch failed: ' + (e.message || e) + ' (CORS? non-audio? wrong URL?)', 'error');
+    return;
+  }
+  // Build a synthetic File from the bytes so we reuse splitterLoadFile's
+  // hash + cache + decode pipeline unchanged.
+  const namePart = (url.split('/').pop() || 'remote-audio').split('?')[0] || 'remote-audio';
+  const blob = new Blob([bytes], { type: 'audio/*' });
+  const fakeFile = new File([blob], namePart, { type: blob.type });
+  return splitterLoadFile(fakeFile);
+}
+
+function splitterCloseAuxModal(which) {
+  if (which === 'history' || !which) {
+    const m = document.getElementById('splitter-history-modal');
+    if (m) m.hidden = true;
+  }
+  if (which === 'url' || !which) {
+    const m = document.getElementById('splitter-url-modal');
+    if (m) m.hidden = true;
+  }
+}
+
+function splitterSetupAuxModals() {
+  // History
+  const histBtn = document.getElementById('splitter-history-btn');
+  if (histBtn) histBtn.onclick = () => splitterOpenHistoryModal();
+  const histClear = document.getElementById('splitter-history-clear');
+  if (histClear) histClear.onclick = async () => {
+    if (!confirm('Delete all saved splits? This cannot be undone.')) return;
+    await splitterCacheClear();
+    splitterOpenHistoryModal();
+  };
+  // URL prompt
+  const urlBtn = document.getElementById('splitter-url-btn');
+  if (urlBtn) urlBtn.onclick = () => splitterOpenUrlModal();
+  const urlLoad = document.getElementById('splitter-url-load');
+  const urlInput = document.getElementById('splitter-url-input');
+  if (urlLoad) urlLoad.onclick = () => splitterLoadFromUrl((urlInput && urlInput.value || '').trim());
+  if (urlInput) urlInput.onkeydown = (e) => {
+    if (e.key === 'Enter') splitterLoadFromUrl(urlInput.value.trim());
+    if (e.key === 'Escape') splitterCloseAuxModal('url');
+  };
+  // Close handlers — backdrop, X buttons
+  document.querySelectorAll('[data-close]').forEach(el => {
+    el.onclick = () => splitterCloseAuxModal(el.dataset.close);
+  });
+  // ESC closes whichever aux is open
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const histOpen = !document.getElementById('splitter-history-modal').hidden;
+    const urlOpen  = !document.getElementById('splitter-url-modal').hidden;
+    if (histOpen) splitterCloseAuxModal('history');
+    if (urlOpen)  splitterCloseAuxModal('url');
+  });
 }
 
 function splitterSetupNotesModal() {
@@ -7207,6 +7457,166 @@ function splitterUpdateStatusUI() {
   if (trackName) trackName.textContent = splitterState.fileName || '—';
 }
 
+// ---- IndexedDB cache: skip Demucs on songs we've already processed -----
+// Each entry is keyed by SHA-256 of the uploaded file's bytes. Stems are
+// stored as plain Float32Array channels + sampleRate so the cache survives
+// across sessions and reloads instantly (no AudioBuffer serialization
+// gymnastics).
+const SPLITTER_DB_NAME = 'fymuse-splitter-cache';
+const SPLITTER_DB_STORE = 'splits';
+const SPLITTER_DB_VERSION = 1;
+let splitterDBHandle = null;
+
+function splitterOpenDB() {
+  if (splitterDBHandle) return Promise.resolve(splitterDBHandle);
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB unavailable'));
+    const req = indexedDB.open(SPLITTER_DB_NAME, SPLITTER_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(SPLITTER_DB_STORE)) {
+        db.createObjectStore(SPLITTER_DB_STORE, { keyPath: 'hash' });
+      }
+    };
+    req.onsuccess = () => { splitterDBHandle = req.result; resolve(splitterDBHandle); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function splitterHashBytes(arrayBuffer) {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    // Fallback: cheap content fingerprint (file size + sampled bytes)
+    const view = new Uint8Array(arrayBuffer);
+    let h = view.length >>> 0;
+    const step = Math.max(1, Math.floor(view.length / 4096));
+    for (let i = 0; i < view.length; i += step) h = ((h << 5) - h + view[i]) | 0;
+    return 'fp_' + view.length + '_' + (h >>> 0).toString(16);
+  }
+  const hash = await crypto.subtle.digest('SHA-256', arrayBuffer);
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function splitterCacheGet(hash) {
+  try {
+    const db = await splitterOpenDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction([SPLITTER_DB_STORE], 'readonly');
+      const req = tx.objectStore(SPLITTER_DB_STORE).get(hash);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { console.warn('[Splitter] cache get failed', e); return null; }
+}
+
+async function splitterCacheSave(hash) {
+  try {
+    const stems = {};
+    let totalBytes = 0;
+    for (const id of Object.keys(splitterState.stems)) {
+      const stem = splitterState.stems[id];
+      if (!stem || !stem.buffer) continue;
+      const channels = [];
+      for (let c = 0; c < stem.buffer.numberOfChannels; c++) {
+        // Plain Float32Array is structured-cloneable so IndexedDB stores it natively
+        channels.push(stem.buffer.getChannelData(c).slice());
+        totalBytes += channels[channels.length - 1].byteLength;
+      }
+      stems[id] = {
+        channels,
+        sampleRate: stem.buffer.sampleRate,
+        duration: stem.buffer.duration,
+        events: stem.events || [],
+        waveformPeaks: stem.waveformPeaks ? stem.waveformPeaks.slice() : null,
+        volume: stem.volume,
+      };
+    }
+    const entry = {
+      hash,
+      fileName: splitterState.fileName,
+      duration: splitterState.duration,
+      detectedKey: splitterState.detectedKey,
+      stems,
+      bytes: totalBytes,
+      createdAt: Date.now(),
+    };
+    const db = await splitterOpenDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction([SPLITTER_DB_STORE], 'readwrite');
+      const req = tx.objectStore(SPLITTER_DB_STORE).put(entry);
+      req.onsuccess = resolve;
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { console.warn('[Splitter] cache save failed', e); }
+}
+
+// Restore stems + events + detectedKey from a cache entry. Faster than the
+// full Demucs pipeline by ~3-5 minutes per song.
+async function splitterLoadFromCache(entry) {
+  const ctx = splitterState.audioCtx;
+  if (!ctx) return false;
+  splitterCloseStems();
+  splitterState.detectedKey = entry.detectedKey || null;
+  for (const id of Object.keys(entry.stems)) {
+    const sd = entry.stems[id];
+    const ch0 = sd.channels[0] instanceof Float32Array ? sd.channels[0] : new Float32Array(sd.channels[0]);
+    const buf = ctx.createBuffer(sd.channels.length, ch0.length, sd.sampleRate);
+    for (let c = 0; c < sd.channels.length; c++) {
+      const arr = sd.channels[c] instanceof Float32Array ? sd.channels[c] : new Float32Array(sd.channels[c]);
+      buf.copyToChannel(arr, c);
+    }
+    splitterState.stems[id] = {
+      buffer: buf,
+      source: null, gain: null,
+      muted: false, solo: false,
+      volume: (sd.volume != null) ? sd.volume : 0.7,
+      events: sd.events || [],
+      waveformPeaks: sd.waveformPeaks ? (sd.waveformPeaks instanceof Float32Array ? sd.waveformPeaks : new Float32Array(sd.waveformPeaks)) : null,
+    };
+    const slider = document.querySelector('.stem-volume[data-stem="' + id + '"]');
+    if (slider) slider.value = Math.round(splitterState.stems[id].volume * 100);
+  }
+  splitterRenderAllTimelines();
+  splitterUpdateMixerUI();
+  return true;
+}
+
+async function splitterCacheList() {
+  try {
+    const db = await splitterOpenDB();
+    return await new Promise((resolve) => {
+      const tx = db.transaction([SPLITTER_DB_STORE], 'readonly');
+      const req = tx.objectStore(SPLITTER_DB_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  } catch (e) { return []; }
+}
+
+async function splitterCacheDelete(hash) {
+  try {
+    const db = await splitterOpenDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction([SPLITTER_DB_STORE], 'readwrite');
+      const req = tx.objectStore(SPLITTER_DB_STORE).delete(hash);
+      req.onsuccess = resolve;
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { console.warn('[Splitter] cache delete failed', e); }
+}
+
+async function splitterCacheClear() {
+  try {
+    const db = await splitterOpenDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction([SPLITTER_DB_STORE], 'readwrite');
+      const req = tx.objectStore(SPLITTER_DB_STORE).clear();
+      req.onsuccess = resolve;
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { console.warn('[Splitter] cache clear failed', e); }
+}
+
 // ---- ML mode (Demucs ONNX via demucs-web library) -----------------------
 // Lazy-loads ONNX Runtime Web (UMD via script tag) and the demucs-web npm
 // library (ES module via esm.sh). Caches a single DemucsProcessor instance
@@ -7640,16 +8050,32 @@ async function splitterLoadFile(file) {
   }
   try {
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = await splitterState.audioCtx.decodeAudioData(arrayBuffer);
+    // Hash content first so identical-bytes uploads (re-uploaded same song,
+    // or pulled via URL etc.) hit the cache regardless of filename.
+    const hash = await splitterHashBytes(arrayBuffer);
+    const buffer = await splitterState.audioCtx.decodeAudioData(arrayBuffer.slice(0));
     splitterState.fileBuffer = buffer;
     splitterState.fileName = file.name;
     splitterState.duration = buffer.duration;
-    // Always run the ML pipeline (Demucs ONNX). DSP path was removed.
+    splitterState.fileHash = hash;
     splitterState.mode = 'ml';
+    // Cache lookup — instant load if we've split this song before
+    const cached = await splitterCacheGet(hash);
+    if (cached && cached.stems) {
+      splitterSetStatus('found cached split for "' + (cached.fileName || file.name) + '" — restoring…', 'busy', 0.5);
+      const ok = await splitterLoadFromCache(cached);
+      if (ok) {
+        splitterSetStatus('ready · ' + splitterFormatTime(buffer.duration) + ' · cached', 'ready');
+        splitterUpdateStatusUI();
+        return;
+      }
+    }
+    // Cache miss — run the full pipeline
     splitterSetStatus('starting Demucs separation…', 'busy', 0);
     await splitterProcessML();
-    // Build per-stem timelines + run chord/note analysis
     await splitterAnalyzeStems();
+    splitterSetStatus('saving to history…', 'busy', 0.999);
+    await splitterCacheSave(hash);
     splitterSetStatus('ready · ' + splitterFormatTime(buffer.duration), 'ready');
     splitterUpdateStatusUI();
   } catch (err) {
@@ -7991,6 +8417,7 @@ setupCustomChordPanel();
 setupCollapsibles();
 setupListener();
 splitterSetupNotesModal();
+splitterSetupAuxModals();
 setupHeaderButtons();
 bindModeButtons();
 document.getElementById('filter-weak').onchange = () => renderGraph();
