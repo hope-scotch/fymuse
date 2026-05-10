@@ -678,32 +678,87 @@
   /* Processing modal — overlays during separation + analysis */
   .processing-modal { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; }
   .processing-modal[hidden] { display: none; }
-  .processing-modal-backdrop { position: absolute; inset: 0; background: rgba(8,8,15,0.78); backdrop-filter: blur(8px); }
-  .processing-modal-panel { position: relative; width: min(520px, 92vw); padding: 32px 32px 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
-  .processing-icon { width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(circle, var(--accent-soft) 0%, transparent 70%); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
-  .processing-icon i { font-size: 44px; color: var(--accent); animation: processing-pulse 2s ease-in-out infinite; }
+  .processing-modal-backdrop { position: absolute; inset: 0; background: rgba(8,8,15,0.82); backdrop-filter: blur(10px); }
+  .processing-modal-panel { position: relative; width: min(540px, 92vw); padding: 28px 32px 24px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; overflow: hidden; }
+  /* Indeterminate marquee bar at the very top — communicates "always doing something" */
+  .processing-modal-panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%); background-size: 30% 100%; background-repeat: no-repeat; animation: processing-marquee 1.8s linear infinite; }
+  @keyframes processing-marquee { 0% { background-position: -30% 0; } 100% { background-position: 130% 0; } }
+  /* Hero icon stack: pulsing rings + animated equalizer + central glyph */
+  .processing-hero { position: relative; width: 110px; height: 110px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px; }
+  .processing-hero-ring { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--accent); opacity: 0; animation: processing-ring 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite; }
+  .processing-hero-ring:nth-child(2) { animation-delay: 0.8s; }
+  .processing-hero-ring:nth-child(3) { animation-delay: 1.6s; }
+  @keyframes processing-ring {
+    0%   { transform: scale(0.5); opacity: 0; }
+    20%  { opacity: 0.6; }
+    100% { transform: scale(1.4); opacity: 0; }
+  }
+  .processing-hero-core { position: relative; width: 64px; height: 64px; border-radius: 50%; background: radial-gradient(circle, var(--accent-soft) 0%, transparent 75%); display: flex; align-items: center; justify-content: center; }
+  .processing-hero-core i { font-size: 38px; color: var(--accent); animation: processing-pulse 2s ease-in-out infinite; }
+  /* Equalizer bars under the core */
+  .processing-eq { position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 3px; height: 18px; }
+  .processing-eq span { display: block; width: 3px; background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%); border-radius: 2px; animation: processing-eq-bar 0.9s ease-in-out infinite; opacity: 0.85; }
+  .processing-eq span:nth-child(1) { animation-delay: 0.0s; height: 60%; }
+  .processing-eq span:nth-child(2) { animation-delay: 0.15s; height: 100%; }
+  .processing-eq span:nth-child(3) { animation-delay: 0.3s; height: 40%; }
+  .processing-eq span:nth-child(4) { animation-delay: 0.45s; height: 80%; }
+  .processing-eq span:nth-child(5) { animation-delay: 0.6s; height: 50%; }
+  @keyframes processing-eq-bar {
+    0%, 100% { transform: scaleY(0.35); }
+    50%      { transform: scaleY(1); }
+  }
   @keyframes processing-pulse {
-    0%, 100% { transform: scale(1); opacity: 0.7; }
-    50%      { transform: scale(1.12); opacity: 1; }
+    0%, 100% { transform: scale(1); opacity: 0.78; }
+    50%      { transform: scale(1.10); opacity: 1; }
   }
   .processing-modal-title { margin: 0; font-size: 18px; font-weight: 700; color: var(--text); letter-spacing: -0.4px; }
   .processing-step { font-family: var(--font-mono); font-size: 12px; color: var(--accent); padding: 4px 10px; background: var(--accent-soft); border-radius: 4px; min-height: 22px; max-width: 100%; word-break: break-word; }
+  /* Live activity ticker — a fake "what's happening under the hood" line that
+     cycles every couple of seconds. Just for vibes; not load-bearing. */
+  .processing-activity { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); min-height: 16px; letter-spacing: 0.2px; }
+  .processing-activity-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); flex-shrink: 0; animation: processing-blink 1.2s ease-in-out infinite; box-shadow: 0 0 6px var(--accent-2); }
+  @keyframes processing-blink {
+    0%, 100% { opacity: 0.3; }
+    50%      { opacity: 1; }
+  }
+  .processing-activity-text { transition: opacity 0.25s ease-in-out; max-width: 380px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .processing-activity-text.is-fading { opacity: 0; }
   .processing-progress-row { display: flex; align-items: center; gap: 10px; width: 100%; }
   .processing-progress-bar { flex: 1; height: 8px; background: var(--panel-3); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; position: relative; }
   .processing-progress-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.4s ease-out; position: relative; min-width: 2px; }
-  .processing-progress-fill::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%); animation: processing-shimmer 1.6s linear infinite; }
+  .processing-progress-fill::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.22) 50%, transparent 100%); animation: processing-shimmer 1.6s linear infinite; }
   @keyframes processing-shimmer {
     0%   { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
   }
   .processing-percent { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); font-weight: 700; min-width: 42px; text-align: right; }
-  .processing-substeps { list-style: none; margin: 8px 0 0; padding: 12px 16px; width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; gap: 6px; text-align: left; }
-  .processing-substeps li { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); transition: color 0.15s; }
-  .processing-substeps li[data-state="active"] { color: var(--accent); }
-  .processing-substeps li[data-state="active"] .processing-mark { color: var(--accent); animation: processing-pulse 1.4s ease-in-out infinite; }
-  .processing-substeps li[data-state="done"] { color: var(--success); opacity: 0.8; }
-  .processing-substeps li[data-state="done"] .processing-mark { color: var(--success); }
-  .processing-mark { font-family: var(--font-mono); font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; }
+  /* Substeps list — phase-specific duotone icons that swap based on state */
+  .processing-substeps { list-style: none; margin: 8px 0 0; padding: 12px 14px; width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+  .processing-substeps li { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); transition: color 0.18s; position: relative; }
+  .processing-substeps li[data-state="active"] { color: var(--accent); font-weight: 600; }
+  .processing-substeps li[data-state="done"] { color: var(--success); opacity: 0.78; }
+  .processing-substeps li .processing-label { flex: 1; }
+  .processing-mark { width: 18px; height: 18px; flex-shrink: 0; position: relative; }
+  .processing-mark i { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: opacity 0.2s, transform 0.2s; }
+  /* Show only the icon matching current state */
+  .processing-mark .pmk-active,
+  .processing-mark .pmk-done { opacity: 0; }
+  .processing-substeps li[data-state="active"] .pmk-pending { opacity: 0; }
+  .processing-substeps li[data-state="active"] .pmk-active { opacity: 1; color: var(--accent); animation: processing-spin 1.05s linear infinite; }
+  .processing-substeps li[data-state="done"] .pmk-pending,
+  .processing-substeps li[data-state="done"] .pmk-active { opacity: 0; }
+  .processing-substeps li[data-state="done"] .pmk-done { opacity: 1; color: var(--success); }
+  .processing-substeps li[data-state=""] .pmk-pending,
+  .processing-substeps li:not([data-state]) .pmk-pending { opacity: 0.4; color: var(--muted); }
+  @keyframes processing-spin { to { transform: rotate(360deg); } }
+  /* Tiny inline equalizer to the right of the active row */
+  .processing-row-eq { display: none; align-items: flex-end; gap: 2px; height: 11px; flex-shrink: 0; }
+  .processing-substeps li[data-state="active"] .processing-row-eq { display: flex; }
+  .processing-row-eq span { display: block; width: 2px; background: var(--accent); border-radius: 1px; animation: processing-eq-bar 0.7s ease-in-out infinite; }
+  .processing-row-eq span:nth-child(1) { animation-delay: 0s;    height: 60%; }
+  .processing-row-eq span:nth-child(2) { animation-delay: 0.12s; height: 100%; }
+  .processing-row-eq span:nth-child(3) { animation-delay: 0.24s; height: 50%; }
+  .processing-row-eq span:nth-child(4) { animation-delay: 0.36s; height: 80%; }
   .processing-hint { margin: 4px 0 0; font-size: 11px; color: var(--muted); line-height: 1.5; max-width: 420px; }
 
   /* Notes modal — full-event timeline for one stem */
@@ -1132,19 +1187,66 @@
 <div class="processing-modal" id="processing-modal" hidden>
   <div class="processing-modal-backdrop"></div>
   <div class="processing-modal-panel" role="dialog" aria-labelledby="processing-modal-title">
-    <div class="processing-icon"><i class="ph-duotone ph-music-notes"></i></div>
+    <div class="processing-hero">
+      <div class="processing-hero-ring"></div>
+      <div class="processing-hero-ring"></div>
+      <div class="processing-hero-ring"></div>
+      <div class="processing-hero-core"><i class="ph-duotone ph-waveform"></i></div>
+      <div class="processing-eq"><span></span><span></span><span></span><span></span><span></span></div>
+    </div>
     <h3 class="processing-modal-title" id="processing-modal-title">Processing your song</h3>
     <div class="processing-step" id="processing-step">starting…</div>
+    <div class="processing-activity"><span class="processing-activity-dot"></span><span class="processing-activity-text" id="processing-activity-text">warming up engines</span></div>
     <div class="processing-progress-row">
       <div class="processing-progress-bar"><div class="processing-progress-fill" id="processing-progress-fill"></div></div>
       <span class="processing-percent" id="processing-percent">0%</span>
     </div>
     <ul class="processing-substeps" id="processing-substeps">
-      <li data-phase="decode"><span class="processing-mark">○</span> <span class="processing-label">Decoding audio</span></li>
-      <li data-phase="model"><span class="processing-mark">○</span> <span class="processing-label">Loading ML model</span></li>
-      <li data-phase="separate"><span class="processing-mark">○</span> <span class="processing-label">Running Demucs separation</span></li>
-      <li data-phase="key"><span class="processing-mark">○</span> <span class="processing-label">Detecting song key</span></li>
-      <li data-phase="analyse"><span class="processing-mark">○</span> <span class="processing-label">Analysing per-stem chords / notes</span></li>
+      <li data-phase="decode">
+        <span class="processing-mark">
+          <i class="ph-duotone ph-waveform pmk-pending"></i>
+          <i class="ph-duotone ph-circle-notch pmk-active"></i>
+          <i class="ph-duotone ph-check-circle pmk-done"></i>
+        </span>
+        <span class="processing-label">Decoding audio</span>
+        <span class="processing-row-eq"><span></span><span></span><span></span><span></span></span>
+      </li>
+      <li data-phase="model">
+        <span class="processing-mark">
+          <i class="ph-duotone ph-brain pmk-pending"></i>
+          <i class="ph-duotone ph-circle-notch pmk-active"></i>
+          <i class="ph-duotone ph-check-circle pmk-done"></i>
+        </span>
+        <span class="processing-label">Loading neural network</span>
+        <span class="processing-row-eq"><span></span><span></span><span></span><span></span></span>
+      </li>
+      <li data-phase="separate">
+        <span class="processing-mark">
+          <i class="ph-duotone ph-stack pmk-pending"></i>
+          <i class="ph-duotone ph-circle-notch pmk-active"></i>
+          <i class="ph-duotone ph-check-circle pmk-done"></i>
+        </span>
+        <span class="processing-label">Separating stems with Demucs</span>
+        <span class="processing-row-eq"><span></span><span></span><span></span><span></span></span>
+      </li>
+      <li data-phase="key">
+        <span class="processing-mark">
+          <i class="ph-duotone ph-key pmk-pending"></i>
+          <i class="ph-duotone ph-circle-notch pmk-active"></i>
+          <i class="ph-duotone ph-check-circle pmk-done"></i>
+        </span>
+        <span class="processing-label">Detecting song key</span>
+        <span class="processing-row-eq"><span></span><span></span><span></span><span></span></span>
+      </li>
+      <li data-phase="analyse">
+        <span class="processing-mark">
+          <i class="ph-duotone ph-music-notes pmk-pending"></i>
+          <i class="ph-duotone ph-circle-notch pmk-active"></i>
+          <i class="ph-duotone ph-check-circle pmk-done"></i>
+        </span>
+        <span class="processing-label">Analysing per-stem chords / notes</span>
+        <span class="processing-row-eq"><span></span><span></span><span></span><span></span></span>
+      </li>
     </ul>
     <p class="processing-hint" id="processing-hint">First-run model download takes a while. After that, only inference time matters.</p>
   </div>
@@ -7463,6 +7565,7 @@ function splitterSetStatus(text, state, progress) {
   const pctEl = document.getElementById('processing-percent');
   const isBusy = state === 'busy';
   const isError = state === 'error';
+  const wasHidden = modal ? modal.hidden : true;
   if (modal) modal.hidden = !(isBusy || isError);
   if (stepEl) stepEl.textContent = text || '';
   if (isBusy && progress != null) {
@@ -7478,6 +7581,9 @@ function splitterSetStatus(text, state, progress) {
   // checklist updates without each call site needing to remember the phase.
   if (isBusy && text) splitterInferPhaseFromText(text);
   if (state === 'ready') splitterMarkAllPhasesDone();
+  // Activity ticker — start when the modal opens during busy, stop otherwise.
+  if (isBusy && wasHidden) splitterStartActivityTicker();
+  if (!isBusy && !isError) splitterStopActivityTicker();
 }
 
 const SPLITTER_PHASE_KEYWORDS = [
@@ -7500,27 +7606,69 @@ function splitterInferPhaseFromText(text) {
 }
 
 function splitterMarkPhase(phase, stateLabel) {
+  // Icon swapping is handled by CSS via [data-state] — we just set the
+  // attribute and the right icon (pending → active spinner → done check)
+  // appears automatically.
   const li = document.querySelector('.processing-substeps li[data-phase="' + phase + '"]');
   if (!li) return;
   li.dataset.state = stateLabel;
-  const mark = li.querySelector('.processing-mark');
-  if (mark) mark.textContent = stateLabel === 'done' ? '✓' : stateLabel === 'active' ? '⏳' : '○';
 }
 
 function splitterMarkAllPhasesDone() {
   document.querySelectorAll('.processing-substeps li').forEach(li => {
     li.dataset.state = 'done';
-    const mark = li.querySelector('.processing-mark');
-    if (mark) mark.textContent = '✓';
   });
 }
 
 function splitterResetProcessingPhases() {
   document.querySelectorAll('.processing-substeps li').forEach(li => {
     li.dataset.state = '';
-    const mark = li.querySelector('.processing-mark');
-    if (mark) mark.textContent = '○';
   });
+}
+
+// ---- Live activity ticker — cycles flavor-text under the title so the
+// modal feels like more is happening than just a single progress bar.
+// Pure decoration; doesn't reflect real internal state.
+const SPLITTER_ACTIVITY_PHRASES = [
+  'warming up engines',
+  'computing spectrogram',
+  'building frequency kernels',
+  'tracking onset transients',
+  'running short-time Fourier transform',
+  'isolating fundamentals',
+  'applying Wiener masks',
+  'convolving harmonic templates',
+  'extracting chroma features',
+  'estimating tempo grid',
+  'fitting probe-tone profiles',
+  'separating harmonic from percussive',
+  'denoising stem residuals',
+  'tracing pitch contours',
+  'quantising note onsets',
+  'sniffing key correlations',
+  'voicing chord candidates',
+  'reticulating splines',
+];
+let _splitterActivityTimer = null;
+let _splitterActivityIdx = 0;
+function splitterStartActivityTicker() {
+  splitterStopActivityTicker();
+  const el = document.getElementById('processing-activity-text');
+  if (!el) return;
+  _splitterActivityIdx = 0;
+  const phrases = SPLITTER_ACTIVITY_PHRASES.slice().sort(() => Math.random() - 0.5);
+  el.textContent = phrases[0];
+  _splitterActivityTimer = setInterval(() => {
+    _splitterActivityIdx = (_splitterActivityIdx + 1) % phrases.length;
+    el.classList.add('is-fading');
+    setTimeout(() => {
+      el.textContent = phrases[_splitterActivityIdx];
+      el.classList.remove('is-fading');
+    }, 220);
+  }, 1800);
+}
+function splitterStopActivityTicker() {
+  if (_splitterActivityTimer) { clearInterval(_splitterActivityTimer); _splitterActivityTimer = null; }
 }
 
 function splitterUpdateStatusUI() {
