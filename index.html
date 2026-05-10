@@ -7580,6 +7580,10 @@ function splitterSetStatus(text, state, progress) {
   // Error styling: freeze every running animation + tint the panel red.
   const panel = modal && modal.querySelector('.processing-modal-panel');
   if (panel) panel.classList.toggle('is-error', !!isError);
+  // Reset phases at the start of a fresh busy run (modal was hidden,
+  // now opening). Otherwise stale "done" marks from the previous run
+  // persist into the new one.
+  if (isBusy && wasHidden) splitterResetProcessingPhases();
   if (isBusy && progress != null) {
     const p = Math.max(0, Math.min(1, progress));
     if (fill) fill.style.width = (p * 100).toFixed(1) + '%';
@@ -7610,8 +7614,11 @@ function splitterInferPhaseFromText(text) {
   for (let i = 0; i < SPLITTER_PHASE_KEYWORDS.length; i++) {
     if (SPLITTER_PHASE_KEYWORDS[i][1].test(text)) {
       splitterMarkPhase(SPLITTER_PHASE_KEYWORDS[i][0], 'active');
-      // Earlier phases get marked done
+      // Earlier phases done
       for (let j = 0; j < i; j++) splitterMarkPhase(SPLITTER_PHASE_KEYWORDS[j][0], 'done');
+      // Later phases reset to pending — defensive in case phases were
+      // marked done by a previous run / out-of-order status update.
+      for (let k = i + 1; k < SPLITTER_PHASE_KEYWORDS.length; k++) splitterMarkPhase(SPLITTER_PHASE_KEYWORDS[k][0], '');
       return;
     }
   }
