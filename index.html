@@ -4817,16 +4817,31 @@ const LISTENER_TUNING_MIN_FRAMES = 30;    // require this many frames before tru
 
 // Chord templates as 12-bin pitch-class vectors. Weights bias toward common shapes.
 const LISTENER_TEMPLATES = [
-  { quality: '',     intervals: [0,4,7],     weight: 1.00 }, // major
-  { quality: 'm',    intervals: [0,3,7],     weight: 1.00 }, // minor
-  { quality: '7',    intervals: [0,4,7,10],  weight: 0.96 },
-  { quality: 'maj7', intervals: [0,4,7,11],  weight: 0.94 },
-  { quality: 'm7',   intervals: [0,3,7,10],  weight: 0.94 },
-  { quality: 'sus4', intervals: [0,5,7],     weight: 0.82 },
-  { quality: 'sus2', intervals: [0,2,7],     weight: 0.78 },
-  { quality: 'dim',  intervals: [0,3,6],     weight: 0.86 },
-  { quality: 'aug',  intervals: [0,4,8],     weight: 0.74 },
-  { quality: 'm7b5', intervals: [0,3,6,10],  weight: 0.78 },
+  // Triads
+  { quality: '',      intervals: [0,4,7],         weight: 1.00 }, // major
+  { quality: 'm',     intervals: [0,3,7],         weight: 1.00 }, // minor
+  { quality: 'sus4',  intervals: [0,5,7],         weight: 0.82 },
+  { quality: 'sus2',  intervals: [0,2,7],         weight: 0.78 },
+  { quality: 'dim',   intervals: [0,3,6],         weight: 0.84 },
+  { quality: 'aug',   intervals: [0,4,8],         weight: 0.72 },
+  // 6th chords
+  { quality: '6',     intervals: [0,4,7,9],       weight: 0.88 },
+  { quality: 'm6',    intervals: [0,3,7,9],       weight: 0.86 },
+  // Add chords (no 7th, just added note)
+  { quality: 'add9',  intervals: [0,4,7,2],       weight: 0.86 },
+  { quality: 'madd9', intervals: [0,3,7,2],       weight: 0.84 },
+  // 7th chords
+  { quality: '7',     intervals: [0,4,7,10],      weight: 0.96 },
+  { quality: 'maj7',  intervals: [0,4,7,11],      weight: 0.94 },
+  { quality: 'm7',    intervals: [0,3,7,10],      weight: 0.94 },
+  { quality: 'mMaj7', intervals: [0,3,7,11],      weight: 0.82 },
+  { quality: 'm7b5',  intervals: [0,3,6,10],      weight: 0.80 },
+  { quality: 'dim7',  intervals: [0,3,6,9],       weight: 0.78 },
+  { quality: '7sus4', intervals: [0,5,7,10],      weight: 0.82 },
+  // 9th chords
+  { quality: '9',     intervals: [0,4,7,10,2],    weight: 0.90 },
+  { quality: 'm9',    intervals: [0,3,7,10,2],    weight: 0.88 },
+  { quality: 'maj9',  intervals: [0,4,7,11,2],    weight: 0.86 },
 ];
 
 // Harmonic series profile: when a fundamental at PC 0 is played on a real instrument,
@@ -7625,16 +7640,13 @@ async function splitterAnalyzeStems() {
     splitterSetStatus('analysing ' + def.name + '…', 'busy', 0.997);
     await splitterYield();
     stem.events = await splitterAnalyseStemEvents(def.id, stem.buffer);
-    // After vocal detection, refine using chord context (drops short
-    // off-scale pitches that are almost always detector artifacts).
-    if (def.id === 'vocals') {
-      const otherStem = splitterState.stems['other'];
-      const chordEvents = (otherStem && otherStem.events) || [];
-      stem.events = splitterFilterVocalToScale(
-        stem.events,
-        chordEvents,
-        splitterState.detectedKey
-      );
+    // After 'other' (chord) detection, use the bass-stem track to add
+    // slash-chord notation (D/F#, C/G, etc.). Bass stem was analysed
+    // before 'other' thanks to the ordering above, so bassEvents is ready.
+    if (def.id === 'other') {
+      const bassStem = splitterState.stems['bass'];
+      const bassEvents = (bassStem && bassStem.events) || [];
+      stem.events = splitterAddSlashChords(stem.events, bassEvents);
     }
     splitterRenderTimelineEvents(def.id);
   }
@@ -8573,7 +8585,8 @@ async function splitterDetectSongKey(buffer) {
 // kernel set, runs listenerScoreChroma, dedupes consecutive identical chords
 // into events. Returns [{start, end, label}].
 async function splitterDetectChords(buffer) {
-  const hopSec = 0.5;
+  const hopSec = 0.25;       // 4 fps — fast enough to catch chord changes
+                              // every half-bar at 120 BPM
   const fftSize = 4096;
   const sr = buffer.sampleRate;
   const hopSamples = Math.max(1, Math.floor(hopSec * sr));
@@ -8648,8 +8661,52 @@ async function splitterDetectChords(buffer) {
     if ((f & 31) === 0) await splitterYield();
   }
   if (curLabel) events.push({ start: curStart, end: numFrames * hopSec, label: curLabel, pitches: curPitches });
-  // Drop events shorter than 0.7 s — chord changes that brief are usually noise / mid-transition
-  return events.filter(ev => (ev.end - ev.start) >= 0.7);
+  // Drop events shorter than 0.4 s — chord changes that brief are usually
+  // mid-transition flicker. (Used to be 0.7 s but that was missing 8th-bar
+  // chord passes common in faster pop / Bollywood.)
+  return events.filter(ev => (ev.end - ev.start) >= 0.4);
+}
+
+// Post-process chord events using the bass-stem note track: if the dominant
+// bass pitch class during a chord is different from the chord root, label it
+// as a slash chord (e.g. "C/E" or "D/F#"). Picks the longest-held bass note
+// in the first 1 s of the chord — handles inversions that establish at the
+// chord onset and aren't overridden by walking-bass passing tones.
+function splitterAddSlashChords(chordEvents, bassEvents) {
+  if (!chordEvents || !chordEvents.length || !bassEvents || !bassEvents.length) return chordEvents;
+  const useFlats = (typeof shouldUseFlats === 'function')
+    ? shouldUseFlats(state.key, state.mode) : false;
+  const indexToNoteFn = (typeof indexToNote === 'function')
+    ? (pc) => indexToNote(pc, useFlats)
+    : (pc) => ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][pc];
+  for (const chord of chordEvents) {
+    if (!chord.label || chord.label.indexOf('/') >= 0) continue;
+    const parsed = splitterParseChord(chord.label);
+    if (!parsed) continue;
+    // Aggregate bass durations by pitch class during the chord's onset window
+    const t0 = chord.start;
+    const t1 = Math.min(chord.end, chord.start + 1.0);
+    const pcDur = new Map();
+    for (const b of bassEvents) {
+      if (b.midi == null) continue;
+      if (b.end < t0 || b.start >= t1) continue;
+      const overlap = Math.min(b.end, t1) - Math.max(b.start, t0);
+      if (overlap <= 0) continue;
+      const pc = ((b.midi % 12) + 12) % 12;
+      pcDur.set(pc, (pcDur.get(pc) || 0) + overlap);
+    }
+    let bestPc = -1, bestDur = 0;
+    for (const [pc, dur] of pcDur) {
+      if (dur > bestDur) { bestDur = dur; bestPc = pc; }
+    }
+    if (bestPc < 0) continue;
+    // Require the bass to dominate ≥ 200 ms — single passing tones shouldn't
+    // override the chord root labelling.
+    if (bestDur < 0.20) continue;
+    if (bestPc === parsed.rootPc) continue; // bass IS the root — no slash needed
+    chord.label = chord.label + '/' + indexToNoteFn(bestPc);
+  }
+  return chordEvents;
 }
 
 // ---- Offline monophonic note detection -----------------------------------
