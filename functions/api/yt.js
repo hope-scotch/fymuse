@@ -57,9 +57,15 @@ export async function onRequestGet({ request }) {
   let streamUrl;
   let containerType = 'audio/mp4';
   try {
+    // Cloudflare Workers' fetch / Headers / Request need the global as
+    // `this`; youtubei.js destructures them and loses the binding,
+    // throwing "Illegal invocation". Wrap them in fresh arrow-fn /
+    // class shims so the library can call them however it wants.
+    const safeFetch = (input, init) => fetch(input, init);
     const yt = await Innertube.create({
       cache: new UniversalCache(false),
       generate_session_locally: true,
+      fetch: safeFetch,
     });
     const info = await yt.getBasicInfo(videoId);
     // Prefer choosing best audio explicitly so we know what we got.
