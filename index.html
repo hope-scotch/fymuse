@@ -7451,13 +7451,13 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
     return await splitterClassifyDrumOnsets(buffer);
   }
   if (stemId === 'vocals') return splitterDetectMonophonicNotes(buffer, {
-    minHz: 80, maxHz: 1200,    // covers low bass voice E2 -> high soprano D6
-    hopSec: 0.06,              // ~16 fps so fast runs aren't missed
+    minHz: 70, maxHz: 1400,    // slightly wider — catches very low croons + high belts
+    hopSec: 0.045,             // ~22 fps — finer time resolution catches more notes
     fftSize: 4096,
     numHarmonics: 4,           // HPS depth — kills octave errors
     smoothFrames: 1,           // raw frames — let the stability filter do the work
-    stabilityFrames: 2,        // a new pitch must hold ≥ 2 frames (~120 ms) to commit
-    minEventSec: 0.07,         // 70 ms — drops single-frame glide chromatics
+    stabilityFrames: 2,        // pitch must hold ≥ 2 frames (~90 ms) to commit
+    minEventSec: 0.04,         // 40 ms — was 70 ms; catches faster ornaments / passing notes
   });
   if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
     minHz: 35,  maxHz: 400,    // low B0 -> G4 covers most basses + sub
@@ -7704,6 +7704,13 @@ async function splitterClassifyDrumOnsets(buffer) {
 }
 
 function splitterDetectDrumOnsets(audio, sr, fftSize, hopSize) {
+  // Two parallel spectral-flux passes:
+  //   - Broadband flux (all bins, k=1..N/2) catches snares, hats, cymbals.
+  //   - Low-band flux (bins below ~250 Hz only) catches kicks. Without
+  //     this, a kick fired alongside a quietly-ringing hat barely moves
+  //     the broadband flux because it changes few bins out of 512+, and
+  //     gets filtered out by the threshold. The low-band detector sees
+  //     only the bins that actually changed.
   const re = new Float32Array(fftSize);
   const im = new Float32Array(fftSize);
   const win = new Float32Array(fftSize);
@@ -7711,9 +7718,11 @@ function splitterDetectDrumOnsets(audio, sr, fftSize, hopSize) {
     win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (fftSize - 1));
   }
   const halfN = fftSize >> 1;
+  const lowKMax = Math.max(1, Math.floor(250 * fftSize / sr));
   const numFrames = Math.floor((audio.length - fftSize) / hopSize) + 1;
   if (numFrames < 4) return [];
-  const flux = new Float32Array(numFrames);
+  const flux    = new Float32Array(numFrames);
+  const lowFlux = new Float32Array(numFrames);
   const prevMag = new Float32Array(halfN);
   for (let f = 0; f < numFrames; f++) {
     const off = f * hopSize;
@@ -7722,39 +7731,71 @@ function splitterDetectDrumOnsets(audio, sr, fftSize, hopSize) {
       im[i] = 0;
     }
     splitterFFT(re, im);
-    let s = 0;
+    let s = 0, lowS = 0;
     for (let k = 1; k < halfN; k++) {
       const mag = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
       const d = mag - prevMag[k];
-      if (d > 0) s += d;
+      if (d > 0) {
+        s += d;
+        if (k <= lowKMax) lowS += d;
+      }
       prevMag[k] = mag;
     }
     flux[f] = s;
+    lowFlux[f] = lowS;
   }
-  // Adaptive threshold using global p50 + p90, plus a local mean window
-  const sorted = Array.from(flux).slice().sort((a, b) => a - b);
-  const p50 = sorted[Math.floor(sorted.length * 0.50)];
-  const p90 = sorted[Math.floor(sorted.length * 0.90)];
-  const baseline = p50 + 0.45 * (p90 - p50);
-  const halfWin = 10; // ±10 frames ≈ ±60 ms at sr=44100
-  const minSepSec = 0.05;
-  const minSepFrames = Math.max(1, Math.floor((minSepSec * sr) / hopSize));
-  const onsetTimes = [];
-  let lastOnsetFrame = -minSepFrames;
-  for (let f = 1; f < numFrames - 1; f++) {
-    if (flux[f] <= flux[f - 1] || flux[f] < flux[f + 1]) continue;
-    let localMean = 0, n = 0;
-    const a = Math.max(0, f - halfWin);
-    const b = Math.min(numFrames - 1, f + halfWin);
-    for (let k = a; k <= b; k++) { localMean += flux[k]; n++; }
-    localMean /= n;
-    const threshold = Math.max(baseline, localMean * 1.55);
-    if (flux[f] >= threshold && (f - lastOnsetFrame) >= minSepFrames) {
-      onsetTimes.push((f * hopSize) / sr);
-      lastOnsetFrame = f;
+
+  function pickPeaks(arr, multiplier, baselineMix) {
+    const sorted = Array.from(arr).slice().sort((a, b) => a - b);
+    const p50 = sorted[Math.floor(sorted.length * 0.50)];
+    const p90 = sorted[Math.floor(sorted.length * 0.90)];
+    const baseline = p50 + baselineMix * (p90 - p50);
+    const halfWin = 10;
+    const minSepSec = 0.05;
+    const minSepFrames = Math.max(1, Math.floor((minSepSec * sr) / hopSize));
+    const out = [];
+    let last = -minSepFrames;
+    for (let f = 1; f < numFrames - 1; f++) {
+      if (arr[f] <= arr[f - 1] || arr[f] < arr[f + 1]) continue;
+      let localMean = 0, n = 0;
+      const a = Math.max(0, f - halfWin);
+      const b = Math.min(numFrames - 1, f + halfWin);
+      for (let k = a; k <= b; k++) { localMean += arr[k]; n++; }
+      localMean /= n;
+      const threshold = Math.max(baseline, localMean * multiplier);
+      if (arr[f] >= threshold && (f - last) >= minSepFrames) {
+        out.push((f * hopSize) / sr);
+        last = f;
+      }
+    }
+    return out;
+  }
+
+  // Broadband: tighter threshold (1.55× local mean) — we want clear hits
+  // Low-band: looser threshold (1.40×) — kicks are quieter relatively
+  const broadOnsets = pickPeaks(flux,    1.45, 0.40);
+  const lowOnsets   = pickPeaks(lowFlux, 1.35, 0.30);
+
+  // Merge: a low-band onset within 30 ms of a broadband one is the same
+  // event; otherwise it's a low-frequency-only kick the broadband missed.
+  const merged = broadOnsets.slice();
+  const mergedSet = new Set(merged.map(t => Math.round(t * 1000)));
+  const mergeWin = 0.030;
+  for (const t of lowOnsets) {
+    let near = false;
+    for (const b of merged) {
+      if (Math.abs(b - t) <= mergeWin) { near = true; break; }
+    }
+    if (!near) {
+      const key = Math.round(t * 1000);
+      if (!mergedSet.has(key)) {
+        merged.push(t);
+        mergedSet.add(key);
+      }
     }
   }
-  return onsetTimes;
+  merged.sort((a, b) => a - b);
+  return merged;
 }
 
 function splitterDrumFeatures(specWin, decayWin, sr) {
@@ -7840,65 +7881,76 @@ function splitterDrumFeatures(specWin, decayWin, sr) {
 
 function splitterClassifyDrumWindow(f) {
   // Order-sensitive decision tree. Tuned against real-world Demucs output
-  // where hat/cymbal bleed always pollutes the low-frequency drum hits.
-  // Use SHORT-window spectral features so we look at the transient, not
-  // the steady-state sustain.
+  // where (a) hat/cymbal bleed pollutes low-frequency hits and (b) Demucs
+  // sometimes filters the kick fundamental (50-80 Hz) into the bass stem,
+  // leaving the drums-stem kick with peak energy at 100-300 Hz from
+  // harmonics and body resonance.
+  //
+  // Multiple OR-triggers per category to catch the wide variety of real
+  // drum sounds we see in the wild.
 
-  const lowE  = f.sub + f.bass;          // 0-200 Hz
-  const lowMid = f.lowMid;                // 200-500 Hz
-  const highE = f.high + f.vhigh;         // 2k-Nyquist
+  const lowE     = f.sub + f.bass;            // 0-200 Hz
+  const lowMid   = f.lowMid;                   // 200-500 Hz
+  const lowTotal = lowE + lowMid;              // 0-500 Hz
+  const highE    = f.high + f.vhigh;           // 2k-Nyquist
 
-  // 1) KICK (check first). Real kicks have very low spectral peak (<200 Hz)
-  // and significant sub-bass energy. Even with hat bleed, the spectral
-  // PEAK frequency is the kick fundamental. Three OR-conditions to catch
-  // various kick situations:
-  //   a) Spectral peak below 150 Hz — unambiguous kick fundamental.
-  //   b) Strong sub-band proportion regardless of HF bleed.
-  //   c) Combined low-band proportion > 0.35 with low centroid.
-  if (
-    (f.peakHz > 0 && f.peakHz < 150 && f.sub > 0.10) ||
-    (f.sub > 0.25 && f.centroid < 1500) ||
-    (lowE > 0.35 && f.centroid < 700 && f.flatness < 0.22)
-  ) {
+  // KICK candidates — any of these triggers + we're not clearly a tom or
+  // cymbal. Permissive on purpose: the cost of mis-calling a snare as a
+  // kick is small (rare in real songs); the cost of missing kicks is huge
+  // (the most important part of the groove).
+  const kickSignals =
+    (f.peakHz > 0 && f.peakHz < 200) ||                   // peak in kick range
+    (f.sub > 0.15) ||                                      // sub-band present at all
+    (lowE > 0.30 && f.centroid < 1800) ||                 // low-band dominant
+    (lowTotal > 0.45 && f.centroid < 1500) ||             // <500 Hz overall
+    (lowTotal > 0.35 && highE < 0.30 && f.centroid < 1200);
+
+  if (kickSignals) {
+    // Kick-vs-tom split: a tom sustains noticeably longer and has its peak
+    // in the 100-400 Hz "tom body" range. A kick decays fast and has peak
+    // either very low (<150 Hz) or in the 100-300 Hz harmonic range with
+    // sharp attack.
+    if (
+      f.decay > 0.30 &&
+      f.peakHz >= 100 && f.peakHz <= 450 &&
+      f.flatness < 0.20 &&
+      lowMid > 0.20
+    ) {
+      return { type: 'tom', velocity: splitterDrumVelocity(f.peak) };
+    }
     return { type: 'kick', velocity: splitterDrumVelocity(f.peak) };
   }
 
-  // 2) TOM. Mid-low tonal (peak in 100-400 Hz), longer decay than kick,
-  // not noisy.
-  if (
-    f.peakHz > 80 && f.peakHz < 400 &&
-    (f.bass + lowMid) > 0.30 &&
-    f.flatness < 0.20 &&
-    f.decay > 0.20
-  ) {
-    return { type: 'tom', velocity: splitterDrumVelocity(f.peak) };
-  }
-
-  // 3) CYMBAL. Long sustain + HF dominant + broadband noise.
+  // CYMBAL: long sustain + HF dominant + noisy
   if (f.decay > 0.45 && highE > 0.45 && f.flatness > 0.26) {
     return { type: 'cymbal', velocity: splitterDrumVelocity(f.peak) };
   }
 
-  // 4) HI-HAT. HF dominant, high centroid, short(ish) decay. Open vs
-  // closed split by decay ratio.
+  // HI-HAT: HF dominant + high centroid; split open/closed by decay
   if (highE > 0.50 && f.centroid > 3500) {
     const type = f.decay > 0.32 ? 'hihat_open' : 'hihat';
     return { type, velocity: splitterDrumVelocity(f.peak) };
   }
 
-  // 5) SNARE. Mid + broadband noise + medium centroid. The "everything
-  // else with snare-character" bucket — wide range because snares vary
-  // a lot between acoustic / piccolo / 808.
+  // SNARE: mid + broadband + medium centroid
   if (
-    (f.lowMid + f.mid + f.high) > 0.40 &&
-    f.flatness > 0.18 &&
-    f.centroid > 600 && f.centroid < 5000
+    (lowMid + f.mid + f.high) > 0.35 &&
+    f.flatness > 0.15 &&
+    f.centroid > 600 && f.centroid < 5500
   ) {
     return { type: 'snare', velocity: splitterDrumVelocity(f.peak) };
   }
 
-  // Fallback: pick by spectral peak frequency, with centroid as tiebreaker.
-  if (f.peakHz > 0 && f.peakHz < 120) return { type: 'kick',  velocity: splitterDrumVelocity(f.peak) };
+  // TOM (secondary fallback for low-tonal hits that didn't trigger kick)
+  if (
+    f.peakHz > 80 && f.peakHz < 400 &&
+    f.flatness < 0.22
+  ) {
+    return { type: 'tom', velocity: splitterDrumVelocity(f.peak) };
+  }
+
+  // Final fallback by spectral peak frequency
+  if (f.peakHz > 0 && f.peakHz < 150) return { type: 'kick',  velocity: splitterDrumVelocity(f.peak) };
   if (f.peakHz < 350)                  return { type: 'tom',   velocity: splitterDrumVelocity(f.peak) };
   if (f.centroid < 1500)               return { type: 'tom',   velocity: splitterDrumVelocity(f.peak) };
   if (f.centroid < 4500)               return { type: 'snare', velocity: splitterDrumVelocity(f.peak) };
