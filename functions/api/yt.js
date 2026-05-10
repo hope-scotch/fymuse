@@ -74,7 +74,22 @@ export async function onRequestGet({ request }) {
     );
   }
 
-  const clientCandidates = ['TV', 'IOS', 'ANDROID', 'WEB'];
+  // Music-specific clients first (more permissive for YT Music URLs),
+  // then mobile clients (often less rate-limited from datacenter IPs),
+  // then desktop. Embedded variants sometimes bypass restrictions.
+  const clientCandidates = [
+    'YTMUSIC',
+    'IOS_MUSIC',
+    'ANDROID_MUSIC',
+    'WEB_MUSIC',
+    'TV',
+    'TV_EMBEDDED',
+    'IOS',
+    'ANDROID',
+    'MWEB',
+    'WEB_EMBEDDED',
+    'WEB',
+  ];
   let streamUrl;
   let containerType = 'audio/mp4';
   let lastErr = null;
