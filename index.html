@@ -4350,6 +4350,10 @@ function showSplitterView() {
     sv.id = 'splitter-view';
     panel.insertBefore(sv, panel.firstChild);
     buildSplitterViewSkeleton(sv);
+    // Aux modal buttons (URL / History) live inside the skeleton — wire
+    // their click handlers now that they exist in the DOM. The init-time
+    // call wired the modal internals; this call wires the trigger buttons.
+    splitterSetupAuxModals();
   }
   Array.from(panel.children).forEach(child => {
     if (ALWAYS_VISIBLE_CHILDREN.has(child.id)) { child.style.display = ''; return; }
@@ -6607,7 +6611,12 @@ function splitterCloseAuxModal(which) {
   }
 }
 
+let _splitterAuxEscBound = false;
 function splitterSetupAuxModals() {
+  // Idempotent: safe to call once at page init (for the modal-internal
+  // controls that exist in the body from load) AND again after the
+  // splitter view skeleton is built (which adds the URL / History
+  // buttons to the DOM).
   // History
   const histBtn = document.getElementById('splitter-history-btn');
   if (histBtn) histBtn.onclick = () => splitterOpenHistoryModal();
@@ -6627,18 +6636,21 @@ function splitterSetupAuxModals() {
     if (e.key === 'Enter') splitterLoadFromUrl(urlInput.value.trim());
     if (e.key === 'Escape') splitterCloseAuxModal('url');
   };
-  // Close handlers — backdrop, X buttons
+  // Close handlers — backdrop, X buttons (data-close="history|url")
   document.querySelectorAll('[data-close]').forEach(el => {
     el.onclick = () => splitterCloseAuxModal(el.dataset.close);
   });
-  // ESC closes whichever aux is open
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    const histOpen = !document.getElementById('splitter-history-modal').hidden;
-    const urlOpen  = !document.getElementById('splitter-url-modal').hidden;
-    if (histOpen) splitterCloseAuxModal('history');
-    if (urlOpen)  splitterCloseAuxModal('url');
-  });
+  // ESC closes whichever aux is open. Bind once globally.
+  if (!_splitterAuxEscBound) {
+    _splitterAuxEscBound = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      const hist = document.getElementById('splitter-history-modal');
+      const url  = document.getElementById('splitter-url-modal');
+      if (hist && !hist.hidden) splitterCloseAuxModal('history');
+      if (url  && !url.hidden)  splitterCloseAuxModal('url');
+    });
+  }
 }
 
 function splitterSetupNotesModal() {
