@@ -50,7 +50,12 @@ async function tryFlyService(env, target) {
   const upstream = await fetch(upstreamUrl, { redirect: 'follow' });
   if (!upstream.ok) {
     const detail = await upstream.text().catch(() => '');
-    throw new Error('Fly service HTTP ' + upstream.status + (detail ? ' — ' + detail.slice(0, 200) : ''));
+    // Surface up to 800 chars of the body so yt-dlp's stderr reaches the
+    // browser. Render's generic 502 page is short — real errors are longer.
+    throw new Error(
+      'sidecar HTTP ' + upstream.status + ' ' + (upstream.statusText || '') +
+      (detail ? ' — ' + detail.slice(0, 800).replace(/\s+/g, ' ').trim() : '')
+    );
   }
   const out = new Headers();
   out.set('Content-Type', upstream.headers.get('Content-Type') || 'audio/*');

@@ -22,6 +22,8 @@ Environment:
                  Tighten to your CF Pages origin in production.
 """
 import os
+import os
+import select
 import shutil
 import subprocess
 import sys
@@ -66,6 +68,9 @@ class YtHandler(BaseHTTPRequestHandler):
             "-o", "-",
             "--no-playlist",
             "--no-warnings",
+            "--socket-timeout", "20",
+            "--retries", "2",
+            "--extractor-retries", "1",
             url,
         ]
         try:
@@ -79,8 +84,26 @@ class YtHandler(BaseHTTPRequestHandler):
         # Buffer the FIRST chunk before we commit to a 200 response. If
         # yt-dlp can't extract anything (auth wall / region block / format
         # missing / IP block), we want to surface a real error rather than
-        # an empty 200.
-        first_chunk = proc.stdout.read(64 * 1024)
+        # an empty 200. Hard 50 s ceiling so we always respond before
+        # Render's edge timeout (~100 s) kicks in.
+        first_chunk = b""
+        deadline = 50.0
+        ready, _, _ = select.select([proc.stdout], [], [], deadline)
+        if ready:
+            first_chunk = proc.stdout.read(64 * 1024)
+        else:
+            proc.kill()
+            err_bytes = b""
+            try: err_bytes = proc.stderr.read() or b""
+            except Exception: pass
+            self._send_text(
+                504,
+                "yt-dlp timed out after %ds. stderr:\n%s" % (
+                    int(deadline),
+                    err_bytes.decode("utf-8", errors="replace").strip() or "(empty)",
+                ),
+            )
+            return
         if not first_chunk:
             # Drain stderr so we can report what actually went wrong.
             try:
