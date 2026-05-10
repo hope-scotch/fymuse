@@ -34,6 +34,12 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 MAX_BYTES = 200 * 1024 * 1024  # 200 MB hard cap
 PORT = int(os.environ.get("PORT", 8080))
 ALLOW_ORIGIN = os.environ.get("ALLOW_ORIGIN", "*")
+# If set, point yt-dlp at a Netscape-format cookies file. Required to
+# bypass YouTube's "Sign in to confirm you're not a bot" challenge that
+# fires on most datacenter IPs. On Render: upload via Settings →
+# Environment → Secret Files (filename cookies.txt), then set
+# YT_COOKIES_FILE=/etc/secrets/cookies.txt
+YT_COOKIES_FILE = os.environ.get("YT_COOKIES_FILE", "")
 
 
 class YtHandler(BaseHTTPRequestHandler):
@@ -71,8 +77,13 @@ class YtHandler(BaseHTTPRequestHandler):
             "--socket-timeout", "20",
             "--retries", "2",
             "--extractor-retries", "1",
-            url,
+            # Try multiple player clients; tv_embedded + ios bypass some
+            # bot-detection paths the default web client triggers.
+            "--extractor-args", "youtube:player_client=tv_embedded,ios,android,web",
         ]
+        if YT_COOKIES_FILE and os.path.exists(YT_COOKIES_FILE):
+            cmd += ["--cookies", YT_COOKIES_FILE]
+        cmd += [url]
         try:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,

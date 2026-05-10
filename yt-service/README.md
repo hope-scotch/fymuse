@@ -98,11 +98,56 @@ The free Fly.io allowance covers a single `shared-cpu-1x` machine with
 256 MB RAM that auto-stops when idle. Cold starts add ~3–5 s to the
 first request after a quiet period. After that, requests are warm.
 
+## Bypassing YouTube's bot detection (cookies)
+
+YouTube increasingly blocks datacenter IPs with "Sign in to confirm
+you're not a bot." When that happens you'll see this in Render's logs:
+
+```
+ERROR: [youtube] <id>: Sign in to confirm you're not a bot.
+       Use --cookies-from-browser or --cookies for the authentication.
+```
+
+The fix is to pass cookies from a logged-in YouTube session.
+
+**1. Export cookies from your browser:**
+
+Install the **"Get cookies.txt LOCALLY"** extension
+([Chrome](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) /
+[Firefox](https://addons.mozilla.org/firefox/addon/cookies-txt-one-click/)).
+Visit `https://music.youtube.com` while logged in. Click the extension
+icon → **Export** → save as `cookies.txt` (Netscape format).
+
+**2. Upload to Render as a Secret File:**
+
+Render Dashboard → fymuse → **Environment** → **Secret Files** →
+**Add Secret File**:
+- Filename: `cookies.txt`
+- File contents: paste your exported cookies.txt
+
+**3. Tell the service to use it.** In the same Environment tab,
+add an env var:
+
+```
+YT_COOKIES_FILE = /etc/secrets/cookies.txt
+```
+
+Save → Render redeploys. Now yt-dlp passes those cookies on every
+request and YouTube treats it like a logged-in user.
+
+Cookies expire (usually a few weeks for YT). When extractions start
+failing again, repeat steps 1-2 to refresh the file contents.
+
+**Privacy note:** these cookies authenticate your YouTube account.
+Keep `ALLOW_ORIGIN` set to your CF Pages URL (not `*`) so random
+people can't use your URL endpoint to extract videos under your
+identity.
+
 ## Notes
 
 - `yt-dlp` breaks against YouTube every few weeks. Bump the version pin
-  in `Dockerfile` and `fly deploy` to refresh.
+  in `Dockerfile` and redeploy to refresh.
 - The container has a 200 MB hard cap on response size to prevent
   abuse if the service URL ever leaks.
-- If you want to lock the service down so only your CF Pages can call
-  it, set the `ALLOW_ORIGIN` env var on Fly to your Pages URL.
+- Lock the service to your origin: set `ALLOW_ORIGIN` env var to your
+  CF Pages URL.
