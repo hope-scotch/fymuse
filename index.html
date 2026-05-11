@@ -7678,12 +7678,12 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
   }
   if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
     minHz: 35,  maxHz: 400,    // low B0 -> G4 covers most basses + sub
-    hopSec: 0.20,              // bass moves slowly — fewer frames is fine
-    fftSize: 8192,             // bigger window for low-pitch resolution
+    hopSec: 0.08,              // ~12.5 fps — catches 1/8 + 1/16 bass notes
+    fftSize: 8192,             // big window keeps low-pitch resolution
     numHarmonics: 5,
-    smoothFrames: 5,           // heavier smoothing kills spurious detections
-    stabilityFrames: 2,        // 2 frames at 0.20 s hop = 400 ms hold
-    minEventSec: 0.18,         // 200 ms-ish, drops the noise
+    smoothFrames: 2,           // light smoothing — was 5 (250 ms lag, too sluggish)
+    stabilityFrames: 1,        // commit every frame, rely on minEventSec to filter
+    minEventSec: 0.06,         // 60 ms — catches eighth notes at fast tempos
   });
   return splitterDetectChords(buffer);
 }
@@ -8585,8 +8585,15 @@ async function splitterDetectSongKey(buffer) {
 // kernel set, runs listenerScoreChroma, dedupes consecutive identical chords
 // into events. Returns [{start, end, label}].
 async function splitterDetectChords(buffer) {
-  const hopSec = 0.25;       // 4 fps — fast enough to catch chord changes
-                              // every half-bar at 120 BPM
+  // Mirrors the Listener's chord pipeline frame-by-frame, then commits
+  // events on stable-key change. The Listener has been tuned over many
+  // iterations — bass-aware chroma scoring, median smoothing, temporal
+  // low-pass, spectral-flux onset resets, rolling-history vote with
+  // hysteresis — and it's the most accurate chord detector we've got.
+  // Run that same logic offline on the 'other' stem and we get the same
+  // accuracy without the live-mic latency limit.
+  const hopSec = 0.12;       // ~8 fps — fast enough to catch beat-level
+                              // chord changes at 120 BPM (500 ms = 4 frames)
   const fftSize = 4096;
   const sr = buffer.sampleRate;
   const hopSamples = Math.max(1, Math.floor(hopSec * sr));
@@ -8601,70 +8608,140 @@ async function splitterDetectChords(buffer) {
   const im = new Float32Array(fftSize);
   const numBins = fftSize / 2 + 1;
   const mags = new Float32Array(numBins);
-  const chroma = new Float32Array(12);
+  const prevMags = new Float32Array(numBins);
+  const chromaRaw = new Float32Array(12);
+  const bassChroma = new Float32Array(12);
+  const smoothChroma = new Float32Array(12);
+
+  // Rolling state mirroring the listener
+  const HISTORY_SIZE = 6;     // ~720 ms of context at 0.12 s hop
+  const HYSTERESIS = 1.10;     // locked key must be beaten by 10% to swap
+  const history = [];
+  let lockedKey = null;
+  let fluxAvg = 1e-6;
+  const rawHist = [];          // last 3 raw chromas for median smoothing
+  const SMOOTH_ALPHA = 0.55;
 
   const events = [];
   let curLabel = null;
   let curPitches = null;
   let curStart = 0;
-  let pendingLabel = null;   // candidate label for the 2-frame stability filter
-  let pendingPitches = null;
-  let pendingCount = 0;
+
+  function commitChange(label, pitches, atTime) {
+    if (label === curLabel) return;
+    if (curLabel) events.push({ start: curStart, end: atTime, label: curLabel, pitches: curPitches });
+    curLabel = label;
+    curPitches = pitches;
+    curStart = atTime;
+  }
 
   for (let f = 0; f < numFrames; f++) {
+    const tNow = f * hopSec;
     const start = f * hopSamples;
     for (let i = 0; i < fftSize; i++) { re[i] = audio[start + i] * window[i]; im[i] = 0; }
     splitterFFT(re, im);
     for (let i = 0; i < numBins; i++) mags[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
-    chroma.fill(0);
+
+    // Spectral flux for onset detection
+    let flux = 0;
+    for (let i = 1; i < numBins; i++) {
+      const d = mags[i] - prevMags[i];
+      if (d > 0) flux += d;
+      prevMags[i] = mags[i];
+    }
+    const onset = flux > Math.max(fluxAvg * 2.5, 0.05);
+    fluxAvg = 0.92 * fluxAvg + 0.08 * flux;
+    if (onset && history.length > 2) {
+      history.length = 0;
+      lockedKey = null;
+    }
+
+    // Build chromas — main (all kernels) + bass (sub-180 Hz kernels only)
+    chromaRaw.fill(0);
+    bassChroma.fill(0);
     for (const k of kernels) {
       let energy = 0;
       for (let j = 0; j < k.bins.length; j++) energy += mags[k.bins[j][0]] * k.bins[j][1];
-      chroma[k.pc] += energy;
+      if (energy <= 0) continue;
+      chromaRaw[k.pc] += energy;
+      if (k.fCenter <= 180) bassChroma[k.pc] += energy;
     }
+    // Normalize main chroma
     let maxV = 0;
-    for (let i = 0; i < 12; i++) if (chroma[i] > maxV) maxV = chroma[i];
-    const tNow = f * hopSec;
+    for (let i = 0; i < 12; i++) if (chromaRaw[i] > maxV) maxV = chromaRaw[i];
     if (maxV < 0.01) {
-      // Silence — close any open event
       if (curLabel) { events.push({ start: curStart, end: tNow, label: curLabel, pitches: curPitches }); curLabel = null; curPitches = null; }
-      pendingLabel = null;
-      pendingPitches = null;
-      pendingCount = 0;
+      history.length = 0;
+      lockedKey = null;
+      rawHist.length = 0;
       continue;
     }
-    for (let i = 0; i < 12; i++) chroma[i] /= maxV;
-    const results = listenerScoreChroma(chroma);
+    for (let i = 0; i < 12; i++) chromaRaw[i] /= maxV;
+
+    // Bass PC from sub-180 Hz band — must clearly dominate the 2nd
+    // strongest (gap > 30%) to be trusted; otherwise drop to -1.
+    let bassMax = 0, bassPc = -1;
+    for (let i = 0; i < 12; i++) if (bassChroma[i] > bassMax) { bassMax = bassChroma[i]; bassPc = i; }
+    if (bassMax > 0) {
+      let secondMax = 0;
+      for (let i = 0; i < 12; i++) if (i !== bassPc && bassChroma[i] > secondMax) secondMax = bassChroma[i];
+      if (secondMax / bassMax > 0.7) bassPc = -1;
+    } else bassPc = -1;
+
+    // Median smoothing over last 3 raw chromas
+    rawHist.push(Float32Array.from(chromaRaw));
+    if (rawHist.length > 3) rawHist.shift();
+    const medChroma = new Float32Array(12);
+    if (rawHist.length >= 3) {
+      for (let i = 0; i < 12; i++) {
+        const a = rawHist[0][i], b = rawHist[1][i], c = rawHist[2][i];
+        medChroma[i] = (a > b) ? (b > c ? b : (a > c ? c : a)) : (a > c ? a : (b > c ? c : b));
+      }
+    } else medChroma.set(chromaRaw);
+
+    // Temporal low-pass
+    for (let i = 0; i < 12; i++) {
+      smoothChroma[i] = SMOOTH_ALPHA * medChroma[i] + (1 - SMOOTH_ALPHA) * smoothChroma[i];
+    }
+
+    // Bass-aware scoring against the 20-quality template set
+    const results = listenerScoreChroma(smoothChroma, bassPc);
     if (!results.length) continue;
-    const top = results[0];
-    const chord = listenerCandidateToChord(top);
-    const label = chord.name;
-    // Compute MIDI pitches for the chord — root in octave 4 + each interval.
-    // Stored on the event so MIDI export can emit full chord tones.
-    const rootMidi = 60 + top.root;
-    const pitches = chord.type.intervals.map(iv => rootMidi + iv);
-    // 2-frame stability: a candidate label has to win two frames in a row
-    // before we commit. Eliminates flicker from single-frame mis-detections.
-    if (label !== pendingLabel) {
-      pendingLabel = label;
-      pendingPitches = pitches;
-      pendingCount = 1;
-    } else {
-      pendingCount++;
+    history.push(results[0]);
+    if (history.length > HISTORY_SIZE) history.shift();
+
+    // Tally rolling history with hysteresis
+    if (history.length >= 3) {
+      const tally = new Map();
+      for (const h of history) {
+        const k = h.root + ':' + h.quality;
+        tally.set(k, (tally.get(k) || 0) + h.score);
+      }
+      let bestKey = null, bestVal = 0;
+      for (const [k, v] of tally) if (v > bestVal) { bestVal = v; bestKey = k; }
+      if (lockedKey && bestKey !== lockedKey) {
+        const lockedVal = tally.get(lockedKey) || 0;
+        if (bestVal < lockedVal * HYSTERESIS) bestKey = lockedKey;
+      }
+      if (bestKey && bestKey !== lockedKey) {
+        lockedKey = bestKey;
+        const [rootStr, qStr] = bestKey.split(':');
+        const root = parseInt(rootStr, 10);
+        const chord = listenerCandidateToChord({ root, quality: qStr });
+        const rootMidi = 60 + root;
+        const pitches = chord.type.intervals.map(iv => rootMidi + iv);
+        commitChange(chord.name, pitches, tNow);
+      }
     }
-    if (pendingCount >= 2 && pendingLabel !== curLabel) {
-      if (curLabel) events.push({ start: curStart, end: tNow, label: curLabel, pitches: curPitches });
-      curLabel = pendingLabel;
-      curPitches = pendingPitches;
-      curStart = tNow;
-    }
-    if ((f & 31) === 0) await splitterYield();
+
+    if ((f & 63) === 0) await splitterYield();
   }
   if (curLabel) events.push({ start: curStart, end: numFrames * hopSec, label: curLabel, pitches: curPitches });
-  // Drop events shorter than 0.4 s — chord changes that brief are usually
-  // mid-transition flicker. (Used to be 0.7 s but that was missing 8th-bar
-  // chord passes common in faster pop / Bollywood.)
-  return events.filter(ev => (ev.end - ev.start) >= 0.4);
+
+  // Drop events shorter than 0.25 s — basically eliminates 1-2 frame
+  // commit-then-revert flickers but lets through real beat-level
+  // passes (250 ms = 1/2 beat at 120 BPM).
+  return events.filter(ev => (ev.end - ev.start) >= 0.25);
 }
 
 // Post-process chord events using the bass-stem note track: if the dominant
