@@ -7661,20 +7661,10 @@ async function splitterAnalyseStemEvents(stemId, buffer) {
     return await splitterClassifyDrumOnsets(buffer);
   }
   if (stemId === 'vocals') {
-    const raw = await splitterDetectMonophonicNotes(buffer, {
-      minHz: 70, maxHz: 1400,    // covers low croons through soprano belts
-      hopSec: 0.040,             // ~25 fps — finer time resolution
-      fftSize: 4096,
-      numHarmonics: 4,           // HPS depth — kills octave errors
-      smoothFrames: 1,           // raw frames
-      stabilityFrames: 1,        // commit on first frame so fast runs (40-80 ms notes) survive
-      minEventSec: 0.025,        // 25 ms — keep super-short ornaments + kan-swar
-    });
-    // The post-cleaner is what protects against chromatic glide artifacts
-    // now that stability=1 lets every frame through. It only drops events
-    // that are unambiguously chromatic-in-between of a slide, so genuine
-    // fast-run notes (each landing on a distinct scale step) survive.
-    return splitterMergeAdjacentSamePitch(splitterCleanGlideChromatics(raw));
+    // New: heatmap + 1/16th quantization. Tempo comes from the song's
+    // auto-detected BPM (defaults to 120 if detection failed).
+    const tempo = splitterState.detectedTempo || 120;
+    return await splitterDetectVocalNotesQuantized(buffer, tempo);
   }
   if (stemId === 'bass')   return splitterDetectMonophonicNotes(buffer, {
     minHz: 35,  maxHz: 400,    // low B0 -> G4 covers most basses + sub
@@ -7867,6 +7857,179 @@ async function splitterDetectMonophonicNotes(buffer, opts) {
     }
   }
   return filtered;
+}
+
+// ---- Vocal note detector: pitch heatmap + 1/16th-note quantization ------
+// Per-frame HPS argmax is wobbly: it picks ONE pitch per frame and the
+// flicker becomes events. This detector instead BUILDS a per-frame energy
+// histogram over every candidate MIDI in the vocal range, then quantizes
+// time into 1/16th-note slots, sums the histogram across every frame in
+// each slot, and picks the MIDI with the highest summed energy as the
+// note for that slot. Brief HPS flickers contribute negligible energy and
+// get outvoted by the real sustained pitch. Consecutive slots with the
+// same winner merge into longer events.
+//
+// Net result: ornament-grade pitch resolution where it matters (each
+// 1/16th-note slot can hold a distinct note), but no sub-1/16th detector
+// noise leaks through. Sheet music lands on a clean musical grid.
+async function splitterDetectVocalNotesQuantized(buffer, tempo) {
+  const sr = buffer.sampleRate;
+  const audio = (buffer.numberOfChannels === 1)
+    ? buffer.getChannelData(0) : splitterMixToMono(buffer);
+  if (!audio || audio.length < 4096) return [];
+
+  const fftSize = 4096;
+  const hopSec = 0.030;                          // 33 fps for high time res
+  const hopSamples = Math.max(1, Math.floor(hopSec * sr));
+  const numFrames = Math.floor((audio.length - fftSize) / hopSamples) + 1;
+  if (numFrames < 4) return [];
+
+  const halfN = fftSize >> 1;
+  const win = splitterHannWindow(fftSize);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const mag = new Float32Array(halfN);
+
+  // MIDI range covering low croon (~D2 = 38) through soprano belt (~F6 = 89)
+  const minMidi = 38, maxMidi = 89;
+  const numMidi = maxMidi - minMidi + 1;
+  // Energy heatmap: [frame][midiOffset] (Float32 flat array)
+  const heat = new Float32Array(numFrames * numMidi);
+  const frameRms = new Float32Array(numFrames);
+
+  // Pre-compute the 4 harmonic bin indices for each candidate MIDI
+  const harmBins = new Int32Array(numMidi * 4);
+  for (let mi = 0; mi < numMidi; mi++) {
+    const m = minMidi + mi;
+    const f0 = 440 * Math.pow(2, (m - 69) / 12);
+    for (let h = 1; h <= 4; h++) {
+      const bin = Math.round((h * f0 * fftSize) / sr);
+      harmBins[mi * 4 + (h - 1)] = (bin < halfN) ? bin : -1;
+    }
+  }
+
+  for (let f = 0; f < numFrames; f++) {
+    const off = f * hopSamples;
+    let sumSq = 0;
+    for (let i = 0; i < fftSize; i++) {
+      const s = (audio[off + i] || 0);
+      re[i] = s * win[i];
+      im[i] = 0;
+      sumSq += s * s;
+    }
+    frameRms[f] = Math.sqrt(sumSq / fftSize);
+    splitterFFT(re, im);
+    for (let k = 0; k < halfN; k++) mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+    // HPS energy per candidate MIDI
+    for (let mi = 0; mi < numMidi; mi++) {
+      const i = mi * 4;
+      const b1 = harmBins[i], b2 = harmBins[i+1], b3 = harmBins[i+2], b4 = harmBins[i+3];
+      if (b1 < 0) { heat[f * numMidi + mi] = 0; continue; }
+      let prod = mag[b1];
+      if (b2 >= 0) prod *= mag[b2];
+      if (b3 >= 0) prod *= mag[b3];
+      if (b4 >= 0) prod *= mag[b4];
+      heat[f * numMidi + mi] = prod;
+    }
+    if ((f & 31) === 0) await splitterYield();
+  }
+
+  // 1/16th-note slot grid based on the song's tempo
+  const bpm = Math.max(40, Math.min(220, tempo || 120));
+  const slotSec = (60 / bpm) / 4;                // 1/16th note
+  const duration = numFrames * hopSec;
+  const numSlots = Math.ceil(duration / slotSec);
+
+  // Adaptive silence floor based on per-frame RMS
+  const rmsSorted = Array.from(frameRms).slice().sort((a, b) => a - b);
+  const rmsP15 = rmsSorted[Math.floor(rmsSorted.length * 0.15)] || 0;
+  const rmsP85 = rmsSorted[Math.floor(rmsSorted.length * 0.85)] || 1;
+  const silenceRms = rmsP15 + 0.10 * (rmsP85 - rmsP15);
+
+  // For each slot, sum heat across frames and pick the winning MIDI
+  const slotEvents = [];
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  for (let s = 0; s < numSlots; s++) {
+    const tStart = s * slotSec;
+    const tEnd = tStart + slotSec;
+    const fStart = Math.max(0, Math.floor(tStart / hopSec));
+    const fEnd = Math.min(numFrames, Math.ceil(tEnd / hopSec));
+    if (fEnd <= fStart) { slotEvents.push(null); continue; }
+    // Check if the slot is voiced (enough loudness)
+    let voicedFrames = 0;
+    for (let f = fStart; f < fEnd; f++) if (frameRms[f] > silenceRms) voicedFrames++;
+    if (voicedFrames < Math.max(1, Math.floor((fEnd - fStart) * 0.40))) {
+      slotEvents.push(null);
+      continue;
+    }
+    // Sum heat per MIDI across the slot's frames
+    let bestVote = 0, bestMi = -1;
+    const totals = new Float32Array(numMidi);
+    for (let mi = 0; mi < numMidi; mi++) {
+      let sum = 0;
+      for (let f = fStart; f < fEnd; f++) {
+        // Only count frames that pass the silence floor
+        if (frameRms[f] > silenceRms) sum += heat[f * numMidi + mi];
+      }
+      totals[mi] = sum;
+      if (sum > bestVote) { bestVote = sum; bestMi = mi; }
+    }
+    if (bestMi < 0 || bestVote <= 0) { slotEvents.push(null); continue; }
+    // Confidence check — the top must clearly beat the 2nd-best so we
+    // don't commit on near-tied pitches (usually octave error or silence).
+    let secondVote = 0;
+    for (let mi = 0; mi < numMidi; mi++) {
+      if (mi === bestMi) continue;
+      if (totals[mi] > secondVote) secondVote = totals[mi];
+    }
+    if (secondVote > 0 && (bestVote / secondVote) < 1.10) {
+      slotEvents.push(null);
+      continue;
+    }
+    const midi = minMidi + bestMi;
+    slotEvents.push({ start: tStart, end: tEnd, midi });
+  }
+
+  // Merge consecutive same-pitch slots into single events
+  const merged = [];
+  for (const ev of slotEvents) {
+    if (!ev) continue;
+    const prev = merged[merged.length - 1];
+    if (prev && prev.midi === ev.midi && Math.abs(ev.start - prev.end) < 0.005) {
+      prev.end = ev.end;
+    } else {
+      merged.push(Object.assign({}, ev));
+    }
+  }
+
+  // Add labels + velocity (RMS-normalized across all events)
+  for (const ev of merged) {
+    const pc = ((ev.midi % 12) + 12) % 12;
+    const oct = Math.floor(ev.midi / 12) - 1;
+    ev.label = NOTE_NAMES[pc] + oct;
+    ev.pitches = [ev.midi];
+  }
+  if (merged.length) {
+    const evRms = new Float32Array(merged.length);
+    for (let i = 0; i < merged.length; i++) {
+      const ev = merged[i];
+      const i0 = Math.max(0, Math.floor(ev.start * sr));
+      const i1 = Math.min(audio.length, Math.floor(ev.end * sr));
+      let sum = 0;
+      const n = Math.max(1, i1 - i0);
+      for (let j = i0; j < i1; j++) sum += audio[j] * audio[j];
+      evRms[i] = Math.sqrt(sum / n);
+    }
+    const sorted = Array.from(evRms).slice().sort((a, b) => a - b);
+    const p05 = sorted[Math.floor(sorted.length * 0.05)] || 0;
+    const p95 = sorted[Math.floor(sorted.length * 0.95)] || 1;
+    const range = Math.max(1e-6, p95 - p05);
+    for (let i = 0; i < merged.length; i++) {
+      const norm = Math.max(0, Math.min(1, (evRms[i] - p05) / range));
+      merged[i].velocity = Math.round(40 + norm * 87);
+    }
+  }
+  return merged;
 }
 
 // ---- Glide / chromatic-passing-tone cleaner -----------------------------
