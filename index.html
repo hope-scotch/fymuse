@@ -616,6 +616,27 @@
   /* Mixer — one track per stem */
   .splitter-mixer { display: flex; flex-direction: column; gap: 10px; }
   .splitter-mixer[hidden] { display: none; }
+  /* Chord chart — sits above the stem mixer. Shows the chord underlying
+     the song right now (big), plus the full progression as a clickable
+     strip. Same vibe as the Listener's current-chord display. */
+  .splitter-chord-chart { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .splitter-chord-chart[hidden] { display: none; }
+  .chord-chart-header { display: flex; justify-content: space-between; align-items: center; }
+  .chord-chart-label { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .chord-chart-meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .chord-chart-now { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; min-height: 84px; }
+  .chord-chart-now-label { font-family: var(--font-mono); font-size: 9.5px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+  .chord-chart-now-chord { font-family: var(--font-sans); font-size: 36px; font-weight: 700; color: var(--accent); line-height: 1; letter-spacing: -0.5px; transition: color 0.15s; }
+  .chord-chart-now-chord.is-silent { color: var(--muted); opacity: 0.5; }
+  .chord-chart-now-notes { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); margin-top: 2px; }
+  .chord-chart-strip-wrap { overflow-x: auto; overflow-y: hidden; padding: 2px 0 6px; }
+  .chord-chart-strip { display: flex; align-items: stretch; gap: 3px; min-height: 38px; }
+  .chord-chart-pill { flex-shrink: 0; padding: 6px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; transition: all 0.12s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+  .chord-chart-pill:hover { border-color: var(--accent); color: var(--accent); }
+  .chord-chart-pill.is-current { background: var(--accent); color: #1a1a1a; border-color: var(--accent); box-shadow: 0 0 10px rgba(245,165,36,0.45); transform: translateY(-1px); }
+  .chord-chart-pill .chord-chart-pill-time { display: block; font-size: 9px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  .chord-chart-pill.is-current .chord-chart-pill-time { color: rgba(0,0,0,0.6); }
+  .chord-chart-empty { color: var(--muted); font-size: 12px; padding: 8px 4px; font-style: italic; }
   .stem-track { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.15s, border-color 0.15s; }
   .stem-track-controls { display: grid; grid-template-columns: 160px auto 1fr 56px auto; align-items: center; gap: 14px; }
   .stem-midi-btn { padding: 5px 10px; background: var(--panel); color: var(--text-2); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.4px; display: inline-flex; align-items: center; gap: 5px; transition: all 0.12s; white-space: nowrap; }
@@ -6051,6 +6072,21 @@ function buildSplitterViewSkeleton(root) {
       <button class="splitter-transport-btn is-secondary" id="splitter-close" title="Close song"><i class="ph-duotone ph-x sz-sm"></i></button>
     </div>
 
+    <div class="splitter-chord-chart" id="splitter-chord-chart" hidden>
+      <div class="chord-chart-header">
+        <span class="chord-chart-label"><i class="ph-duotone ph-music-note-half sz-sm"></i> Chords</span>
+        <span class="chord-chart-meta" id="chord-chart-meta"></span>
+      </div>
+      <div class="chord-chart-now">
+        <div class="chord-chart-now-label">Playing</div>
+        <div class="chord-chart-now-chord" id="chord-chart-now-chord">—</div>
+        <div class="chord-chart-now-notes" id="chord-chart-now-notes"></div>
+      </div>
+      <div class="chord-chart-strip-wrap">
+        <div class="chord-chart-strip" id="chord-chart-strip"></div>
+      </div>
+    </div>
+
     <div class="splitter-mixer" id="splitter-mixer" hidden>
       ${SPLITTER_STEMS.map(s => `
         <div class="stem-track" data-stem="${s.id}" id="stem-track-${s.id}">
@@ -6141,6 +6177,105 @@ function splitterUpdateStemCursors() {
   document.querySelectorAll('.stem-timeline-cursor').forEach(el => {
     el.style.left = pct.toFixed(2) + '%';
   });
+  splitterUpdateChordChartCursor(elapsed);
+}
+
+// ---- Chord chart: shows the song's underlying chord progression ---------
+// Listens to the 'other' stem's chord events (from splitterDetectChords).
+// Renders two pieces: a big 'currently playing' display + a horizontal
+// scrolling strip of every detected chord, clickable to seek. The current-
+// chord pill is highlighted in the strip and the big display updates as
+// the playhead moves.
+function splitterRenderChordChart() {
+  const wrap = document.getElementById('splitter-chord-chart');
+  const strip = document.getElementById('chord-chart-strip');
+  const meta = document.getElementById('chord-chart-meta');
+  if (!wrap || !strip) return;
+  const other = splitterState.stems['other'];
+  const events = (other && other.events) ? other.events : [];
+  if (!events.length) {
+    wrap.hidden = !splitterState.fileBuffer; // hide entirely if no song
+    strip.innerHTML = '<div class="chord-chart-empty">No chord progression detected yet.</div>';
+    if (meta) meta.textContent = '';
+    return;
+  }
+  wrap.hidden = false;
+  if (meta) {
+    const tempo = splitterState.detectedTempo
+      ? splitterState.detectedTempo + ' bpm · '
+      : '';
+    meta.textContent = tempo + events.length + ' chord' + (events.length !== 1 ? 's' : '');
+  }
+  const pills = events.map((ev, i) => {
+    const safe = String(ev.label || '?').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;','\'':'&#39;'}[c]));
+    const tStr = splitterFormatTime(ev.start);
+    return '<button class="chord-chart-pill" data-time="' + ev.start.toFixed(3) + '" '
+      + 'data-end="' + ev.end.toFixed(3) + '" '
+      + 'data-idx="' + i + '" '
+      + 'title="' + safe + ' · ' + tStr + ' → ' + splitterFormatTime(ev.end) + '">'
+      + safe + '<span class="chord-chart-pill-time">' + tStr + '</span></button>';
+  }).join('');
+  strip.innerHTML = pills;
+  strip.querySelectorAll('.chord-chart-pill').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const t = parseFloat(btn.dataset.time);
+      if (!isNaN(t)) splitterSeek(t);
+    };
+  });
+  splitterUpdateChordChartCursor(splitterCurrentTime());
+}
+
+function splitterUpdateChordChartCursor(t) {
+  const other = splitterState.stems['other'];
+  const events = (other && other.events) ? other.events : [];
+  const nowEl = document.getElementById('chord-chart-now-chord');
+  const notesEl = document.getElementById('chord-chart-now-notes');
+  const strip = document.getElementById('chord-chart-strip');
+  if (!nowEl || !strip) return;
+  // Find the chord active at the playhead time
+  let activeIdx = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].start <= t + 0.001) {
+      if (events[i].end + 0.05 >= t) activeIdx = i;
+      break;
+    }
+  }
+  const ev = activeIdx >= 0 ? events[activeIdx] : null;
+  if (ev) {
+    nowEl.textContent = ev.label || '?';
+    nowEl.classList.remove('is-silent');
+    if (notesEl) {
+      const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      const noteStr = (ev.pitches || []).map(p => NOTE_NAMES[((p % 12) + 12) % 12]).join(' · ');
+      notesEl.textContent = noteStr;
+    }
+  } else {
+    nowEl.textContent = '—';
+    nowEl.classList.add('is-silent');
+    if (notesEl) notesEl.textContent = '';
+  }
+  // Highlight the active pill in the strip + scroll it into view
+  let activePill = null;
+  strip.querySelectorAll('.chord-chart-pill').forEach(pill => {
+    const isActive = parseInt(pill.dataset.idx, 10) === activeIdx;
+    pill.classList.toggle('is-current', isActive);
+    if (isActive) activePill = pill;
+  });
+  if (activePill && splitterState.playing) {
+    const wrap = activePill.parentElement;
+    if (wrap && wrap.parentElement) {
+      const scroller = wrap.parentElement; // .chord-chart-strip-wrap
+      const pillRect = activePill.getBoundingClientRect();
+      const scrollRect = scroller.getBoundingClientRect();
+      if (pillRect.left < scrollRect.left + 40 || pillRect.right > scrollRect.right - 40) {
+        scroller.scrollBy({
+          left: pillRect.left - scrollRect.left - scrollRect.width / 2 + pillRect.width / 2,
+          behavior: 'smooth',
+        });
+      }
+    }
+  }
 }
 
 // Helper: where is the playhead right now?
@@ -7647,9 +7782,12 @@ async function splitterAnalyzeStems() {
       const bassStem = splitterState.stems['bass'];
       const bassEvents = (bassStem && bassStem.events) || [];
       stem.events = splitterAddSlashChords(stem.events, bassEvents);
+      // Chord chart depends on this stem — render as soon as it's ready
+      splitterRenderChordChart();
     }
     splitterRenderTimelineEvents(def.id);
   }
+  splitterRenderChordChart();
   splitterUpdateStemCursors();
 }
 
@@ -9143,10 +9281,12 @@ function splitterStopActivityTicker() {
 function splitterUpdateStatusUI() {
   const transport = document.getElementById('splitter-transport');
   const mixer = document.getElementById('splitter-mixer');
+  const chordChart = document.getElementById('splitter-chord-chart');
   const empty = document.getElementById('splitter-empty');
   const ready = !!splitterState.fileBuffer && Object.keys(splitterState.stems).length > 0;
   if (transport) transport.hidden = !ready;
   if (mixer) mixer.hidden = !ready;
+  if (chordChart) chordChart.hidden = !ready;
   // Hide the empty drop-zone state once we have a song loaded
   if (empty) empty.hidden = ready;
   const trackName = document.getElementById('splitter-track-name');
@@ -9276,6 +9416,7 @@ async function splitterLoadFromCache(entry) {
   }
   splitterRenderAllTimelines();
   splitterUpdateMixerUI();
+  splitterRenderChordChart();
   return true;
 }
 
