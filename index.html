@@ -7796,6 +7796,15 @@ async function splitterAnalyzeStems() {
 // runs and harmonic suppression), skip drums.
 async function splitterAnalyseStemEvents(stemId, buffer) {
   if (stemId === 'drums' || stemId === 'percussive') {
+    // Cross-stem classifier: the original mix + bass stem give us the kick
+    // fundamental that Demucs steals out of the drums stem (40-90 Hz). The
+    // single-stem fallback (splitterClassifyDrumOnsets) only runs when we
+    // don't have access to the mix — e.g. some legacy call sites.
+    const mixBuf = splitterState.fileBuffer;
+    const bassBuf = splitterState.stems.bass && splitterState.stems.bass.buffer;
+    if (mixBuf && mixBuf !== buffer) {
+      return await splitterClassifyDrumOnsetsCrossStem(buffer, mixBuf, bassBuf);
+    }
     return await splitterClassifyDrumOnsets(buffer);
   }
   if (stemId === 'vocals') {
@@ -8737,6 +8746,293 @@ function splitterDrumVelocity(peak) {
   // Map peak amplitude (0-1) → MIDI velocity in [40, 127]
   const v = Math.round(40 + Math.min(1, peak * 1.5) * 87);
   return Math.max(40, Math.min(127, v));
+}
+
+// ---- Cross-stem drum classifier (the good one) --------------------------
+// The original single-stem classifier (splitterClassifyDrumOnsets above)
+// has a fundamental Demucs problem: htdemucs routinely steals the kick
+// fundamental (40-90 Hz) into the bass stem because Bass and Kick share
+// that band and the model has to pick one. What's left in the drums stem
+// for a kick is mostly 150-400 Hz body resonance — looks more like a snare
+// than a kick. The classifier then either calls it a snare, or worse,
+// misses it entirely.
+//
+// Fix: stop trying to find kicks in the drums stem. Build a "kick channel"
+// from the ORIGINAL MIX (which still contains everything Demucs split out),
+// low-passed below ~120 Hz. Every onset in that band is a kick — pop / rock
+// kicks are by definition the dominant sub-100 Hz transient in the song.
+// Then use the drums stem only for snare/hat/cymbal/tom, with kick-onset
+// neighbourhoods suppressed (those drums-stem hits are kick spill into the
+// upper bands, not real snares/hats).
+async function splitterClassifyDrumOnsetsCrossStem(drumsBuf, mixBuf, bassBuf) {
+  const sr = drumsBuf.sampleRate;
+  const drumsAudio = splitterMixToMono(drumsBuf);
+  if (!drumsAudio || drumsAudio.length < 2048) return [];
+
+  // ---- Kick channel: low-pass(mix + 0.5 * bass) at ~120 Hz ----
+  // Mix alone usually has the kick fundamental, but if the recording is
+  // bass-light and Demucs took most of the low end into the bass stem, we
+  // top up by adding the bass stem at half gain. The 4th-order LP cleanly
+  // isolates the kick band from everything else (hats start at 5+ kHz,
+  // snare shells at 200-300 Hz, bass fundamentals 40-200 Hz). Bass-note
+  // onsets are much softer than kicks (slow swells vs sharp transients),
+  // so the spectral-flux detector still picks out the kicks.
+  let kickChan = null;
+  if (mixBuf && mixBuf.sampleRate === sr) {
+    const mixMono = splitterMixToMono(mixBuf);
+    if (mixMono && mixMono.length === drumsAudio.length) {
+      kickChan = new Float32Array(mixMono.length);
+      kickChan.set(mixMono);
+      if (bassBuf && bassBuf.sampleRate === sr) {
+        const bassMono = splitterMixToMono(bassBuf);
+        if (bassMono && bassMono.length === kickChan.length) {
+          for (let i = 0; i < kickChan.length; i++) {
+            kickChan[i] += 0.5 * bassMono[i];
+          }
+        }
+      }
+    }
+  }
+  // Fallback: no mix → drums-only kick channel (still useful, kick body
+  // resonance lives in drums even after Demucs strips the fundamental).
+  if (!kickChan) {
+    kickChan = new Float32Array(drumsAudio.length);
+    kickChan.set(drumsAudio);
+  }
+  // Two passes of biquad LP at 120 Hz → 4th order Butterworth-ish rolloff.
+  splitterBiquadLPInPlace(kickChan, sr, 120);
+  splitterBiquadLPInPlace(kickChan, sr, 120);
+
+  // ---- Kick onsets ----
+  const kickOnsetTimes = splitterDetectKickChannelOnsets(kickChan, sr);
+
+  // ---- Drums-stem onsets (existing detector) ----
+  const drumsOnsets = splitterDetectDrumOnsets(drumsAudio, sr, 1024, 256);
+
+  // ---- Build kick events with cross-stem velocity ----
+  const events = [];
+  for (let i = 0; i < kickOnsetTimes.length; i++) {
+    const t = kickOnsetTimes[i];
+    // Peak of the kick channel in the first 80 ms drives velocity
+    const peakSamples = Math.floor(0.08 * sr);
+    const a = Math.floor(t * sr);
+    const b = Math.min(kickChan.length, a + peakSamples);
+    let peak = 0;
+    for (let s = a; s < b; s++) {
+      const v = Math.abs(kickChan[s]);
+      if (v > peak) peak = v;
+    }
+    const nextT = kickOnsetTimes[i + 1] != null ? kickOnsetTimes[i + 1] : t + 0.30;
+    const visEnd = Math.min(t + 0.18, nextT - 0.005);
+    events.push({
+      start:    t,
+      end:      Math.max(t + 0.04, visEnd),
+      label:    SPLITTER_DRUM_LABELS.kick,
+      type:     'kick',
+      midi:     SPLITTER_DRUM_GM.kick,
+      pitches:  [SPLITTER_DRUM_GM.kick],
+      velocity: splitterDrumVelocity(Math.min(1, peak * 2)), // LP'd signal is quieter
+    });
+  }
+
+  // ---- Suppress drums-stem onsets that are kick spill ----
+  // A drums-stem onset within ±30 ms of a kick onset is the upper-band
+  // bleed of the same kick (HF spike + body resonance Demucs left behind).
+  // Drop these — the kick is already represented by the kick-channel event.
+  const kickWin = 0.030;
+  const nonKickOnsets = [];
+  for (const t of drumsOnsets) {
+    let near = false;
+    for (const k of kickOnsetTimes) {
+      if (Math.abs(k - t) <= kickWin) { near = true; break; }
+    }
+    if (!near) nonKickOnsets.push(t);
+  }
+
+  // ---- Classify the rest as snare / hat / cymbal / tom ----
+  const specSec  = 0.08;
+  const decaySec = 0.25;
+  for (let i = 0; i < nonKickOnsets.length; i++) {
+    const t = nonKickOnsets[i];
+    const startSample = Math.floor(t * sr);
+    const specEnd  = Math.min(drumsAudio.length, startSample + Math.floor(specSec  * sr));
+    const decayEnd = Math.min(drumsAudio.length, startSample + Math.floor(decaySec * sr));
+    if (specEnd - startSample < 256) continue;
+    const specWin  = drumsAudio.subarray(startSample, specEnd);
+    const decayWin = drumsAudio.subarray(startSample, decayEnd);
+    const features = splitterDrumFeatures(specWin, decayWin, sr);
+    features.zcr = splitterZeroCrossingRate(specWin); // crossings per sample
+    const cls = splitterClassifyNonKickDrum(features);
+    const nextT = nonKickOnsets[i + 1] != null ? nonKickOnsets[i + 1] : t + 0.30;
+    const visEnd = Math.min(t + 0.18, nextT - 0.005);
+    events.push({
+      start:    t,
+      end:      Math.max(t + 0.04, visEnd),
+      label:    SPLITTER_DRUM_LABELS[cls.type] || '?',
+      type:     cls.type,
+      midi:     SPLITTER_DRUM_GM[cls.type] || 60,
+      pitches:  [SPLITTER_DRUM_GM[cls.type] || 60],
+      velocity: cls.velocity || 96,
+    });
+  }
+
+  events.sort((a, b) => a.start - b.start);
+  return events;
+}
+
+// 2nd-order Butterworth low-pass biquad (RBJ cookbook). In-place on a
+// Float32Array. Apply twice for a 4th-order rolloff if you want sharper
+// separation; one pass is ~12 dB/oct, two ~24 dB/oct.
+function splitterBiquadLPInPlace(buf, sr, cutoffHz) {
+  const w0 = 2 * Math.PI * cutoffHz / sr;
+  const cs = Math.cos(w0);
+  const sn = Math.sin(w0);
+  const Q = 0.7071; // Butterworth
+  const alpha = sn / (2 * Q);
+  const b0 =  (1 - cs) / 2;
+  const b1 =   1 - cs;
+  const b2 =  (1 - cs) / 2;
+  const a0 =   1 + alpha;
+  const a1 =  -2 * cs;
+  const a2 =   1 - alpha;
+  const nb0 = b0 / a0, nb1 = b1 / a0, nb2 = b2 / a0;
+  const na1 = a1 / a0, na2 = a2 / a0;
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const x0 = buf[i];
+    const y0 = nb0 * x0 + nb1 * x1 + nb2 * x2 - na1 * y1 - na2 * y2;
+    x2 = x1; x1 = x0;
+    y2 = y1; y1 = y0;
+    buf[i] = y0;
+  }
+}
+
+// Spectral-flux onset detector tuned for the low-passed kick channel.
+// Different defaults from the broadband drum onset detector: shorter FFT
+// (since we're band-limited anyway), lower threshold (kicks are the only
+// game in town below 120 Hz, so SNR is high), and a longer min separation
+// (60 ms — kicks rarely fire faster than 16ths at 240 BPM = 62 ms).
+function splitterDetectKickChannelOnsets(audio, sr) {
+  const fftSize = 1024;
+  const hopSize = 256;
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const win = new Float32Array(fftSize);
+  for (let i = 0; i < fftSize; i++) {
+    win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (fftSize - 1));
+  }
+  const halfN = fftSize >> 1;
+  // Only count bins up to ~150 Hz (a touch above the LP cutoff to be safe).
+  const kMax = Math.max(1, Math.floor(150 * fftSize / sr));
+  const numFrames = Math.floor((audio.length - fftSize) / hopSize) + 1;
+  if (numFrames < 4) return [];
+  const flux = new Float32Array(numFrames);
+  const prevMag = new Float32Array(halfN);
+  for (let f = 0; f < numFrames; f++) {
+    const off = f * hopSize;
+    for (let i = 0; i < fftSize; i++) {
+      re[i] = (audio[off + i] || 0) * win[i];
+      im[i] = 0;
+    }
+    splitterFFT(re, im);
+    let s = 0;
+    for (let k = 1; k < kMax; k++) {
+      const mag = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+      const d = mag - prevMag[k];
+      if (d > 0) s += d;
+      prevMag[k] = mag;
+    }
+    flux[f] = s;
+  }
+  const sorted = Array.from(flux).slice().sort((a, b) => a - b);
+  const p50 = sorted[Math.floor(sorted.length * 0.50)];
+  const p90 = sorted[Math.floor(sorted.length * 0.90)];
+  const baseline = p50 + 0.30 * (p90 - p50);
+  const halfWin = 10;
+  const minSepFrames = Math.max(1, Math.floor((0.060 * sr) / hopSize));
+  const out = [];
+  let last = -minSepFrames;
+  for (let f = 1; f < numFrames - 1; f++) {
+    if (flux[f] <= flux[f - 1] || flux[f] < flux[f + 1]) continue;
+    let localMean = 0, n = 0;
+    const a = Math.max(0, f - halfWin);
+    const b = Math.min(numFrames - 1, f + halfWin);
+    for (let k = a; k <= b; k++) { localMean += flux[k]; n++; }
+    localMean /= n;
+    const threshold = Math.max(baseline, localMean * 1.35);
+    if (flux[f] >= threshold && (f - last) >= minSepFrames) {
+      out.push((f * hopSize) / sr);
+      last = f;
+    }
+  }
+  return out;
+}
+
+// Zero-crossing rate over a window. Returns crossings per sample (so a
+// 22050 Hz signal of pure 440 Hz tone gives ~0.04 = 880 zero-crossings
+// per 22050 samples = 880 crossings per second / 22050). Useful drum
+// discriminator: kicks ~0.005, snares ~0.05, hats ~0.15+.
+function splitterZeroCrossingRate(buf) {
+  if (!buf || buf.length < 2) return 0;
+  let crossings = 0;
+  let prev = buf[0] >= 0 ? 1 : -1;
+  for (let i = 1; i < buf.length; i++) {
+    const cur = buf[i] >= 0 ? 1 : -1;
+    if (cur !== prev) crossings++;
+    prev = cur;
+  }
+  return crossings / buf.length;
+}
+
+// Slimmed classifier for the cross-stem path: kick is already handled by
+// the kick-channel detector, so this only decides snare / hat (closed) /
+// hat (open) / cymbal / tom. Decisions use ZCR + HF balance + decay.
+function splitterClassifyNonKickDrum(f) {
+  const highE = f.high + f.vhigh;
+  const lowMidMid = f.lowMid + f.mid;
+
+  // CYMBAL: very long sustain + lots of HF + noisy
+  if (f.decay > 0.45 && highE > 0.40 && f.flatness > 0.24) {
+    return { type: 'cymbal', velocity: splitterDrumVelocity(f.peak) };
+  }
+
+  // HI-HAT (closed/open): high ZCR + HF dominant + high centroid.
+  // ZCR is the key discriminator here — hats have very high zero-
+  // crossing rate (broadband noise) while snares are mid-frequency
+  // dominated and have moderate ZCR.
+  if (
+    (f.zcr > 0.10 || (highE > 0.50 && f.centroid > 3500)) &&
+    f.centroid > 2500
+  ) {
+    const type = f.decay > 0.32 ? 'hihat_open' : 'hihat';
+    return { type, velocity: splitterDrumVelocity(f.peak) };
+  }
+
+  // TOM: low-mid dominant, tonal (low flatness), longer decay
+  if (
+    f.peakHz > 90 && f.peakHz < 400 &&
+    f.flatness < 0.18 &&
+    f.lowMid > 0.25 &&
+    f.decay > 0.28
+  ) {
+    return { type: 'tom', velocity: splitterDrumVelocity(f.peak) };
+  }
+
+  // SNARE: the residual mid-frequency category. Broadband mid + medium ZCR
+  // + medium-to-high flatness (snare wires add noise).
+  if (
+    lowMidMid > 0.25 &&
+    f.zcr > 0.02 &&
+    f.centroid > 500 && f.centroid < 5500
+  ) {
+    return { type: 'snare', velocity: splitterDrumVelocity(f.peak) };
+  }
+
+  // Final fallback by centroid + ZCR
+  if (f.zcr > 0.12)     return { type: 'hihat', velocity: splitterDrumVelocity(f.peak) };
+  if (f.centroid < 1500) return { type: 'tom',   velocity: splitterDrumVelocity(f.peak) };
+  if (f.centroid < 4500) return { type: 'snare', velocity: splitterDrumVelocity(f.peak) };
+                         return { type: 'hihat', velocity: splitterDrumVelocity(f.peak) };
 }
 
 // ---- Offline song-key detection (Krumhansl-Schmuckler) -------------------
