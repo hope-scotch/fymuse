@@ -829,6 +829,25 @@
   .modal-tab i { font-size: 16px; }
   .modal-tab-content[hidden] { display: none !important; }
   .modal-tab-content.sheet-content { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px; flex: 1; min-height: 0; overflow: hidden; }
+  .modal-tab-content.tone-content { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px; flex: 1; min-height: 0; overflow: hidden; }
+
+  /* Tone Match view: section selector + analysis report */
+  .tone-controls { display: flex; align-items: center; gap: 14px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
+  .tone-analyze-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: var(--font-sans); transition: all 0.12s; }
+  .tone-analyze-btn:hover { background: var(--accent); color: #1a1a1a; }
+  .tone-analyze-btn:disabled { opacity: 0.5; cursor: wait; }
+  .tone-report-wrap { flex: 1; overflow-y: auto; padding: 4px; }
+  .tone-report { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .tone-placeholder { grid-column: 1 / -1; padding: 32px; color: var(--muted); text-align: center; font-size: 13px; }
+  .tone-card { padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .tone-card-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .tone-card-title i { color: var(--accent); font-size: 12px; }
+  .tone-card svg { width: 100%; height: auto; display: block; }
+  .tone-stat-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; font-family: var(--font-mono); font-size: 11.5px; }
+  .tone-stat-row + .tone-stat-row { border-top: 1px dashed var(--border); }
+  .tone-stat-label { color: var(--text-2); }
+  .tone-stat-value { color: var(--accent); font-weight: 600; }
+  .tone-stat-note { color: var(--muted); font-size: 10.5px; margin-top: 6px; line-height: 1.5; font-family: var(--font-sans); }
 
   /* Sheet view: tempo / bpb / cell controls + bar grid */
   .sheet-controls { display: flex; align-items: center; gap: 14px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
@@ -1430,6 +1449,7 @@
     <div class="modal-tabs">
       <button class="modal-tab is-active" data-tab="piano-roll" title="Pitched view (vertical = pitch)"><i class="ph-duotone ph-piano-keys sz-sm"></i> Piano Roll</button>
       <button class="modal-tab" data-tab="sheet" title="Beat-by-beat sheet notation"><i class="ph-duotone ph-list-numbers sz-sm"></i> Sheet</button>
+      <button class="modal-tab" data-tab="tone" title="Sound character: EQ, dynamics, stereo, reverb"><i class="ph-duotone ph-equalizer sz-sm"></i> Tone Match</button>
     </div>
     <div class="notes-modal-help" id="notes-modal-help">Click an event to jump to that moment · scroll horizontally · zoom to spread out dense sections</div>
     <div class="notes-modal-track-wrap modal-tab-content" data-tab="piano-roll" id="notes-modal-track-wrap">
@@ -1458,6 +1478,22 @@
       </div>
       <div class="sheet-grid-wrap" id="sheet-grid-wrap">
         <div class="sheet-grid" id="sheet-grid"></div>
+      </div>
+    </div>
+    <div class="modal-tab-content tone-content" data-tab="tone" id="tone-content" hidden>
+      <div class="tone-controls">
+        <label class="sheet-control">Analyze region
+          <input type="number" id="tone-start" value="0" min="0" step="0.5">
+          <span class="sheet-control-unit">s →</span>
+          <input type="number" id="tone-end" value="10" min="0.5" step="0.5">
+          <span class="sheet-control-unit">s</span>
+        </label>
+        <button class="tone-analyze-btn" id="tone-analyze-btn"><i class="ph-duotone ph-waveform sz-sm"></i> Re-analyze</button>
+      </div>
+      <div class="tone-report-wrap" id="tone-report-wrap">
+        <div class="tone-report" id="tone-report">
+          <div class="tone-placeholder">Click <strong>Re-analyze</strong> to characterise this stem's sound.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -6414,11 +6450,14 @@ const splitterModalState = {
   notation: 'western',     // 'western' | 'devanagari'
   sa: 0,                   // tonic pitch class (0=C..11=B) when notation != western
   saAutoDetected: true,    // true until user manually picks Sa via the dropdown
-  tab: 'piano-roll',       // 'piano-roll' | 'sheet'
+  tab: 'piano-roll',       // 'piano-roll' | 'sheet' | 'tone'
   sheetTempo: 120,         // BPM
   sheetTempoAuto: true,    // auto-track detectedTempo until user manually edits
   sheetBeatsPerBar: 4,
   sheetSubdiv: 1,          // 1 = quarter, 2 = 8th, 4 = 16th
+  toneStartSec: 0,         // analysis region start
+  toneEndSec: 10,          // analysis region end
+  toneCache: {},           // keyed by `${stemId}:${start.toFixed(2)}:${end.toFixed(2)}` → measurement result
 };
 
 // 12 swaras (semitones from Sa) in Devanagari with komal/tivra diacritics:
@@ -6473,6 +6512,11 @@ function splitterOpenNotesModal(stemId) {
   const wrap = document.getElementById('notes-modal-track-wrap');
   const visibleW = wrap ? Math.max(600, wrap.clientWidth - 40) : 1200;
   splitterModalState.pxPerSec = Math.max(30, Math.min(200, visibleW / dur));
+  // Reset Tone Match region: default to first 10s of the stem (or full
+  // stem if shorter). Cache stays — switching stems keeps prior analyses
+  // available; the key includes stemId so there's no collision.
+  splitterModalState.toneStartSec = 0;
+  splitterModalState.toneEndSec   = Math.min(10, dur);
   // Auto-set Sa from detected key (unless user has overridden via the dropdown)
   if (splitterModalState.saAutoDetected && splitterState.detectedKey) {
     splitterModalState.sa = splitterState.detectedKey.root | 0;
@@ -7086,12 +7130,241 @@ function splitterSwitchTab(tab) {
   // Help text differs per tab
   const help = document.getElementById('notes-modal-help');
   if (help) {
-    help.textContent = tab === 'sheet'
-      ? 'Click a cell to jump there · adjust tempo + cells/beat to taste · current beat highlights as it plays'
-      : 'Click an event to jump to that moment · scroll horizontally · zoom to spread out dense sections';
+    if (tab === 'sheet') {
+      help.textContent = 'Click a cell to jump there · adjust tempo + cells/beat to taste · current beat highlights as it plays';
+    } else if (tab === 'tone') {
+      help.textContent = 'Pick a 5-30 s region of this stem · Re-analyze characterises its EQ curve, dynamics, stereo width, and reverb.';
+    } else {
+      help.textContent = 'Click an event to jump to that moment · scroll horizontally · zoom to spread out dense sections';
+    }
   }
   if (tab === 'sheet') splitterRenderSheet();
+  else if (tab === 'tone') splitterRenderTonePane();
   else splitterRenderNotesModal();
+}
+
+// Tone Match pane: render the section selector + analysis report. The
+// measurement itself is heavy (a few hundred ms of FFTs); we lazy-run it
+// on the user clicking "Re-analyze" or auto-run once on first tab open
+// per stem so the user sees something immediately.
+function splitterRenderTonePane() {
+  const stem = splitterState.stems[splitterModalState.stemId];
+  if (!stem || !stem.buffer) return;
+  // Snap region to stem duration if needed
+  const dur = stem.buffer.duration;
+  let s = Math.max(0, Math.min(dur - 0.5, splitterModalState.toneStartSec));
+  let e = Math.max(s + 0.5, Math.min(dur, splitterModalState.toneEndSec));
+  splitterModalState.toneStartSec = s;
+  splitterModalState.toneEndSec   = e;
+  const startInput = document.getElementById('tone-start');
+  const endInput   = document.getElementById('tone-end');
+  if (startInput) startInput.value = s.toFixed(2);
+  if (endInput)   endInput.value   = e.toFixed(2);
+  // Cache lookup
+  const key = splitterModalState.stemId + ':' + s.toFixed(2) + ':' + e.toFixed(2);
+  if (splitterModalState.toneCache[key]) {
+    splitterRenderToneReport(splitterModalState.toneCache[key]);
+  } else {
+    // Auto-run on first open if cache empty for this stem
+    splitterRunToneAnalysis();
+  }
+}
+
+function splitterRunToneAnalysis() {
+  const stem = splitterState.stems[splitterModalState.stemId];
+  if (!stem || !stem.buffer) return;
+  const dur = stem.buffer.duration;
+  const s = Math.max(0, Math.min(dur - 0.5, splitterModalState.toneStartSec));
+  const e = Math.max(s + 0.5, Math.min(dur, splitterModalState.toneEndSec));
+  splitterModalState.toneStartSec = s;
+  splitterModalState.toneEndSec   = e;
+  const btn = document.getElementById('tone-analyze-btn');
+  const reportEl = document.getElementById('tone-report');
+  if (btn) { btn.disabled = true; }
+  if (reportEl) { reportEl.innerHTML = '<div class="tone-placeholder">Analysing…</div>'; }
+  // Yield to the browser so the spinner shows before the heavy DSP starts
+  setTimeout(() => {
+    try {
+      const result = splitterMeasureTone(stem.buffer, s, e);
+      const key = splitterModalState.stemId + ':' + s.toFixed(2) + ':' + e.toFixed(2);
+      splitterModalState.toneCache[key] = result;
+      splitterRenderToneReport(result);
+    } catch (err) {
+      console.error('[Splitter Tone] analysis failed', err);
+      if (reportEl) reportEl.innerHTML = '<div class="tone-placeholder">Analysis failed: ' + (err.message || err) + '</div>';
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }, 30);
+}
+
+function splitterRenderToneReport(result) {
+  const reportEl = document.getElementById('tone-report');
+  if (!reportEl) return;
+  if (!result || result.error) {
+    reportEl.innerHTML = '<div class="tone-placeholder">' + (result && result.error ? result.error : 'No data.') + '</div>';
+    return;
+  }
+  const cards = [];
+  cards.push(splitterToneCardSpectrum(result.spectrum));
+  cards.push(splitterToneCardDynamics(result.dynamics));
+  if (result.isStereo && result.stereo) cards.push(splitterToneCardStereo(result.stereo));
+  cards.push(splitterToneCardReverb(result.reverb));
+  reportEl.innerHTML = cards.join('');
+}
+
+function splitterToneCardSpectrum(sp) {
+  if (!sp) return '';
+  // SVG: 32 bars + log freq labels at decades
+  const W = 320, H = 140;
+  const padL = 28, padR = 8, padT = 8, padB = 24;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const n = sp.bandDb.length;
+  const dbMin = -36, dbMax = 0;
+  const bars = [];
+  for (let i = 0; i < n; i++) {
+    const x = padL + (i / n) * plotW;
+    const bw = plotW / n - 1;
+    const db = Math.max(dbMin, Math.min(dbMax, sp.bandDb[i]));
+    const h = ((db - dbMin) / (dbMax - dbMin)) * plotH;
+    const y = padT + plotH - h;
+    bars.push('<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="var(--accent)" opacity="0.75"/>');
+  }
+  const labelFreqs = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
+  const fLo = 25, fHi = sp.bandFreqs[n - 1];
+  const labels = [];
+  for (const f of labelFreqs) {
+    if (f < fLo || f > fHi) continue;
+    const t = Math.log(f / fLo) / Math.log(fHi / fLo);
+    const x = padL + t * plotW;
+    const label = f >= 1000 ? (f / 1000) + 'k' : f + '';
+    labels.push('<text x="' + x.toFixed(1) + '" y="' + (H - 6) + '" font-family="var(--font-mono)" font-size="9" fill="var(--muted)" text-anchor="middle">' + label + '</text>');
+  }
+  // Horizontal -12dB / -24dB grid lines
+  const grid = [];
+  for (const db of [-12, -24]) {
+    const t = (db - dbMin) / (dbMax - dbMin);
+    const y = padT + plotH - t * plotH;
+    grid.push('<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-dasharray="2,3"/>');
+    grid.push('<text x="' + (padL - 4) + '" y="' + (y + 3).toFixed(1) + '" font-family="var(--font-mono)" font-size="8.5" fill="var(--muted)" text-anchor="end">' + db + '</text>');
+  }
+  const svg =
+    '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' +
+    grid.join('') + bars.join('') + labels.join('') +
+    '</svg>';
+  const centroid = sp.centroidHz >= 1000 ? (sp.centroidHz / 1000).toFixed(2) + ' kHz' : sp.centroidHz.toFixed(0) + ' Hz';
+  const tilt = sp.tiltDbPerOct.toFixed(1) + ' dB/oct';
+  let toneNote;
+  if      (sp.tiltDbPerOct < -5) toneNote = 'Dark / bass-heavy.';
+  else if (sp.tiltDbPerOct < -2) toneNote = 'Warm tilt.';
+  else if (sp.tiltDbPerOct <  1) toneNote = 'Balanced.';
+  else if (sp.tiltDbPerOct <  4) toneNote = 'Bright tilt.';
+  else                           toneNote = 'Aggressive top end.';
+  return (
+    '<div class="tone-card">' +
+      '<div class="tone-card-title"><i class="ph-duotone ph-equalizer"></i> Frequency curve</div>' +
+      svg +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Centroid</span><span class="tone-stat-value">' + centroid + '</span></div>' +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Tilt (200 Hz – 8 kHz)</span><span class="tone-stat-value">' + tilt + '</span></div>' +
+      '<div class="tone-stat-note">' + toneNote + ' Bars are log-scaled and normalised to peak (0 dB).</div>' +
+    '</div>'
+  );
+}
+
+function splitterToneCardDynamics(dn) {
+  if (!dn) return '';
+  // Sparkline of RMS over time
+  const W = 320, H = 60;
+  const padL = 4, padR = 4, padT = 4, padB = 4;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const n = dn.rmsTrace.length;
+  const minDb = -60, maxDb = 0;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const x = padL + (i / Math.max(1, n - 1)) * plotW;
+    const db = Math.max(minDb, Math.min(maxDb, dn.rmsTrace[i]));
+    const y = padT + plotH - ((db - minDb) / (maxDb - minDb)) * plotH;
+    pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+  }
+  const poly = '<polyline points="' + pts.join(' ') + '" fill="none" stroke="var(--accent)" stroke-width="1.5"/>';
+  const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' + poly + '</svg>';
+  return (
+    '<div class="tone-card">' +
+      '<div class="tone-card-title"><i class="ph-duotone ph-pulse"></i> Dynamics &amp; compression</div>' +
+      svg +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Crest factor</span><span class="tone-stat-value">' + dn.crestDb.toFixed(1) + ' dB</span></div>' +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Peak / RMS</span><span class="tone-stat-value">' + dn.peakDb.toFixed(1) + ' / ' + dn.rmsDb.toFixed(1) + ' dB</span></div>' +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Compression</span><span class="tone-stat-value">' + dn.compRating + '</span></div>' +
+      '<div class="tone-stat-note">' + dn.compNote + ' Sparkline above: short-window RMS over the analysed region.</div>' +
+    '</div>'
+  );
+}
+
+function splitterToneCardStereo(st) {
+  if (!st) return '';
+  // Width per band rendered as a horizontal-bar chart
+  const W = 320, H = 140;
+  const padL = 28, padR = 8, padT = 8, padB = 24;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const n = st.bandWidth.length;
+  const bars = [];
+  for (let i = 0; i < n; i++) {
+    const x = padL + (i / n) * plotW;
+    const bw = plotW / n - 1;
+    const w = Math.max(0, Math.min(1, st.bandWidth[i]));
+    const h = w * plotH;
+    const y = padT + plotH - h;
+    bars.push('<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="var(--accent-2)" opacity="0.75"/>');
+  }
+  const labelFreqs = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
+  const fLo = 25, fHi = st.bandFreqs[n - 1];
+  const labels = [];
+  for (const f of labelFreqs) {
+    if (f < fLo || f > fHi) continue;
+    const t = Math.log(f / fLo) / Math.log(fHi / fLo);
+    const x = padL + t * plotW;
+    const label = f >= 1000 ? (f / 1000) + 'k' : f + '';
+    labels.push('<text x="' + x.toFixed(1) + '" y="' + (H - 6) + '" font-family="var(--font-mono)" font-size="9" fill="var(--muted)" text-anchor="middle">' + label + '</text>');
+  }
+  const grid = [];
+  for (const w of [0.25, 0.5, 0.75]) {
+    const y = padT + plotH - w * plotH;
+    grid.push('<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-dasharray="2,3"/>');
+    grid.push('<text x="' + (padL - 4) + '" y="' + (y + 3).toFixed(1) + '" font-family="var(--font-mono)" font-size="8.5" fill="var(--muted)" text-anchor="end">' + w.toFixed(2) + '</text>');
+  }
+  const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' + grid.join('') + bars.join('') + labels.join('') + '</svg>';
+  return (
+    '<div class="tone-card">' +
+      '<div class="tone-card-title"><i class="ph-duotone ph-arrows-out-line-horizontal"></i> Stereo width per band</div>' +
+      svg +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Overall width</span><span class="tone-stat-value">' + (st.overallWidth * 100).toFixed(0) + '%</span></div>' +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Character</span><span class="tone-stat-value">' + st.widthRating + '</span></div>' +
+      '<div class="tone-stat-note">' + st.widthNote + ' 0 = mono, 0.5 = balanced stereo, 1 = pure side.</div>' +
+    '</div>'
+  );
+}
+
+function splitterToneCardReverb(rv) {
+  if (!rv) {
+    return (
+      '<div class="tone-card">' +
+        '<div class="tone-card-title"><i class="ph-duotone ph-waves"></i> Reverb tail</div>' +
+        '<div class="tone-stat-note">No clear decay event found in this region. Try a region with a more transient hit (a snare, a struck chord, a sharp vocal consonant) for a reverb estimate.</div>' +
+      '</div>'
+    );
+  }
+  return (
+    '<div class="tone-card">' +
+      '<div class="tone-card-title"><i class="ph-duotone ph-waves"></i> Reverb tail</div>' +
+      '<div class="tone-stat-row"><span class="tone-stat-label">RT60 (estimated)</span><span class="tone-stat-value">' + rv.rt60.toFixed(2) + ' s</span></div>' +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Decay slope</span><span class="tone-stat-value">' + rv.slopeDbPerSec.toFixed(1) + ' dB/s</span></div>' +
+      '<div class="tone-stat-row"><span class="tone-stat-label">Character</span><span class="tone-stat-value">' + rv.rvbRating + '</span></div>' +
+      '<div class="tone-stat-note">' + rv.rvbNote + ' Estimated from the loudest peak in the region with a clean monotonic decay.</div>' +
+    '</div>'
+  );
 }
 
 // Highlight whichever sheet cell the playhead is currently inside (called
@@ -7467,6 +7740,19 @@ function splitterSetupNotesModal() {
     splitterModalState.sheetSubdiv = parseInt(sheetSubdiv.value, 10) || 1;
     if (splitterModalState.tab === 'sheet') splitterRenderSheet();
   };
+  // Tone Match controls — re-analyze on button click, also re-snap region
+  // bounds when the inputs change (but don't auto-run; the user clicks the
+  // Re-analyze button to actually do the DSP work).
+  const toneStart = document.getElementById('tone-start');
+  const toneEnd   = document.getElementById('tone-end');
+  const toneBtn   = document.getElementById('tone-analyze-btn');
+  if (toneStart) toneStart.oninput = () => {
+    splitterModalState.toneStartSec = parseFloat(toneStart.value) || 0;
+  };
+  if (toneEnd) toneEnd.oninput = () => {
+    splitterModalState.toneEndSec = parseFloat(toneEnd.value) || 10;
+  };
+  if (toneBtn) toneBtn.onclick = () => splitterRunToneAnalysis();
   const slider = document.getElementById('notes-modal-zoom-slider');
   if (slider) {
     slider.oninput = () => {
@@ -9033,6 +9319,322 @@ function splitterClassifyNonKickDrum(f) {
   if (f.centroid < 1500) return { type: 'tom',   velocity: splitterDrumVelocity(f.peak) };
   if (f.centroid < 4500) return { type: 'snare', velocity: splitterDrumVelocity(f.peak) };
                          return { type: 'hihat', velocity: splitterDrumVelocity(f.peak) };
+}
+
+// ---- Tone Match: per-stem sound characterisation -------------------------
+// Phase 1 of the "Music Copier" feature. Given a region of a stem, extract
+// objective acoustic measurements: long-term average spectrum (frequency
+// curve), dynamic range / compression estimate, per-band stereo width,
+// reverb decay estimate. No AI here yet — just honest DSP. The eventual
+// Phase 2 will feed these numbers to Claude alongside the user's gear list
+// to produce gear-specific recreation instructions.
+
+// Run all measurements for a region of an AudioBuffer in one pass and
+// return a single object suitable for the renderer.
+function splitterMeasureTone(buffer, startSec, endSec) {
+  const sr = buffer.sampleRate;
+  const startSample = Math.max(0, Math.floor(startSec * sr));
+  const endSample   = Math.min(buffer.length, Math.floor(endSec * sr));
+  if (endSample - startSample < sr * 0.5) {
+    return { error: 'Region too short — need at least 0.5 s of audio.' };
+  }
+  // Mono view for spectrum + dynamics + reverb; keep both channels for stereo
+  const mono = splitterSliceMono(buffer, startSample, endSample);
+  const isStereo = buffer.numberOfChannels >= 2;
+  const left  = isStereo ? buffer.getChannelData(0).subarray(startSample, endSample) : mono;
+  const right = isStereo ? buffer.getChannelData(1).subarray(startSample, endSample) : mono;
+
+  const spectrum = splitterToneSpectrum(mono, sr);
+  const dynamics = splitterToneDynamics(mono, sr);
+  const stereo   = isStereo ? splitterToneStereoWidth(left, right, sr) : null;
+  const reverb   = splitterToneReverbEstimate(mono, sr);
+
+  return {
+    sampleRate: sr,
+    durationSec: (endSample - startSample) / sr,
+    isStereo,
+    spectrum, dynamics, stereo, reverb,
+  };
+}
+
+function splitterSliceMono(buffer, startSample, endSample) {
+  const n = endSample - startSample;
+  const out = new Float32Array(n);
+  const numCh = buffer.numberOfChannels;
+  for (let c = 0; c < numCh; c++) {
+    const data = buffer.getChannelData(c).subarray(startSample, endSample);
+    for (let i = 0; i < n; i++) out[i] += data[i];
+  }
+  const inv = 1 / numCh;
+  for (let i = 0; i < n; i++) out[i] *= inv;
+  return out;
+}
+
+// Long-term average spectrum on a log frequency axis. Returns 32 bands
+// from 25 Hz to 16 kHz with dB-relative-to-peak values, ready to plot.
+// Also returns spectral centroid + tilt (dB/octave slope) for the summary.
+function splitterToneSpectrum(audio, sr) {
+  const fftSize = 4096;
+  const hop = fftSize >> 1;
+  const numFrames = Math.max(1, Math.floor((audio.length - fftSize) / hop) + 1);
+  const halfN = fftSize >> 1;
+  const win = splitterHannWindow(fftSize);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const magAvg = new Float32Array(halfN);
+  let framesUsed = 0;
+  for (let f = 0; f < numFrames; f++) {
+    const off = f * hop;
+    if (off + fftSize > audio.length) break;
+    for (let i = 0; i < fftSize; i++) {
+      re[i] = audio[off + i] * win[i];
+      im[i] = 0;
+    }
+    splitterFFT(re, im);
+    for (let k = 1; k < halfN; k++) {
+      magAvg[k] += Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+    }
+    framesUsed++;
+  }
+  if (framesUsed > 0) {
+    for (let k = 0; k < halfN; k++) magAvg[k] /= framesUsed;
+  }
+  const binHz = sr / fftSize;
+  // Log-frequency band aggregation: 32 bands from 25 Hz to 16 kHz
+  const numBands = 32;
+  const fLo = 25, fHi = Math.min(16000, sr / 2);
+  const ratio = Math.pow(fHi / fLo, 1 / numBands);
+  const bandFreqs = new Float32Array(numBands);
+  const bandDb    = new Float32Array(numBands);
+  let peakAmp = 1e-12;
+  for (let b = 0; b < numBands; b++) {
+    const f1 = fLo * Math.pow(ratio, b);
+    const f2 = fLo * Math.pow(ratio, b + 1);
+    bandFreqs[b] = Math.sqrt(f1 * f2);
+    const k1 = Math.max(1, Math.floor(f1 / binHz));
+    const k2 = Math.min(halfN - 1, Math.ceil(f2 / binHz));
+    let sum = 0, n = 0;
+    for (let k = k1; k <= k2; k++) { sum += magAvg[k]; n++; }
+    const amp = n > 0 ? sum / n : 0;
+    bandDb[b] = amp;
+    if (amp > peakAmp) peakAmp = amp;
+  }
+  for (let b = 0; b < numBands; b++) {
+    bandDb[b] = 20 * Math.log10(Math.max(1e-6, bandDb[b] / peakAmp));
+  }
+  // Spectral centroid (Hz) — magnitude-weighted average frequency
+  let centroidNum = 0, centroidDen = 0;
+  for (let k = 1; k < halfN; k++) {
+    const f = k * binHz;
+    centroidNum += f * magAvg[k];
+    centroidDen += magAvg[k];
+  }
+  const centroidHz = centroidDen > 0 ? centroidNum / centroidDen : 0;
+  // Spectral tilt: best-fit slope in dB / octave between 200 Hz and 8 kHz
+  // Bands within that range get a least-squares fit on (log2(f), bandDb).
+  let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let b = 0; b < numBands; b++) {
+    const f = bandFreqs[b];
+    if (f < 200 || f > 8000) continue;
+    const x = Math.log2(f);
+    const y = bandDb[b];
+    sx += x; sy += y; sxx += x * x; sxy += x * y; n++;
+  }
+  const tiltDbPerOct = n > 1 ? (n * sxy - sx * sy) / (n * sxx - sx * sx) : 0;
+  return { bandFreqs, bandDb, centroidHz, tiltDbPerOct };
+}
+
+// Dynamics: peak / RMS / crest factor → heuristic compression estimate.
+// Compression makes peaks closer to the RMS, i.e. lowers crest factor.
+// Uncompressed acoustic music: 14-20 dB crest. Light compression: 10-14 dB.
+// Heavy/limited modern pop master: 6-9 dB. Brick-walled: ~3-5 dB.
+function splitterToneDynamics(audio, sr) {
+  let peak = 0;
+  let sumSq = 0;
+  for (let i = 0; i < audio.length; i++) {
+    const v = audio[i];
+    const a = Math.abs(v);
+    if (a > peak) peak = a;
+    sumSq += v * v;
+  }
+  const rms = Math.sqrt(sumSq / Math.max(1, audio.length));
+  const crestDb = (peak > 1e-6 && rms > 1e-6) ? 20 * Math.log10(peak / rms) : 0;
+  // Walk a windowed RMS to detect how varied loudness is across the region.
+  // Standard deviation of short-window RMS (in dB) is a proxy for dynamic
+  // contrast: high = expressive, low = squashed.
+  const winSec = 0.30;
+  const winN = Math.max(1, Math.floor(winSec * sr));
+  const numWin = Math.max(1, Math.floor(audio.length / winN));
+  const rmsTrace = new Float32Array(numWin);
+  let traceMaxDb = -120, traceMinDb = 0;
+  for (let w = 0; w < numWin; w++) {
+    let s = 0;
+    const a = w * winN;
+    const b = Math.min(audio.length, a + winN);
+    for (let i = a; i < b; i++) s += audio[i] * audio[i];
+    const r = Math.sqrt(s / Math.max(1, b - a));
+    const db = r > 1e-6 ? 20 * Math.log10(r) : -120;
+    rmsTrace[w] = db;
+    if (db > traceMaxDb) traceMaxDb = db;
+    if (db < traceMinDb && db > -100) traceMinDb = db;
+  }
+  // Compression rating from crest factor
+  let compRating, compNote;
+  if (crestDb > 16)      { compRating = 'minimal',  compNote = 'Practically uncompressed. Acoustic / classical / live-recorded.'; }
+  else if (crestDb > 12) { compRating = 'light',    compNote = 'Light bus compression. ~2:1 with a few dB of reduction on peaks.'; }
+  else if (crestDb > 9)  { compRating = 'moderate', compNote = 'Medium compression. ~3-4:1, several dB of gain reduction. Pop / rock norm.'; }
+  else if (crestDb > 6)  { compRating = 'heavy',    compNote = 'Heavy compression / parallel compression. ~6:1 or limiting.'; }
+  else                   { compRating = 'brickwall', compNote = 'Brick-wall limited / loudness-war territory. Very low crest factor.'; }
+  return {
+    peak, rms,
+    peakDb:  peak > 1e-6 ? 20 * Math.log10(peak) : -120,
+    rmsDb:   rms  > 1e-6 ? 20 * Math.log10(rms)  : -120,
+    crestDb, rmsTrace, traceMaxDb, traceMinDb,
+    compRating, compNote,
+  };
+}
+
+// Stereo width per frequency band via mid/side. Width = |S| / (|M| + |S|).
+// 0 = mono, 0.5 = balanced stereo, 1 = pure side (out of phase). For each
+// of the same 32 log bands as the spectrum, compute the magnitude of M and
+// S separately in the FFT domain and average over frames.
+function splitterToneStereoWidth(left, right, sr) {
+  const fftSize = 4096;
+  const hop = fftSize >> 1;
+  const halfN = fftSize >> 1;
+  const win = splitterHannWindow(fftSize);
+  const re = new Float32Array(fftSize);
+  const im = new Float32Array(fftSize);
+  const reS = new Float32Array(fftSize);
+  const imS = new Float32Array(fftSize);
+  const magM = new Float32Array(halfN);
+  const magS = new Float32Array(halfN);
+  let framesUsed = 0;
+  const numFrames = Math.max(1, Math.floor((left.length - fftSize) / hop) + 1);
+  for (let f = 0; f < numFrames; f++) {
+    const off = f * hop;
+    if (off + fftSize > left.length) break;
+    for (let i = 0; i < fftSize; i++) {
+      const w = win[i];
+      const l = left[off + i] || 0;
+      const r = right[off + i] || 0;
+      re[i]  = (l + r) * 0.5 * w; im[i]  = 0;
+      reS[i] = (l - r) * 0.5 * w; imS[i] = 0;
+    }
+    splitterFFT(re, im);
+    splitterFFT(reS, imS);
+    for (let k = 1; k < halfN; k++) {
+      magM[k] += Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+      magS[k] += Math.sqrt(reS[k] * reS[k] + imS[k] * imS[k]);
+    }
+    framesUsed++;
+  }
+  if (framesUsed > 0) {
+    for (let k = 0; k < halfN; k++) { magM[k] /= framesUsed; magS[k] /= framesUsed; }
+  }
+  const binHz = sr / fftSize;
+  const numBands = 32;
+  const fLo = 25, fHi = Math.min(16000, sr / 2);
+  const ratio = Math.pow(fHi / fLo, 1 / numBands);
+  const bandFreqs = new Float32Array(numBands);
+  const bandWidth = new Float32Array(numBands);
+  for (let b = 0; b < numBands; b++) {
+    const f1 = fLo * Math.pow(ratio, b);
+    const f2 = fLo * Math.pow(ratio, b + 1);
+    bandFreqs[b] = Math.sqrt(f1 * f2);
+    const k1 = Math.max(1, Math.floor(f1 / binHz));
+    const k2 = Math.min(halfN - 1, Math.ceil(f2 / binHz));
+    let mSum = 0, sSum = 0;
+    for (let k = k1; k <= k2; k++) { mSum += magM[k]; sSum += magS[k]; }
+    bandWidth[b] = (mSum + sSum) > 1e-9 ? sSum / (mSum + sSum) : 0;
+  }
+  // Overall width = magnitude-weighted average across bands
+  let wNum = 0, wDen = 0;
+  for (let b = 0; b < numBands; b++) {
+    const w = bandWidth[b];
+    wNum += w; wDen += 1;
+  }
+  const overallWidth = wDen > 0 ? wNum / wDen : 0;
+  let widthRating, widthNote;
+  if (overallWidth < 0.10)      { widthRating = 'mono',           widthNote = 'Effectively mono — single-channel source or fully centred.'; }
+  else if (overallWidth < 0.22) { widthRating = 'narrow',         widthNote = 'Slight stereo. Subtle panning or near-mono content.'; }
+  else if (overallWidth < 0.35) { widthRating = 'natural stereo', widthNote = 'Standard stereo image. Typical pop / rock width.'; }
+  else if (overallWidth < 0.48) { widthRating = 'wide',           widthNote = 'Wide image. Possibly stereo widening, doubling, chorus.'; }
+  else                          { widthRating = 'very wide',      widthNote = 'Very wide / out-of-phase content. Chorus + widener / Haas effect likely.'; }
+  return { bandFreqs, bandWidth, overallWidth, widthRating, widthNote };
+}
+
+// Reverb tail estimate: find the loudest event in the region with at least
+// 200 ms of decay after it, fit an exponential to that decay, derive RT60
+// (time for the signal to drop 60 dB). Crude but useful — gives a "this is
+// a 1.8 s plate" vs "0.4 s tight room" call. Works best on music with
+// transient material (drums, plucked instruments, percussive vocals).
+function splitterToneReverbEstimate(audio, sr) {
+  // Envelope follower: short-window RMS at 50 fps
+  const stepN = Math.max(1, Math.floor(sr / 50));
+  const numStep = Math.floor(audio.length / stepN);
+  if (numStep < 20) return null;
+  const env = new Float32Array(numStep);
+  for (let i = 0; i < numStep; i++) {
+    let s = 0;
+    const a = i * stepN;
+    const b = Math.min(audio.length, a + stepN);
+    for (let j = a; j < b; j++) s += audio[j] * audio[j];
+    env[i] = Math.sqrt(s / Math.max(1, b - a));
+  }
+  // Find the loudest peak that has at least 0.4 s of decreasing envelope
+  // after it. That gap likely contains reverb tail.
+  let bestPeak = -1;
+  let bestPeakAmp = 0;
+  for (let i = 5; i < numStep - 20; i++) {
+    if (env[i] <= env[i - 1] || env[i] < env[i + 1]) continue;
+    if (env[i] < bestPeakAmp * 0.6) continue;
+    // Decay quality: how monotone is the next 0.4 s?
+    let decreasing = 0, total = 0;
+    for (let j = i + 1; j < Math.min(numStep, i + 20); j++) {
+      if (env[j] < env[j - 1]) decreasing++;
+      total++;
+    }
+    if (total === 0) continue;
+    const monotonicity = decreasing / total;
+    if (monotonicity < 0.6) continue;
+    if (env[i] > bestPeakAmp) {
+      bestPeakAmp = env[i];
+      bestPeak = i;
+    }
+  }
+  if (bestPeak < 0) return null;
+  // Fit log(env) = a*t + b over the decay window after the peak. RT60 =
+  // -60 / (a * 20/ln10)  →  RT60 (s) = -60 / slope_db_per_sec  where slope
+  // is in dB/sec.
+  const peakAmp = env[bestPeak];
+  const fps = 50;
+  const ts = [];
+  const ys = [];
+  for (let j = bestPeak; j < Math.min(numStep, bestPeak + 40); j++) {
+    const amp = env[j];
+    if (amp < peakAmp * 0.01) break; // hit noise floor
+    const db = 20 * Math.log10(Math.max(1e-6, amp / peakAmp));
+    if (db < -45) break;
+    ts.push((j - bestPeak) / fps);
+    ys.push(db);
+    if (db < -30 && ts.length > 8) break;
+  }
+  if (ts.length < 6) return null;
+  let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = 0; i < ts.length; i++) {
+    sx += ts[i]; sy += ys[i]; sxx += ts[i] * ts[i]; sxy += ts[i] * ys[i]; n++;
+  }
+  const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx); // dB / sec
+  if (!isFinite(slope) || slope >= -1) return null; // no real decay
+  const rt60 = -60 / slope;
+  let rvbRating, rvbNote;
+  if (rt60 < 0.25)      { rvbRating = 'dry',          rvbNote = 'Near-dry / close-miked. <250 ms tail.'; }
+  else if (rt60 < 0.6)  { rvbRating = 'tight room',   rvbNote = 'Small room or short plate. Common on snares / vocals.'; }
+  else if (rt60 < 1.2)  { rvbRating = 'medium room',  rvbNote = 'Live room or medium plate. Modern pop snare territory.'; }
+  else if (rt60 < 2.5)  { rvbRating = 'large hall',   rvbNote = 'Hall / long plate. Atmospheric vocal or guitar tail.'; }
+  else                  { rvbRating = 'cathedral',    rvbNote = 'Very long reverb — washy / ambient / shoegaze territory.'; }
+  return { rt60, slopeDbPerSec: slope, rvbRating, rvbNote };
 }
 
 // ---- Offline song-key detection (Krumhansl-Schmuckler) -------------------
