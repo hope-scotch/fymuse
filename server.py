@@ -19,11 +19,28 @@ Endpoints:
       and pipes the audio bytes back. Requires `pip install yt-dlp`
       (and ffmpeg for some formats).
 
+  /api/recipe-health   (GET)
+      Lightweight probe the browser uses to detect "we're running
+      under the local server AND the `claude` CLI is reachable."
+      Returns {"ok": true, "model": "<default>"} if so.
+
+  /api/recipe          (POST, JSON body)
+      Calls the Claude Code CLI in headless print mode with the given
+      system + user prompt. Uses the local Claude Code authentication
+      (your subscription) so no API key is needed. Returns the
+      assistant's text response. Body shape:
+          {"systemPrompt": "...", "userMessage": "...", "model": "sonnet"}
+      Response shape (success):
+          {"ok": true, "text": "...", "usage": {...}, "cost_usd": 0.0123}
+      Response shape (failure):
+          {"ok": false, "error": "..."}
+
 Usage:
     python3 server.py            # serves on http://localhost:8765
     python3 server.py 9000       # serves on http://localhost:9000
 """
 
+import json
 import shutil
 import subprocess
 import sys
@@ -34,6 +51,8 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 
 PROXY_MAX_BYTES = 200 * 1024 * 1024  # 200 MB hard cap
+RECIPE_TIMEOUT_SEC = 90              # Claude CLI invocation timeout
+RECIPE_DEFAULT_MODEL = "sonnet"      # 'sonnet', 'opus', 'haiku', or full ID
 
 
 class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
@@ -50,7 +69,170 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
             return self._handle_proxy()
         if self.path.startswith("/api/yt"):
             return self._handle_yt()
+        if self.path.startswith("/api/recipe-health"):
+            return self._handle_recipe_health()
         return super().do_GET()
+
+    def do_POST(self):
+        if self.path.startswith("/api/recipe"):
+            return self._handle_recipe()
+        self._send_text(404, "not found")
+
+    def _read_json_body(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 4 * 1024 * 1024:  # 4 MB cap on POST bodies
+            return None
+        raw = self.rfile.read(length)
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except Exception:
+            return None
+
+    def _send_json(self, status, obj):
+        body_bytes = json.dumps(obj).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body_bytes)))
+        self.end_headers()
+        try:
+            self.wfile.write(body_bytes)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _claude_cli_path(self):
+        # Honour an explicit override so e.g. fnm/nvm-managed installs work
+        # without polluting PATH for the python process.
+        return (
+            shutil.which("claude")
+            or shutil.which("claude.cmd")
+            or shutil.which("claude-code")
+        )
+
+    def _handle_recipe_health(self):
+        path = self._claude_cli_path()
+        if not path:
+            return self._send_json(503, {
+                "ok": False,
+                "error": "claude CLI not found on PATH. Install Claude Code "
+                         "(https://docs.claude.com/en/docs/claude-code) and run "
+                         "`claude login` to authenticate against your Claude subscription.",
+            })
+        # Probe `claude --version` to confirm it actually runs. Very fast.
+        try:
+            r = subprocess.run(
+                [path, "--version"],
+                capture_output=True, text=True, timeout=10,
+            )
+            version = (r.stdout or r.stderr or "").strip().splitlines()[0] if (r.stdout or r.stderr) else "unknown"
+            return self._send_json(200, {
+                "ok": True,
+                "claude_cli_path": path,
+                "claude_cli_version": version,
+                "default_model": RECIPE_DEFAULT_MODEL,
+            })
+        except Exception as e:
+            return self._send_json(503, {"ok": False, "error": f"claude --version failed: {e}"})
+
+    def _handle_recipe(self):
+        body = self._read_json_body()
+        if not body or not isinstance(body, dict):
+            return self._send_json(400, {"ok": False, "error": "request body must be JSON object"})
+        user_message  = body.get("userMessage")  or ""
+        system_prompt = body.get("systemPrompt") or ""
+        model         = body.get("model") or RECIPE_DEFAULT_MODEL
+        if not isinstance(user_message, str) or not user_message.strip():
+            return self._send_json(400, {"ok": False, "error": "userMessage required"})
+        if len(user_message) > 200_000 or len(system_prompt) > 200_000:
+            return self._send_json(413, {"ok": False, "error": "prompt too large (max 200K chars each)"})
+
+        cli = self._claude_cli_path()
+        if not cli:
+            return self._send_json(503, {
+                "ok": False,
+                "error": "claude CLI not found on PATH. Install Claude Code and run `claude login`.",
+            })
+
+        # Headless invocation. -p enters "print" mode (one-shot, exit after
+        # response). --output-format json gives us a structured envelope
+        # with the assistant text + usage stats so we don't have to scrape
+        # stdout. --append-system-prompt tacks our schema onto Claude
+        # Code's default system prompt rather than replacing it (which
+        # would lose CC's tool/file context but we don't need those here).
+        cmd = [cli, "-p", user_message, "--output-format", "json", "--model", model]
+        if system_prompt.strip():
+            cmd += ["--append-system-prompt", system_prompt]
+
+        try:
+            r = subprocess.run(
+                cmd,
+                capture_output=True, text=True,
+                # Pass /dev/null on stdin or the CLI waits 3 s for piped input
+                stdin=subprocess.DEVNULL,
+                timeout=RECIPE_TIMEOUT_SEC,
+            )
+        except subprocess.TimeoutExpired:
+            return self._send_json(504, {"ok": False, "error": f"claude CLI timed out after {RECIPE_TIMEOUT_SEC} s"})
+        except Exception as e:
+            return self._send_json(500, {"ok": False, "error": f"claude CLI invocation failed: {e}"})
+
+        # The --output-format json envelope is emitted to stdout EVEN on
+        # error conditions (auth failures, rate limits) — the CLI exits
+        # non-zero but the JSON contains the user-readable error message.
+        # So we try to parse stdout regardless of return code, and only
+        # fall back to "raw stderr" if parsing fails.
+        env = None
+        if r.stdout and r.stdout.strip():
+            try:
+                env = json.loads(r.stdout.strip())
+            except Exception:
+                env = None
+        if env is None:
+            if r.returncode != 0:
+                err = (r.stderr or "").strip()[:1200]
+                return self._send_json(500, {
+                    "ok": False,
+                    "error": f"claude CLI exited with status {r.returncode}: {err or '(no stderr)'}",
+                })
+            return self._send_json(500, {
+                "ok": False,
+                "error": f"claude CLI stdout was not valid JSON. stdout head: {(r.stdout or '')[:400]}",
+            })
+
+        # The --output-format json envelope has the shape:
+        #   {"type": "result", "subtype": "success",
+        #    "result": "<assistant text>",
+        #    "usage": {"input_tokens": N, "output_tokens": M, ...},
+        #    "total_cost_usd": 0.0123, "session_id": "...", ...}
+        # We unwrap to the schema the browser already expects.
+        if env.get("is_error") or env.get("subtype") == "error_during_execution":
+            # `result` typically contains the human-readable error in this case
+            # ("Not logged in · Please run /login", auth failures, rate limits)
+            msg = env.get("result") or env.get("subtype") or "unknown error"
+            hint = ""
+            if isinstance(msg, str) and "log" in msg.lower() and "in" in msg.lower():
+                hint = " — run `claude login` in your terminal to authenticate the CLI against your Claude subscription."
+            return self._send_json(500, {
+                "ok": False,
+                "error": f"Claude CLI error: {msg}{hint}",
+            })
+        text = env.get("result")
+        if not isinstance(text, str):
+            return self._send_json(500, {
+                "ok": False,
+                "error": "claude CLI envelope did not include a string 'result' field.",
+                "envelope": env,
+            })
+        return self._send_json(200, {
+            "ok": True,
+            "text": text,
+            "usage": env.get("usage", {}),
+            "cost_usd": env.get("total_cost_usd", 0.0),
+            "model": env.get("model") or model,
+            "session_id": env.get("session_id"),
+        })
 
     def _handle_proxy(self):
         try:
@@ -192,6 +374,12 @@ def main():
     else:
         print("yt-dlp NOT installed — YouTube / SoundCloud URLs will fail. "
               "Install with: pip install --user yt-dlp")
+    if shutil.which("claude") or shutil.which("claude-code"):
+        print("Claude Code CLI detected — /api/recipe will use your Claude subscription "
+              "(no API key needed).")
+    else:
+        print("Claude Code CLI NOT installed — /api/recipe will return 503. "
+              "Install from https://docs.claude.com/en/docs/claude-code and run `claude login`.")
     print("Ctrl+C to stop.")
     try:
         server.serve_forever()

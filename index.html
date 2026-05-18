@@ -444,6 +444,11 @@
   .ai-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
   .ai-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
   .ai-toggle input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+  .ai-mode-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ai-mode-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; font-size: 11.5px; color: var(--text-2); cursor: pointer; transition: all 0.12s; }
+  .ai-mode-pill:hover { color: var(--accent); border-color: var(--accent); }
+  .ai-mode-pill input[type="radio"] { accent-color: var(--accent); }
+  .ai-mode-pill:has(input[type="radio"]:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
   .ai-status { margin-top: 8px; padding: 8px 10px; border-radius: 6px; font-family: var(--font-mono); font-size: 11.5px; }
   .ai-status.ok    { background: rgba(80,200,120,0.10); color: #6dd58c; border: 1px solid rgba(80,200,120,0.30); }
   .ai-status.err   { background: rgba(255,90,90,0.10);  color: #ff8b8b; border: 1px solid rgba(255,90,90,0.30); }
@@ -1309,13 +1314,28 @@
       </div>
 
       <div class="ai-section">
-        <label class="ai-row-label">Master toggle</label>
-        <label class="ai-toggle">
-          <input type="checkbox" id="ai-enable-toggle"> Enable AI features
-        </label>
+        <label class="ai-row-label">Mode</label>
+        <div class="ai-mode-row">
+          <label class="ai-mode-pill" data-mode="off"><input type="radio" name="ai-mode" value="off"> Off</label>
+          <label class="ai-mode-pill" data-mode="local"><input type="radio" name="ai-mode" value="local"> Local · Claude subscription</label>
+          <label class="ai-mode-pill" data-mode="api"><input type="radio" name="ai-mode" value="api"> API · paid key</label>
+        </div>
+        <div class="ai-note">
+          <strong>Local</strong>: routes through <code>server.py</code> + <code>claude</code> CLI on your laptop. Uses your Claude.ai subscription, no separate billing. Only works when <code>python3 server.py</code> is running.<br>
+          <strong>API</strong>: direct browser → <code>api.anthropic.com</code> with your paid API key. Works on the deployed Pages site too.
+        </div>
       </div>
 
-      <div class="ai-section">
+      <div class="ai-section" id="ai-local-section" hidden>
+        <label class="ai-row-label">Local proxy status</label>
+        <div class="ai-status" id="ai-local-status">Probing…</div>
+        <div class="ai-row">
+          <button class="play-btn" id="ai-local-probe-btn"><i class="ph-duotone ph-arrows-clockwise sz-sm"></i> Re-check</button>
+        </div>
+        <div class="ai-note">Requires Claude Code installed and authenticated (<code>claude login</code>). Recipes count against your subscription's usage allowance, same as chat.</div>
+      </div>
+
+      <div class="ai-section" id="ai-api-section" hidden>
         <label class="ai-row-label" for="ai-key-input">Anthropic API key</label>
         <input type="password" id="ai-key-input" class="ai-input" placeholder="sk-ant-..." spellcheck="false" autocomplete="off">
         <div class="ai-row">
@@ -4268,28 +4288,33 @@ function setupCustomChordPanel() {
   };
 }
 
-// === AI Settings: BYOK Claude key + gear inventory ======================
-// Browser-only architecture: the user's API key lives in localStorage on
-// THEIR device, never sent to FYmuse's servers. Recipe generation calls
-// api.anthropic.com directly via fetch() using Anthropic's documented
-// "dangerous direct browser access" mode — opt-in by the user, intended
-// for prototypes and small-scale tools (which this is).
-const AI_LS_ENABLED   = 'fymuse-ai-enabled';
+// === AI Settings: mode selector + key/local proxy + gear inventory =========
+// Two transport modes:
+//   - 'local': POSTs to /api/recipe on this same origin. server.py shells
+//     out to the `claude` CLI, which uses the user's Claude.ai subscription.
+//     No API key, no per-call billing — but only works when server.py is
+//     running on localhost and Claude Code is logged in.
+//   - 'api': direct browser → api.anthropic.com using the user's paid API
+//     key. Works anywhere including the deployed Cloudflare Pages site.
+// 'off' is the default-disabled state.
+const AI_LS_MODE      = 'fymuse-ai-mode';            // 'off' | 'local' | 'api'
 const AI_LS_KEY       = 'fymuse-anthropic-key';
 const AI_LS_GEAR_NUX    = 'fymuse-gear-nux-notes';
 const AI_LS_GEAR_ROLAND = 'fymuse-gear-roland-notes';
 const AI_LS_GEAR_MODX   = 'fymuse-gear-modx-notes';
 
 const aiState = {
-  enabled: false,
+  mode: 'off',                  // 'off' | 'local' | 'api'
   apiKey: '',
-  apiKeyValidated: false, // true once a Validate call succeeded for this key
+  apiKeyValidated: false,        // true once a Validate call succeeded for this key
+  localHealth: null,             // {ok: bool, version?: string, error?: string} once probed
   gear: { nux: '', roland: '', modx: '' },
 };
 
 function aiLoadFromStorage() {
   try {
-    aiState.enabled = localStorage.getItem(AI_LS_ENABLED) === '1';
+    const m = localStorage.getItem(AI_LS_MODE);
+    aiState.mode = (m === 'local' || m === 'api') ? m : 'off';
     aiState.apiKey  = localStorage.getItem(AI_LS_KEY) || '';
     aiState.apiKeyValidated = !!aiState.apiKey; // assume previously-saved keys are valid; revalidates lazily
     aiState.gear.nux    = localStorage.getItem(AI_LS_GEAR_NUX)    || '';
@@ -4300,7 +4325,7 @@ function aiLoadFromStorage() {
   }
 }
 
-function aiSaveEnabled(v)      { aiState.enabled = v; try { localStorage.setItem(AI_LS_ENABLED, v ? '1' : '0'); } catch {} }
+function aiSaveMode(m)         { aiState.mode = m; try { localStorage.setItem(AI_LS_MODE, m); } catch {} }
 function aiSaveKey(k)          { aiState.apiKey = k; try { localStorage.setItem(AI_LS_KEY, k); } catch {} }
 function aiClearKey()          { aiState.apiKey = ''; aiState.apiKeyValidated = false; try { localStorage.removeItem(AI_LS_KEY); } catch {} }
 function aiSaveGear(slot, txt) {
@@ -4309,7 +4334,34 @@ function aiSaveGear(slot, txt) {
   try { localStorage.setItem(k, txt); } catch {}
 }
 function aiIsReady() {
-  return aiState.enabled && !!aiState.apiKey && aiState.apiKeyValidated;
+  if (aiState.mode === 'local') return !!(aiState.localHealth && aiState.localHealth.ok);
+  if (aiState.mode === 'api')   return !!aiState.apiKey && aiState.apiKeyValidated;
+  return false;
+}
+
+// Probe /api/recipe-health to see whether we're running under server.py +
+// the claude CLI is reachable. Stores the result on aiState.localHealth
+// and returns it.
+async function aiProbeLocalProxy() {
+  aiState.localHealth = { ok: false, error: 'probing…' };
+  try {
+    const res = await fetch('/api/recipe-health', { method: 'GET' });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && data.ok) {
+      aiState.localHealth = { ok: true, version: data.claude_cli_version || 'unknown' };
+    } else {
+      aiState.localHealth = {
+        ok: false,
+        error: (data && data.error) || ('health probe returned HTTP ' + res.status),
+      };
+    }
+  } catch (err) {
+    aiState.localHealth = {
+      ok: false,
+      error: 'no /api/recipe-health response — is `python3 server.py` running? (' + (err.message || err) + ')',
+    };
+  }
+  return aiState.localHealth;
 }
 
 // Tiny ping call to confirm the key works. Uses the count_tokens endpoint
@@ -4354,18 +4406,57 @@ function aiSetKeyStatus(state, msg) {
   el.textContent = msg;
 }
 
+function aiSetLocalStatus(state, msg) {
+  const el = document.getElementById('ai-local-status');
+  if (!el) return;
+  el.className = 'ai-status ' + state;
+  el.textContent = msg;
+}
+
+// Show/hide the local + api sub-sections based on the chosen mode.
+function aiSyncModeSections() {
+  const localSec = document.getElementById('ai-local-section');
+  const apiSec   = document.getElementById('ai-api-section');
+  if (localSec) localSec.hidden = (aiState.mode !== 'local');
+  if (apiSec)   apiSec.hidden   = (aiState.mode !== 'api');
+}
+
+async function aiRefreshLocalProbe() {
+  aiSetLocalStatus('busy', 'Probing /api/recipe-health…');
+  const r = await aiProbeLocalProxy();
+  if (r.ok) {
+    aiSetLocalStatus('ok', 'Connected. claude CLI ' + (r.version || '?') + ' reachable.');
+  } else {
+    aiSetLocalStatus('err', r.error || 'unreachable');
+  }
+}
+
 function setupAISettingsPanel() {
   aiLoadFromStorage();
 
-  // Master toggle
-  const toggle = document.getElementById('ai-enable-toggle');
-  if (toggle) {
-    toggle.checked = aiState.enabled;
-    toggle.onchange = () => {
-      aiSaveEnabled(toggle.checked);
+  // Mode radios
+  const modeRadios = document.querySelectorAll('input[name="ai-mode"]');
+  modeRadios.forEach(r => {
+    r.checked = (r.value === aiState.mode);
+    r.onchange = async () => {
+      aiSaveMode(r.value);
+      aiSyncModeSections();
+      if (r.value === 'local') {
+        await aiRefreshLocalProbe();
+      }
       aiUpdateToneMatchAvailability();
     };
-  }
+  });
+  aiSyncModeSections();
+
+  // Local proxy probe + re-check button
+  const probeBtn = document.getElementById('ai-local-probe-btn');
+  if (probeBtn) probeBtn.onclick = async () => {
+    probeBtn.disabled = true;
+    await aiRefreshLocalProbe();
+    probeBtn.disabled = false;
+    aiUpdateToneMatchAvailability();
+  };
 
   // API key field + buttons
   const keyInput  = document.getElementById('ai-key-input');
@@ -4456,11 +4547,18 @@ function setupAISettingsPanel() {
   } else {
     aiSetKeyStatus('idle', 'No key configured.');
   }
+  aiSetLocalStatus('idle', 'Not yet probed.');
+
+  // If user is already in local mode (from a previous session) auto-probe
+  // so the status pill reflects current reality. Don't block panel init.
+  if (aiState.mode === 'local') {
+    aiRefreshLocalProbe().then(() => aiUpdateToneMatchAvailability());
+  }
 }
 
 // Show / hide the Tone Match "Recreate on my gear" row based on whether
 // the user has AI features configured. Called from the AI Settings panel
-// when the toggle / key changes, and from splitterRenderTonePane on open.
+// when mode/key changes, and from splitterRenderTonePane on open.
 function aiUpdateToneMatchAvailability() {
   const row = document.getElementById('tone-recreate-row');
   const btn = document.getElementById('tone-recreate-btn');
@@ -4470,16 +4568,18 @@ function aiUpdateToneMatchAvailability() {
   row.hidden = false;
   row.classList.toggle('disabled', !ready);
   btn.disabled = !ready;
-  if (hint) {
-    if (ready) {
-      hint.innerHTML = 'Ask Claude to translate these measurements into gear-specific settings on your NUX MG 300, Roland kit, and MODX 6.';
-    } else if (!aiState.enabled) {
-      hint.innerHTML = 'AI features are off. Toggle them on in the <code>AI</code> panel (top right).';
-    } else if (!aiState.apiKey) {
-      hint.innerHTML = 'Paste your Anthropic API key in the <code>AI</code> panel (top right) to enable gear recipes.';
-    } else if (!aiState.apiKeyValidated) {
-      hint.innerHTML = 'API key needs validation — re-open the <code>AI</code> panel and click <strong>Validate &amp; save</strong>.';
-    }
+  if (!hint) return;
+  if (ready) {
+    const via = aiState.mode === 'local' ? 'via your Claude subscription (local proxy)' : 'via your Anthropic API key';
+    hint.innerHTML = 'Ask Claude to translate these measurements into gear-specific settings on your NUX MG 300, Roland kit, and MODX 6 — <em>' + via + '</em>.';
+  } else if (aiState.mode === 'off') {
+    hint.innerHTML = 'AI features are off. Pick a mode in the <code>AI</code> panel (top right).';
+  } else if (aiState.mode === 'local') {
+    const err = aiState.localHealth && aiState.localHealth.error;
+    hint.innerHTML = 'Local proxy not reachable. ' + (err ? '<code>' + err + '</code>' : 'Open the <code>AI</code> panel and click <strong>Re-check</strong>.');
+  } else if (aiState.mode === 'api') {
+    if (!aiState.apiKey)            hint.innerHTML = 'Paste your Anthropic API key in the <code>AI</code> panel (top right) to enable gear recipes.';
+    else if (!aiState.apiKeyValidated) hint.innerHTML = 'API key needs validation — re-open the <code>AI</code> panel and click <strong>Validate &amp; save</strong>.';
   }
 }
 
@@ -4660,71 +4760,138 @@ function aiExtractJSON(text) {
   }
 }
 
+// Transport-agnostic one-shot call. Returns:
+//   { ok: true, text, usage, costUsd }
+//   { ok: false, error }
+// where `text` is the assistant's raw response (JSON parse + validation
+// happens at the caller level so the retry loop can re-prompt cleanly).
+async function aiCallClaudeOnce(messages) {
+  if (aiState.mode === 'local') return aiCallClaudeLocalProxy(messages);
+  if (aiState.mode === 'api')   return aiCallClaudeAPI(messages);
+  return { ok: false, error: 'AI mode is off' };
+}
+
+async function aiCallClaudeAPI(messages) {
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': aiState.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: AI_MODEL,
+        max_tokens: AI_MAX_TOKENS,
+        system: AI_RECIPE_SYSTEM_PROMPT,
+        messages,
+      }),
+    });
+  } catch (err) {
+    return { ok: false, error: 'Network error calling Claude: ' + (err.message || err) };
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    return { ok: false, error: 'Claude API ' + res.status + ': ' + body.slice(0, 400) };
+  }
+  const data = await res.json().catch(() => null);
+  if (!data || !Array.isArray(data.content)) {
+    return { ok: false, error: 'Claude returned a malformed envelope.' };
+  }
+  const usage = data.usage || {};
+  const textChunk = data.content.find(c => c.type === 'text');
+  const text = textChunk ? textChunk.text : '';
+  const costUsd =
+    ((usage.input_tokens  || 0) / 1e6) * AI_PRICE_INPUT_PER_MTOK +
+    ((usage.output_tokens || 0) / 1e6) * AI_PRICE_OUTPUT_PER_MTOK;
+  return { ok: true, text, usage, costUsd };
+}
+
+// Local proxy: POSTs to /api/recipe on this same origin (server.py).
+// The server shells out to the `claude` CLI which uses the user's local
+// Claude Code authentication (subscription, no API billing). The CLI
+// only accepts a single user message at a time — to keep the retry
+// machinery transport-agnostic, we collapse the messages array into a
+// single user message with role labels when there's prior context.
+async function aiCallClaudeLocalProxy(messages) {
+  // Collapse multi-turn into a single user message — claude -p is one-shot
+  let userMessage;
+  if (messages.length === 1 && messages[0].role === 'user') {
+    userMessage = messages[0].content;
+  } else {
+    userMessage = messages.map(m => {
+      const tag = m.role === 'assistant' ? 'PRIOR ASSISTANT RESPONSE' :
+                  m.role === 'user'      ? 'USER' : m.role.toUpperCase();
+      return '=== ' + tag + ' ===\n' + m.content;
+    }).join('\n\n');
+  }
+  let res;
+  try {
+    res = await fetch('/api/recipe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        systemPrompt: AI_RECIPE_SYSTEM_PROMPT,
+        userMessage,
+        model: 'sonnet',
+      }),
+    });
+  } catch (err) {
+    return { ok: false, error: 'Local proxy unreachable: ' + (err.message || err) + '. Is server.py running?' };
+  }
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!data) {
+    return { ok: false, error: 'Local proxy returned non-JSON response (HTTP ' + res.status + ')' };
+  }
+  if (!data.ok) {
+    return { ok: false, error: data.error || ('Local proxy HTTP ' + res.status) };
+  }
+  return {
+    ok: true,
+    text: data.text || '',
+    usage: data.usage || {},
+    // CLI's reported subscription cost — typically 0 since subscription users
+    // don't see per-call dollar amounts, but we pass it through anyway.
+    costUsd: typeof data.cost_usd === 'number' ? data.cost_usd : 0,
+  };
+}
+
 // Main entry point. Returns a Promise that resolves to:
 //   { ok: true, recipe, usage: {input_tokens, output_tokens}, costUsd }
 //   { ok: false, error: '...' }
 async function aiGenerateGearRecipe(measurements, stemId, songContext) {
   if (!aiIsReady()) {
-    return { ok: false, error: 'AI features not enabled. Open the AI panel and validate a key.' };
+    return { ok: false, error: 'AI features not configured. Open the AI panel and pick a mode.' };
   }
   const userMsg = aiBuildRecipeUserMessage(measurements, stemId, songContext, aiState.gear);
   let messages = [{ role: 'user', content: userMsg }];
   let lastValidationError = null;
   let usageTotal = { input_tokens: 0, output_tokens: 0 };
+  let costTotal  = 0;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    let res;
-    try {
-      res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': aiState.apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: AI_MODEL,
-          max_tokens: AI_MAX_TOKENS,
-          system: AI_RECIPE_SYSTEM_PROMPT,
-          messages,
-        }),
-      });
-    } catch (err) {
-      return { ok: false, error: 'Network error calling Claude: ' + (err.message || err) };
-    }
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      return { ok: false, error: 'Claude API ' + res.status + ': ' + body.slice(0, 400) };
-    }
-    const data = await res.json().catch(() => null);
-    if (!data || !Array.isArray(data.content)) {
-      return { ok: false, error: 'Claude returned a malformed envelope.' };
-    }
-    if (data.usage) {
-      usageTotal.input_tokens  += data.usage.input_tokens  || 0;
-      usageTotal.output_tokens += data.usage.output_tokens || 0;
-    }
-    const textChunk = data.content.find(c => c.type === 'text');
-    const text = textChunk ? textChunk.text : '';
-    const parsed = aiExtractJSON(text);
+    const r = await aiCallClaudeOnce(messages);
+    if (!r.ok) return { ok: false, error: r.error };
+    usageTotal.input_tokens  += (r.usage && r.usage.input_tokens)  || 0;
+    usageTotal.output_tokens += (r.usage && r.usage.output_tokens) || 0;
+    costTotal += r.costUsd || 0;
+    const parsed = aiExtractJSON(r.text || '');
     if (!parsed) {
       lastValidationError = 'response was not valid JSON';
     } else {
       const v = aiValidateRecipe(parsed, stemId);
       if (v.ok) {
-        const costUsd =
-          (usageTotal.input_tokens  / 1e6) * AI_PRICE_INPUT_PER_MTOK +
-          (usageTotal.output_tokens / 1e6) * AI_PRICE_OUTPUT_PER_MTOK;
-        return { ok: true, recipe: v.recipe, usage: usageTotal, costUsd };
+        return { ok: true, recipe: v.recipe, usage: usageTotal, costUsd: costTotal };
       }
       lastValidationError = v.error;
     }
     if (attempt === 1) {
-      // Retry once with the validation error appended so Claude can self-correct
       messages = [
         { role: 'user', content: userMsg },
-        { role: 'assistant', content: text },
+        { role: 'assistant', content: r.text || '' },
         { role: 'user', content:
           'Your previous response failed validation: ' + lastValidationError +
           '. Re-emit a corrected JSON object that matches the schema exactly. No prose outside the object.' },
