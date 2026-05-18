@@ -434,6 +434,31 @@
     overflow: hidden;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.55);
   }
+  /* AI Settings panel: BYOK Anthropic key + per-gear notes + cache controls */
+  .ai-section { padding: 14px 0; border-bottom: 1px dashed var(--border); }
+  .ai-section:last-child { border-bottom: none; }
+  .ai-row-label { display: block; font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; }
+  .ai-input { width: 100%; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-family: var(--font-mono); font-size: 12px; box-sizing: border-box; }
+  .ai-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  textarea.ai-input { resize: vertical; min-height: 56px; font-family: var(--font-sans); }
+  .ai-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  .ai-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
+  .ai-toggle input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+  .ai-status { margin-top: 8px; padding: 8px 10px; border-radius: 6px; font-family: var(--font-mono); font-size: 11.5px; }
+  .ai-status.ok    { background: rgba(80,200,120,0.10); color: #6dd58c; border: 1px solid rgba(80,200,120,0.30); }
+  .ai-status.err   { background: rgba(255,90,90,0.10);  color: #ff8b8b; border: 1px solid rgba(255,90,90,0.30); }
+  .ai-status.busy  { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
+  .ai-status.idle  { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
+  .ai-note { color: var(--muted); font-size: 11.5px; line-height: 1.55; margin-top: 6px; }
+  .ai-note a { color: var(--accent); text-decoration: none; border-bottom: 1px dashed var(--accent); }
+  .ai-note a:hover { color: var(--accent-2); border-bottom-style: solid; }
+  .ai-gear-card { padding: 12px; margin-bottom: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .ai-gear-card:last-child { margin-bottom: 0; }
+  .ai-gear-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .ai-gear-name i { color: var(--accent-2); }
+  .ai-gear-name small { color: var(--muted); font-size: 11px; font-weight: 400; margin-left: 4px; }
+  .ai-gear-notes { min-height: 48px; }
+
   /* When a side panel is open, builder shrinks to leave room for it (side panels take width preference) */
   body.side-panel-open #builder-drawer { right: 460px; }
   @media (max-width: 600px) { body.side-panel-open #builder-drawer { right: 92vw; } }
@@ -849,6 +874,42 @@
   .tone-stat-value { color: var(--accent); font-weight: 600; }
   .tone-stat-note { color: var(--muted); font-size: 10.5px; margin-top: 6px; line-height: 1.5; font-family: var(--font-sans); }
 
+  /* Tone Match · gear recipe cards (Phase 2 AI translation) */
+  .tone-recreate-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .tone-recreate-row.disabled { opacity: 0.6; }
+  .tone-recreate-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: var(--accent); color: #1a1a1a; border: none; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: var(--font-sans); }
+  .tone-recreate-btn:hover { background: var(--accent-2); }
+  .tone-recreate-btn:disabled { background: var(--panel); color: var(--muted); border: 1px solid var(--border); cursor: wait; }
+  .tone-recreate-hint { color: var(--muted); font-size: 11.5px; flex: 1; line-height: 1.45; }
+  .tone-recreate-hint code { color: var(--accent); font-size: 11px; padding: 1px 5px; background: var(--accent-soft); border-radius: 3px; }
+
+  .tone-recipe-summary { padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; }
+  .tone-recipe-summary-headline { font-size: 14px; color: var(--text); font-weight: 600; line-height: 1.45; }
+  .tone-recipe-summary-meta { display: flex; gap: 14px; margin-top: 8px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); flex-wrap: wrap; }
+  .tone-recipe-conf { padding: 1px 7px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .tone-recipe-conf.high   { background: rgba(80,200,120,0.15); color: #6dd58c; }
+  .tone-recipe-conf.medium { background: var(--accent-soft);    color: var(--accent); }
+  .tone-recipe-conf.low    { background: rgba(255,90,90,0.15);  color: #ff8b8b; }
+  .tone-recipe-caveats { color: var(--muted); font-size: 11.5px; margin-top: 8px; font-family: var(--font-sans); line-height: 1.55; }
+
+  .tone-gear-card { padding: 14px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .tone-gear-card-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .tone-gear-card-title i { color: var(--accent-2); font-size: 16px; }
+  .tone-gear-card.not-applicable { opacity: 0.7; }
+  .tone-gear-na-reason { font-style: italic; color: var(--muted); font-size: 12px; padding: 8px 0; }
+  .tone-block { padding: 9px 0; border-top: 1px dashed var(--border); }
+  .tone-block:first-of-type { border-top: none; padding-top: 4px; }
+  .tone-block-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .tone-block-name { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+  .tone-block-setting { font-size: 13px; color: var(--accent); font-weight: 600; text-align: right; }
+  .tone-block-params { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-family: var(--font-mono); font-size: 11px; }
+  .tone-block-param { color: var(--text-2); }
+  .tone-block-param-key { color: var(--muted); }
+  .tone-block-why { color: var(--muted); font-size: 10.5px; margin-top: 6px; line-height: 1.5; font-family: var(--font-sans); font-style: italic; }
+
+  .tone-recipe-cost { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; margin-top: 12px; background: var(--panel); border: 1px dashed var(--border); border-radius: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .tone-recipe-cost strong { color: var(--accent); font-weight: 600; }
+
   /* Sheet view: tempo / bpb / cell controls + bar grid */
   .sheet-controls { display: flex; align-items: center; gap: 14px; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
   .sheet-control { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); font-family: var(--font-mono); }
@@ -1102,6 +1163,7 @@
         <button id="header-listener-btn" class="header-action-btn" title="Listen to audio · detect chord · suggest next"><i class="ph-duotone ph-microphone"></i> Listener</button>
         <button id="header-splitter-btn" class="header-action-btn" title="Upload a song · split into stems · per-stem chord detection"><i class="ph-duotone ph-stack"></i> Splitter</button>
         <button id="header-songwriter-btn" class="header-action-btn" title="Open Songwriter shutter (Shift+S)"><i class="ph-duotone ph-note-pencil"></i> Songwriter</button>
+        <button id="header-ai-btn" class="header-action-btn" title="AI Settings · paste your Anthropic API key + gear inventory"><i class="ph-duotone ph-sparkle"></i> AI</button>
         <button id="header-sidebar-btn" class="header-action-btn active" title="Toggle reference sidebar (templates, chord detail, substitutions)"><i class="ph-duotone ph-sidebar-simple"></i> Sidebar</button>
       </div>
       <div class="control-group">
@@ -1233,6 +1295,61 @@
       </div>
       <div id="melody-steps"></div>
       <button class="melody-finalize" id="melody-finalize" disabled>+ Add picked chords to Builder</button>
+    </div>
+  </aside>
+
+  <aside id="ai-settings-panel" class="side-panel">
+    <div class="side-panel-header">
+      <h2><i class="ph-duotone ph-sparkle"></i> AI Settings <small>· bring your own Claude key</small></h2>
+      <button class="side-panel-close" data-panel="ai-settings-panel" title="Close"><i class="ph-duotone ph-x"></i></button>
+    </div>
+    <div class="side-panel-body">
+      <div class="help-text" style="margin-top:0;margin-bottom:12px;">
+        AI features (gear-specific tone matching, future drum generation, etc.) call Anthropic's Claude directly from your browser. Your key stays in <code>localStorage</code> on this device — nothing is sent to FYmuse. You pay per API call (~$0.01-0.02 per recipe).
+      </div>
+
+      <div class="ai-section">
+        <label class="ai-row-label">Master toggle</label>
+        <label class="ai-toggle">
+          <input type="checkbox" id="ai-enable-toggle"> Enable AI features
+        </label>
+      </div>
+
+      <div class="ai-section">
+        <label class="ai-row-label" for="ai-key-input">Anthropic API key</label>
+        <input type="password" id="ai-key-input" class="ai-input" placeholder="sk-ant-..." spellcheck="false" autocomplete="off">
+        <div class="ai-row">
+          <button class="play-btn" id="ai-validate-btn"><i class="ph-duotone ph-check-circle sz-sm"></i> Validate &amp; save</button>
+          <button class="secondary-btn" id="ai-clear-key-btn"><i class="ph-duotone ph-trash sz-sm"></i> Clear key</button>
+        </div>
+        <div class="ai-status" id="ai-key-status">No key configured.</div>
+        <div class="ai-note">Get a key at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>. Validation runs a tiny call (1 input token) to confirm the key works.</div>
+      </div>
+
+      <div class="ai-section">
+        <label class="ai-row-label">Your gear</label>
+        <div class="ai-note" style="margin-bottom:10px;">Tone Match recipes target this exact setup. Notes are sent to Claude verbatim — flag firmware versions, pedalboard quirks, missing modules, anything that changes the recipe.</div>
+        <div class="ai-gear-card">
+          <div class="ai-gear-name"><i class="ph-duotone ph-guitar sz-sm"></i> NUX MG 300 <small>· guitar multi-effects</small></div>
+          <textarea class="ai-input ai-gear-notes" id="ai-gear-nux" placeholder="e.g. firmware 1.5.0, no expression pedal, IR loader has Owen 4x12 Greenback installed at slot 1"></textarea>
+        </div>
+        <div class="ai-gear-card">
+          <div class="ai-gear-name"><i class="ph-duotone ph-drum sz-sm"></i> Roland electronic drums <small>· kit editor + multi-effects</small></div>
+          <textarea class="ai-input ai-gear-notes" id="ai-gear-roland" placeholder="e.g. TD-17KVX, mesh snare, kick trigger via KD-10, V-Cymbals CY-12C + CY-13R"></textarea>
+        </div>
+        <div class="ai-gear-card">
+          <div class="ai-gear-name"><i class="ph-duotone ph-piano-keys sz-sm"></i> Yamaha MODX 6 <small>· AWM2 + FM-X synth</small></div>
+          <textarea class="ai-input ai-gear-notes" id="ai-gear-modx" placeholder="e.g. firmware 2.50, Soundmondo presets installed, sustain pedal only (no expression / breath controller)"></textarea>
+        </div>
+      </div>
+
+      <div class="ai-section">
+        <label class="ai-row-label">Cached recipes</label>
+        <div class="ai-row">
+          <button class="secondary-btn" id="ai-clear-cache-btn"><i class="ph-duotone ph-broom sz-sm"></i> Clear cached recipes</button>
+        </div>
+        <div class="ai-note" id="ai-cache-status">Recipes are cached locally so re-opening the same analysis doesn't re-call Claude.</div>
+      </div>
     </div>
   </aside>
 
@@ -1490,10 +1607,15 @@
         </label>
         <button class="tone-analyze-btn" id="tone-analyze-btn"><i class="ph-duotone ph-waveform sz-sm"></i> Re-analyze</button>
       </div>
+      <div class="tone-recreate-row" id="tone-recreate-row" hidden>
+        <div class="tone-recreate-hint" id="tone-recreate-hint">Ask Claude to translate these measurements into gear-specific settings on your NUX MG 300, Roland kit, and MODX 6.</div>
+        <button class="tone-recreate-btn" id="tone-recreate-btn"><i class="ph-duotone ph-sparkle sz-sm"></i> Recreate on my gear</button>
+      </div>
       <div class="tone-report-wrap" id="tone-report-wrap">
         <div class="tone-report" id="tone-report">
           <div class="tone-placeholder">Click <strong>Re-analyze</strong> to characterise this stem's sound.</div>
         </div>
+        <div id="tone-recipe-wrap" hidden style="margin-top:18px;"></div>
       </div>
     </div>
   </div>
@@ -4146,6 +4268,566 @@ function setupCustomChordPanel() {
   };
 }
 
+// === AI Settings: BYOK Claude key + gear inventory ======================
+// Browser-only architecture: the user's API key lives in localStorage on
+// THEIR device, never sent to FYmuse's servers. Recipe generation calls
+// api.anthropic.com directly via fetch() using Anthropic's documented
+// "dangerous direct browser access" mode — opt-in by the user, intended
+// for prototypes and small-scale tools (which this is).
+const AI_LS_ENABLED   = 'fymuse-ai-enabled';
+const AI_LS_KEY       = 'fymuse-anthropic-key';
+const AI_LS_GEAR_NUX    = 'fymuse-gear-nux-notes';
+const AI_LS_GEAR_ROLAND = 'fymuse-gear-roland-notes';
+const AI_LS_GEAR_MODX   = 'fymuse-gear-modx-notes';
+
+const aiState = {
+  enabled: false,
+  apiKey: '',
+  apiKeyValidated: false, // true once a Validate call succeeded for this key
+  gear: { nux: '', roland: '', modx: '' },
+};
+
+function aiLoadFromStorage() {
+  try {
+    aiState.enabled = localStorage.getItem(AI_LS_ENABLED) === '1';
+    aiState.apiKey  = localStorage.getItem(AI_LS_KEY) || '';
+    aiState.apiKeyValidated = !!aiState.apiKey; // assume previously-saved keys are valid; revalidates lazily
+    aiState.gear.nux    = localStorage.getItem(AI_LS_GEAR_NUX)    || '';
+    aiState.gear.roland = localStorage.getItem(AI_LS_GEAR_ROLAND) || '';
+    aiState.gear.modx   = localStorage.getItem(AI_LS_GEAR_MODX)   || '';
+  } catch (e) {
+    console.warn('[AI] localStorage read failed', e);
+  }
+}
+
+function aiSaveEnabled(v)      { aiState.enabled = v; try { localStorage.setItem(AI_LS_ENABLED, v ? '1' : '0'); } catch {} }
+function aiSaveKey(k)          { aiState.apiKey = k; try { localStorage.setItem(AI_LS_KEY, k); } catch {} }
+function aiClearKey()          { aiState.apiKey = ''; aiState.apiKeyValidated = false; try { localStorage.removeItem(AI_LS_KEY); } catch {} }
+function aiSaveGear(slot, txt) {
+  aiState.gear[slot] = txt;
+  const k = slot === 'nux' ? AI_LS_GEAR_NUX : slot === 'roland' ? AI_LS_GEAR_ROLAND : AI_LS_GEAR_MODX;
+  try { localStorage.setItem(k, txt); } catch {}
+}
+function aiIsReady() {
+  return aiState.enabled && !!aiState.apiKey && aiState.apiKeyValidated;
+}
+
+// Tiny ping call to confirm the key works. Uses the count_tokens endpoint
+// when possible (zero usage cost); falls back to a 1-token messages call.
+async function aiValidateKey(key) {
+  if (!key || !/^sk-ant-/.test(key)) {
+    return { ok: false, error: 'Key should start with "sk-ant-".' };
+  }
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ok' }],
+      }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      const body = await res.text().catch(() => '');
+      return { ok: false, error: 'Auth failed (' + res.status + '). Double-check the key. ' + body.slice(0, 200) };
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return { ok: false, error: 'API call failed (' + res.status + '). ' + body.slice(0, 200) };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: 'Network error: ' + (err.message || err) };
+  }
+}
+
+function aiSetKeyStatus(state, msg) {
+  const el = document.getElementById('ai-key-status');
+  if (!el) return;
+  el.className = 'ai-status ' + state;
+  el.textContent = msg;
+}
+
+function setupAISettingsPanel() {
+  aiLoadFromStorage();
+
+  // Master toggle
+  const toggle = document.getElementById('ai-enable-toggle');
+  if (toggle) {
+    toggle.checked = aiState.enabled;
+    toggle.onchange = () => {
+      aiSaveEnabled(toggle.checked);
+      aiUpdateToneMatchAvailability();
+    };
+  }
+
+  // API key field + buttons
+  const keyInput  = document.getElementById('ai-key-input');
+  const validate  = document.getElementById('ai-validate-btn');
+  const clearKey  = document.getElementById('ai-clear-key-btn');
+  if (keyInput) {
+    keyInput.value = aiState.apiKey ? '••••••••••••••••••••••••' + aiState.apiKey.slice(-4) : '';
+    // Reveal the real key when the user focuses the input — placeholder mask
+    // is a UX nicety, not real security. Real key never leaves localStorage.
+    let revealed = false;
+    keyInput.onfocus = () => {
+      if (!revealed && aiState.apiKey) {
+        keyInput.value = aiState.apiKey;
+        revealed = true;
+      }
+    };
+    keyInput.onblur = () => {
+      if (aiState.apiKey && keyInput.value === aiState.apiKey) {
+        keyInput.value = '••••••••••••••••••••••••' + aiState.apiKey.slice(-4);
+        revealed = false;
+      }
+    };
+  }
+  if (validate) {
+    validate.onclick = async () => {
+      const raw = (keyInput && keyInput.value.includes('sk-ant-')) ? keyInput.value.trim() : aiState.apiKey;
+      if (!raw) {
+        aiSetKeyStatus('err', 'Paste a key first.');
+        return;
+      }
+      aiSetKeyStatus('busy', 'Validating…');
+      validate.disabled = true;
+      const r = await aiValidateKey(raw);
+      validate.disabled = false;
+      if (r.ok) {
+        aiSaveKey(raw);
+        aiState.apiKeyValidated = true;
+        aiSetKeyStatus('ok', 'Key validated and saved. Ready to use.');
+        if (keyInput) keyInput.value = '••••••••••••••••••••••••' + raw.slice(-4);
+        aiUpdateToneMatchAvailability();
+      } else {
+        aiState.apiKeyValidated = false;
+        aiSetKeyStatus('err', r.error || 'Validation failed.');
+      }
+    };
+  }
+  if (clearKey) {
+    clearKey.onclick = () => {
+      aiClearKey();
+      if (keyInput) keyInput.value = '';
+      aiSetKeyStatus('idle', 'Key cleared.');
+      aiUpdateToneMatchAvailability();
+    };
+  }
+
+  // Gear notes textareas — save on input
+  const wireGear = (id, slot) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = aiState.gear[slot];
+    el.oninput = () => aiSaveGear(slot, el.value);
+  };
+  wireGear('ai-gear-nux',    'nux');
+  wireGear('ai-gear-roland', 'roland');
+  wireGear('ai-gear-modx',   'modx');
+
+  // Clear cached recipes — wired in Phase 2 step 4 (IndexedDB cache).
+  // Stub here; real impl lands when the cache is built.
+  const clearCache = document.getElementById('ai-clear-cache-btn');
+  if (clearCache) {
+    clearCache.onclick = async () => {
+      try {
+        if (typeof aiCacheClearAll === 'function') {
+          await aiCacheClearAll();
+        }
+        const cacheStatus = document.getElementById('ai-cache-status');
+        if (cacheStatus) cacheStatus.textContent = 'Cleared.';
+      } catch (e) {
+        const cacheStatus = document.getElementById('ai-cache-status');
+        if (cacheStatus) cacheStatus.textContent = 'Clear failed: ' + (e.message || e);
+      }
+    };
+  }
+
+  // Initial status
+  if (aiState.apiKey) {
+    aiSetKeyStatus('ok', 'Key on file (•••' + aiState.apiKey.slice(-4) + '). Re-validate to confirm.');
+  } else {
+    aiSetKeyStatus('idle', 'No key configured.');
+  }
+}
+
+// Show / hide the Tone Match "Recreate on my gear" row based on whether
+// the user has AI features configured. Called from the AI Settings panel
+// when the toggle / key changes, and from splitterRenderTonePane on open.
+function aiUpdateToneMatchAvailability() {
+  const row = document.getElementById('tone-recreate-row');
+  const btn = document.getElementById('tone-recreate-btn');
+  const hint = document.getElementById('tone-recreate-hint');
+  if (!row || !btn) return;
+  const ready = aiIsReady();
+  row.hidden = false;
+  row.classList.toggle('disabled', !ready);
+  btn.disabled = !ready;
+  if (hint) {
+    if (ready) {
+      hint.innerHTML = 'Ask Claude to translate these measurements into gear-specific settings on your NUX MG 300, Roland kit, and MODX 6.';
+    } else if (!aiState.enabled) {
+      hint.innerHTML = 'AI features are off. Toggle them on in the <code>AI</code> panel (top right).';
+    } else if (!aiState.apiKey) {
+      hint.innerHTML = 'Paste your Anthropic API key in the <code>AI</code> panel (top right) to enable gear recipes.';
+    } else if (!aiState.apiKeyValidated) {
+      hint.innerHTML = 'API key needs validation — re-open the <code>AI</code> panel and click <strong>Validate &amp; save</strong>.';
+    }
+  }
+}
+
+// === Claude fetch wrapper for gear recipes =================================
+// Pure async function. Takes the Tone Match measurements + the user's gear +
+// stem/song context, returns a validated structured recipe object. On a
+// malformed response, retries once with the validation error as added user
+// context (Claude is reliably self-correcting when shown its own mistake).
+
+const AI_MODEL = 'claude-sonnet-4-6';
+const AI_MAX_TOKENS = 2000;
+// Anthropic pricing as of 2026-05 for claude-sonnet-4-6 — used for the
+// per-recipe cost readout. Per million tokens.
+const AI_PRICE_INPUT_PER_MTOK  = 3.00;
+const AI_PRICE_OUTPUT_PER_MTOK = 15.00;
+
+const AI_RECIPE_SYSTEM_PROMPT = `You are an audio engineer translating measured acoustic characteristics of a song stem into concrete, recreatable settings on the user's exact gear. Be specific, not generic: name the exact amp / cab / preset / parameter and give a numeric or short-string value for each.
+
+Your output MUST be a single JSON object with this exact shape — no prose before or after, no markdown code fence:
+
+{
+  "stem": "<the stem id you were given>",
+  "summary": "<one sentence describing the overall sound, e.g. 'Bright clean-with-edge tele tone, slap-back delay, light room.'>",
+  "confidence": "high" | "medium" | "low",
+  "caveats": "<short prose, 1-3 sentences, naming anything you couldn't determine from the measurements or anything the user's gear can't replicate>",
+  "gear_recipes": [
+    {
+      "gear": "<exact gear name from the inventory>",
+      "applicable": <true if this gear can carry this stem's sound, false if not>,
+      "reason_if_not": "<empty string if applicable, otherwise why not>",
+      "blocks": [
+        {
+          "block": "<gear-specific block name, e.g. 'Amp', 'Drive', 'Cab/IR', 'EQ', 'Modulation', 'Delay', 'Reverb', 'Compressor', 'Kit', 'Performance', 'Insertion FX'>",
+          "setting": "<exact preset / model / patch name from this gear's actual options>",
+          "params": { "<param_name>": <number or string>, ... },
+          "why": "<one-line explanation tying this back to a measured value>"
+        }
+      ]
+    }
+  ]
+}
+
+Hard rules:
+1. Only emit JSON. No prose outside the object. No code fences.
+2. Use gear-specific block names and preset names. If the gear has an "Amp" block named "Brit 800", say "Brit 800" — not "Marshall-style amp".
+3. Tie each "why" to a specific measured number (centroid, tilt, RT60, crest factor, stereo width, etc.). No hand-waving.
+4. confidence = "low" when measurements don't strongly constrain a choice. Be honest.
+5. If a gear genuinely can't carry the stem (e.g. NUX MG 300 for a vocal), set applicable=false and skip the blocks array (use []).
+6. Numbers in params should be in the gear's native units. NUX MG 300 amp params 0-10. Roland reverb send 0-127. MODX cutoff 0-127.`;
+
+// Build the user message. Keeps the measurements compact and labels each
+// number explicitly so Claude can reason from concrete values.
+function aiBuildRecipeUserMessage(measurements, stemId, songContext, gear) {
+  const m = measurements;
+  const lines = [];
+  lines.push('Stem: ' + stemId);
+  lines.push('Region analysed: ' + (m.startSec || 0).toFixed(2) + 's – ' + (m.endSec || 0).toFixed(2) + 's (' + (m.durationSec || 0).toFixed(2) + 's)');
+  if (songContext) {
+    if (songContext.songName)  lines.push('Song: ' + songContext.songName);
+    if (songContext.bpm)       lines.push('Tempo: ' + songContext.bpm + ' BPM');
+    if (songContext.key)       lines.push('Key: ' + songContext.key);
+  }
+  lines.push('');
+  lines.push('MEASUREMENTS');
+  if (m.spectrum) {
+    lines.push('  Spectral centroid: ' + m.spectrum.centroidHz.toFixed(0) + ' Hz');
+    lines.push('  Spectral tilt (200 Hz – 8 kHz): ' + m.spectrum.tiltDbPerOct.toFixed(2) + ' dB / octave');
+    // Compact a few "bump" indicators rather than dumping all 32 bands
+    const bumps = aiSpectrumBumps(m.spectrum);
+    if (bumps.length) lines.push('  Notable peaks/dips: ' + bumps.join(', '));
+  }
+  if (m.dynamics) {
+    lines.push('  Crest factor: ' + m.dynamics.crestDb.toFixed(1) + ' dB (rating: ' + m.dynamics.compRating + ')');
+    lines.push('  Peak / RMS: ' + m.dynamics.peakDb.toFixed(1) + ' / ' + m.dynamics.rmsDb.toFixed(1) + ' dB');
+  }
+  if (m.stereo) {
+    lines.push('  Stereo width (overall): ' + (m.stereo.overallWidth * 100).toFixed(0) + '% (rating: ' + m.stereo.widthRating + ')');
+  } else {
+    lines.push('  Stereo: mono source.');
+  }
+  if (m.reverb) {
+    lines.push('  Reverb tail RT60: ' + m.reverb.rt60.toFixed(2) + ' s (rating: ' + m.reverb.rvbRating + ')');
+  } else {
+    lines.push('  Reverb: no clear decay event found in this region.');
+  }
+  lines.push('');
+  lines.push('GEAR INVENTORY (only these — no DAW plugins, no other hardware)');
+  lines.push('  • NUX MG 300 (guitar multi-effects: amp models, IR/cab, drive, modulation, delay, reverb)');
+  if (gear && gear.nux)    lines.push('    Notes: ' + gear.nux);
+  lines.push('  • Roland electronic drum kit (kit editor with sample select, tuning, muffling, ambience, multi-effects)');
+  if (gear && gear.roland) lines.push('    Notes: ' + gear.roland);
+  lines.push('  • Yamaha MODX 6 (AWM2 + FM-X synthesis; Performances with parts, insertion FX, system reverb + chorus sends)');
+  if (gear && gear.modx)   lines.push('    Notes: ' + gear.modx);
+  lines.push('');
+  lines.push('Generate gear_recipes for this stem. Be specific about preset/model/patch names. Tie each "why" to a measured value.');
+  return lines.join('\n');
+}
+
+// Summarise the 32-band spectrum as a list of "+X dB at YYY Hz" bumps for
+// the prompt, instead of dumping all 32 numbers. Picks the top 2-3 peaks
+// above the local average and the deepest dip.
+function aiSpectrumBumps(sp) {
+  const out = [];
+  const n = sp.bandDb.length;
+  if (n < 5) return out;
+  // Smoothed baseline (rolling 5-band mean)
+  const baseline = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let s = 0, c = 0;
+    for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) { s += sp.bandDb[j]; c++; }
+    baseline[i] = s / c;
+  }
+  // Top 2 peaks above baseline + deepest dip
+  const dev = [];
+  for (let i = 0; i < n; i++) dev.push({ i, d: sp.bandDb[i] - baseline[i], f: sp.bandFreqs[i] });
+  dev.sort((a, b) => b.d - a.d);
+  for (let k = 0; k < Math.min(2, dev.length); k++) {
+    if (dev[k].d > 1.5) {
+      const fStr = dev[k].f >= 1000 ? (dev[k].f / 1000).toFixed(1) + ' kHz' : dev[k].f.toFixed(0) + ' Hz';
+      out.push('+' + dev[k].d.toFixed(1) + ' dB at ' + fStr);
+    }
+  }
+  const lowest = dev[dev.length - 1];
+  if (lowest && lowest.d < -1.5) {
+    const fStr = lowest.f >= 1000 ? (lowest.f / 1000).toFixed(1) + ' kHz' : lowest.f.toFixed(0) + ' Hz';
+    out.push(lowest.d.toFixed(1) + ' dB at ' + fStr);
+  }
+  return out;
+}
+
+// Validate the structure Claude returned. Returns either {ok: true, recipe}
+// or {ok: false, error: "..."}. Used to detect malformed responses + drive
+// the retry-with-feedback loop.
+function aiValidateRecipe(obj, expectedStem) {
+  if (!obj || typeof obj !== 'object') return { ok: false, error: 'response is not an object' };
+  if (typeof obj.stem !== 'string') return { ok: false, error: 'missing "stem" string' };
+  if (expectedStem && obj.stem !== expectedStem) return { ok: false, error: 'stem mismatch — expected "' + expectedStem + '", got "' + obj.stem + '"' };
+  if (typeof obj.summary !== 'string') return { ok: false, error: 'missing "summary" string' };
+  if (!['high', 'medium', 'low'].includes(obj.confidence)) return { ok: false, error: 'invalid "confidence" (must be high/medium/low)' };
+  if (typeof obj.caveats !== 'string') return { ok: false, error: 'missing "caveats" string' };
+  if (!Array.isArray(obj.gear_recipes)) return { ok: false, error: 'missing "gear_recipes" array' };
+  for (let i = 0; i < obj.gear_recipes.length; i++) {
+    const g = obj.gear_recipes[i];
+    if (!g || typeof g !== 'object') return { ok: false, error: 'gear_recipes[' + i + '] is not an object' };
+    if (typeof g.gear !== 'string') return { ok: false, error: 'gear_recipes[' + i + '].gear missing' };
+    if (typeof g.applicable !== 'boolean') return { ok: false, error: 'gear_recipes[' + i + '].applicable must be boolean' };
+    if (typeof g.reason_if_not !== 'string') return { ok: false, error: 'gear_recipes[' + i + '].reason_if_not must be string (use "" if applicable)' };
+    if (!Array.isArray(g.blocks)) return { ok: false, error: 'gear_recipes[' + i + '].blocks must be an array' };
+    if (g.applicable) {
+      for (let j = 0; j < g.blocks.length; j++) {
+        const b = g.blocks[j];
+        if (!b || typeof b !== 'object') return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '] is not an object' };
+        if (typeof b.block !== 'string')   return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '].block missing' };
+        if (typeof b.setting !== 'string') return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '].setting missing' };
+        if (typeof b.why !== 'string')     return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '].why missing' };
+        if (b.params != null && typeof b.params !== 'object') return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '].params must be an object or null' };
+      }
+    }
+  }
+  return { ok: true, recipe: obj };
+}
+
+// Extract a JSON object from Claude's text response. Models sometimes
+// emit a markdown fence anyway despite system prompt instructions; strip
+// it if present. Finds the first { and matching final }.
+function aiExtractJSON(text) {
+  if (!text) return null;
+  let s = text.trim();
+  // Strip markdown fence if present
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start < 0 || end < 0 || end <= start) return null;
+  try {
+    return JSON.parse(s.slice(start, end + 1));
+  } catch (e) {
+    return null;
+  }
+}
+
+// Main entry point. Returns a Promise that resolves to:
+//   { ok: true, recipe, usage: {input_tokens, output_tokens}, costUsd }
+//   { ok: false, error: '...' }
+async function aiGenerateGearRecipe(measurements, stemId, songContext) {
+  if (!aiIsReady()) {
+    return { ok: false, error: 'AI features not enabled. Open the AI panel and validate a key.' };
+  }
+  const userMsg = aiBuildRecipeUserMessage(measurements, stemId, songContext, aiState.gear);
+  let messages = [{ role: 'user', content: userMsg }];
+  let lastValidationError = null;
+  let usageTotal = { input_tokens: 0, output_tokens: 0 };
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let res;
+    try {
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': aiState.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: AI_MODEL,
+          max_tokens: AI_MAX_TOKENS,
+          system: AI_RECIPE_SYSTEM_PROMPT,
+          messages,
+        }),
+      });
+    } catch (err) {
+      return { ok: false, error: 'Network error calling Claude: ' + (err.message || err) };
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      return { ok: false, error: 'Claude API ' + res.status + ': ' + body.slice(0, 400) };
+    }
+    const data = await res.json().catch(() => null);
+    if (!data || !Array.isArray(data.content)) {
+      return { ok: false, error: 'Claude returned a malformed envelope.' };
+    }
+    if (data.usage) {
+      usageTotal.input_tokens  += data.usage.input_tokens  || 0;
+      usageTotal.output_tokens += data.usage.output_tokens || 0;
+    }
+    const textChunk = data.content.find(c => c.type === 'text');
+    const text = textChunk ? textChunk.text : '';
+    const parsed = aiExtractJSON(text);
+    if (!parsed) {
+      lastValidationError = 'response was not valid JSON';
+    } else {
+      const v = aiValidateRecipe(parsed, stemId);
+      if (v.ok) {
+        const costUsd =
+          (usageTotal.input_tokens  / 1e6) * AI_PRICE_INPUT_PER_MTOK +
+          (usageTotal.output_tokens / 1e6) * AI_PRICE_OUTPUT_PER_MTOK;
+        return { ok: true, recipe: v.recipe, usage: usageTotal, costUsd };
+      }
+      lastValidationError = v.error;
+    }
+    if (attempt === 1) {
+      // Retry once with the validation error appended so Claude can self-correct
+      messages = [
+        { role: 'user', content: userMsg },
+        { role: 'assistant', content: text },
+        { role: 'user', content:
+          'Your previous response failed validation: ' + lastValidationError +
+          '. Re-emit a corrected JSON object that matches the schema exactly. No prose outside the object.' },
+      ];
+    }
+  }
+  return { ok: false, error: 'Claude could not produce valid JSON after retry. Last error: ' + lastValidationError };
+}
+
+// === Recipe cache (IndexedDB) ==============================================
+// Recipes cost real money — cache them aggressively. Key includes the
+// song's content hash, stem id, region bounds, AND a hash of the user's
+// gear notes so editing the gear inventory invalidates stale recipes.
+const AI_CACHE_DB_NAME = 'fymuse-ai-cache';
+const AI_CACHE_DB_STORE = 'recipes';
+const AI_CACHE_DB_VERSION = 1;
+let aiCacheDBHandle = null;
+
+function aiCacheOpenDB() {
+  if (aiCacheDBHandle) return Promise.resolve(aiCacheDBHandle);
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB unavailable'));
+    const req = indexedDB.open(AI_CACHE_DB_NAME, AI_CACHE_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(AI_CACHE_DB_STORE)) {
+        db.createObjectStore(AI_CACHE_DB_STORE, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = () => { aiCacheDBHandle = req.result; resolve(aiCacheDBHandle); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// Cheap deterministic string hash (32-bit FNV-like). Good enough as a
+// cache discriminator for gear-notes changes — collisions are harmless,
+// they just mean "treat as same gear profile."
+function aiHashString(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h.toString(16);
+}
+
+function aiGearProfileHash() {
+  return aiHashString(
+    (aiState.gear.nux    || '') + '|' +
+    (aiState.gear.roland || '') + '|' +
+    (aiState.gear.modx   || '')
+  );
+}
+
+function aiCacheKey(songHash, stemId, startSec, endSec) {
+  return [
+    songHash || 'unknown',
+    stemId,
+    startSec.toFixed(2),
+    endSec.toFixed(2),
+    aiGearProfileHash(),
+  ].join('::');
+}
+
+async function aiCacheGet(key) {
+  try {
+    const db = await aiCacheOpenDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction([AI_CACHE_DB_STORE], 'readonly');
+      const req = tx.objectStore(AI_CACHE_DB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { console.warn('[AI] cache get failed', e); return null; }
+}
+
+async function aiCacheSave(key, recipe, usage, costUsd) {
+  try {
+    const db = await aiCacheOpenDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction([AI_CACHE_DB_STORE], 'readwrite');
+      const req = tx.objectStore(AI_CACHE_DB_STORE).put({
+        key, recipe, usage, costUsd,
+        createdAt: Date.now(),
+      });
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { console.warn('[AI] cache save failed', e); }
+}
+
+async function aiCacheClearAll() {
+  try {
+    const db = await aiCacheOpenDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction([AI_CACHE_DB_STORE], 'readwrite');
+      const req = tx.objectStore(AI_CACHE_DB_STORE).clear();
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { console.warn('[AI] cache clear failed', e); }
+}
+
 // === Header tool buttons & side panels (Path Finder, Melody Mode) ===
 function setupHeaderButtons() {
   // Playground button — switches the "current view" to playground (it's no longer a genre pill)
@@ -4169,6 +4851,7 @@ function setupHeaderButtons() {
   setupSidePanelToggle('header-pathfinder-btn', 'path-finder-panel');
   setupSidePanelToggle('header-melody-btn', 'melody-mode-panel');
   setupSidePanelToggle('header-customchord-btn', 'custom-chord-panel');
+  setupSidePanelToggle('header-ai-btn', 'ai-settings-panel');
   // Listener: full main view (mirrors Playground), not a side panel
   const listenerBtn = document.getElementById('header-listener-btn');
   if (listenerBtn) {
@@ -4250,6 +4933,7 @@ const PANEL_TO_BTN = {
   'path-finder-panel': 'header-pathfinder-btn',
   'melody-mode-panel': 'header-melody-btn',
   'custom-chord-panel': 'header-customchord-btn',
+  'ai-settings-panel': 'header-ai-btn',
 };
 
 function syncBodyPanelState() {
@@ -7160,6 +7844,10 @@ function splitterRenderTonePane() {
   const endInput   = document.getElementById('tone-end');
   if (startInput) startInput.value = s.toFixed(2);
   if (endInput)   endInput.value   = e.toFixed(2);
+  // Stale recipe — different region or stem since last gear-recipe call
+  const recipeWrap = document.getElementById('tone-recipe-wrap');
+  if (recipeWrap) { recipeWrap.hidden = true; recipeWrap.innerHTML = ''; }
+  aiUpdateToneMatchAvailability();
   // Cache lookup
   const key = splitterModalState.stemId + ':' + s.toFixed(2) + ':' + e.toFixed(2);
   if (splitterModalState.toneCache[key]) {
@@ -7211,6 +7899,145 @@ function splitterRenderToneReport(result) {
   if (result.isStereo && result.stereo) cards.push(splitterToneCardStereo(result.stereo));
   cards.push(splitterToneCardReverb(result.reverb));
   reportEl.innerHTML = cards.join('');
+  // Update the Recreate button row whenever a new analysis lands
+  aiUpdateToneMatchAvailability();
+}
+
+// === Tone Match · "Recreate on my gear" Claude call + renderer ============
+async function splitterRunGearRecipe() {
+  if (!aiIsReady()) {
+    aiUpdateToneMatchAvailability();
+    return;
+  }
+  const stemId = splitterModalState.stemId;
+  if (!stemId) return;
+  const s = splitterModalState.toneStartSec;
+  const e = splitterModalState.toneEndSec;
+  const measKey = stemId + ':' + s.toFixed(2) + ':' + e.toFixed(2);
+  const cachedMeas = splitterModalState.toneCache[measKey];
+  if (!cachedMeas || cachedMeas.error) {
+    // Need the measurements first — run the DSP then come back
+    splitterRunToneAnalysis();
+    return;
+  }
+
+  const btn = document.getElementById('tone-recreate-btn');
+  const wrap = document.getElementById('tone-recipe-wrap');
+  if (btn) btn.disabled = true;
+  if (wrap) {
+    wrap.hidden = false;
+    wrap.innerHTML = '<div class="tone-placeholder">Loading…</div>';
+  }
+
+  // Recipe-cache lookup: song hash + stem + region + gear profile hash.
+  const songHash = splitterState.fileHash || null;
+  const recipeKey = aiCacheKey(songHash, stemId, s, e);
+  const cachedRecipe = await aiCacheGet(recipeKey);
+  if (cachedRecipe && cachedRecipe.recipe) {
+    if (btn) btn.disabled = false;
+    splitterRenderGearRecipe(cachedRecipe.recipe, cachedRecipe.usage, cachedRecipe.costUsd, { fromCache: true });
+    return;
+  }
+
+  if (wrap) {
+    wrap.innerHTML = '<div class="tone-placeholder">Asking Claude to translate these measurements into gear settings…</div>';
+  }
+  // Tack region bounds onto the measurements for the prompt
+  const measurements = Object.assign({}, cachedMeas, { startSec: s, endSec: e });
+  const songContext = {
+    songName: splitterState.fileName || null,
+    bpm: splitterState.detectedTempo || null,
+    key: splitterFormatDetectedKey(),
+  };
+  let out;
+  try {
+    out = await aiGenerateGearRecipe(measurements, stemId, songContext);
+  } catch (err) {
+    out = { ok: false, error: (err && err.message) || String(err) };
+  }
+  if (btn) btn.disabled = false;
+  if (!out.ok) {
+    if (wrap) wrap.innerHTML = '<div class="tone-placeholder">Recipe failed: ' + (out.error || 'unknown error') + '</div>';
+    return;
+  }
+  // Cache + render
+  aiCacheSave(recipeKey, out.recipe, out.usage, out.costUsd).catch(() => {});
+  splitterRenderGearRecipe(out.recipe, out.usage, out.costUsd);
+}
+
+// Format the detected song key for the songContext blob. Mirrors how the
+// notes modal renders it elsewhere; safe to return null when unset.
+function splitterFormatDetectedKey() {
+  const dk = splitterState.detectedKey;
+  if (!dk || dk.root == null) return null;
+  const rootName = NOTES_SHARP[dk.root] || ('PC' + dk.root);
+  return rootName + ' ' + (dk.mode || 'major');
+}
+
+function splitterRenderGearRecipe(recipe, usage, costUsd, opts) {
+  const wrap = document.getElementById('tone-recipe-wrap');
+  if (!wrap) return;
+  const fromCache = !!(opts && opts.fromCache);
+  const confClass = ['high', 'medium', 'low'].includes(recipe.confidence) ? recipe.confidence : 'medium';
+  const gearIcon = (name) => {
+    const n = (name || '').toLowerCase();
+    if (n.includes('nux') || n.includes('mg 300') || n.includes('guitar')) return 'ph-guitar';
+    if (n.includes('roland') || n.includes('drum') || n.includes('kit'))   return 'ph-drum';
+    if (n.includes('modx') || n.includes('yamaha') || n.includes('synth')) return 'ph-piano-keys';
+    return 'ph-sparkle';
+  };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmtParam = (k, v) => {
+    if (v == null) return '';
+    const valStr = (typeof v === 'number') ? (Number.isInteger(v) ? v.toString() : v.toFixed(2)) : esc(v);
+    return '<span class="tone-block-param"><span class="tone-block-param-key">' + esc(k) + ':</span> ' + valStr + '</span>';
+  };
+
+  const summaryHtml =
+    '<div class="tone-recipe-summary">' +
+      '<div class="tone-recipe-summary-headline">' + esc(recipe.summary) + '</div>' +
+      '<div class="tone-recipe-summary-meta">' +
+        '<span class="tone-recipe-conf ' + confClass + '">' + confClass + ' confidence</span>' +
+        '<span>stem: ' + esc(recipe.stem) + '</span>' +
+      '</div>' +
+      (recipe.caveats ? '<div class="tone-recipe-caveats">' + esc(recipe.caveats) + '</div>' : '') +
+    '</div>';
+
+  const gearCards = recipe.gear_recipes.map(g => {
+    const head = '<div class="tone-gear-card-title"><i class="ph-duotone ' + gearIcon(g.gear) + '"></i> ' + esc(g.gear) + '</div>';
+    if (!g.applicable) {
+      return '<div class="tone-gear-card not-applicable">' + head +
+        '<div class="tone-gear-na-reason">Not used for this stem. ' + esc(g.reason_if_not || '') + '</div>' +
+      '</div>';
+    }
+    const blocks = (g.blocks || []).map(b => {
+      const params = (b.params && typeof b.params === 'object')
+        ? Object.keys(b.params).map(k => fmtParam(k, b.params[k])).join('')
+        : '';
+      return '<div class="tone-block">' +
+        '<div class="tone-block-head">' +
+          '<div class="tone-block-name">' + esc(b.block) + '</div>' +
+          '<div class="tone-block-setting">' + esc(b.setting) + '</div>' +
+        '</div>' +
+        (params ? '<div class="tone-block-params">' + params + '</div>' : '') +
+        (b.why ? '<div class="tone-block-why">' + esc(b.why) + '</div>' : '') +
+      '</div>';
+    }).join('');
+    return '<div class="tone-gear-card">' + head + blocks + '</div>';
+  }).join('');
+
+  const costHtml = (usage && costUsd != null)
+    ? '<div class="tone-recipe-cost">' +
+        '<span>' + (fromCache ? '<i class="ph-duotone ph-database sz-sm"></i> served from cache · original ' : '') +
+          'tokens · ' + (usage.input_tokens || 0) + ' in / ' + (usage.output_tokens || 0) + ' out</span>' +
+        '<span><strong>~$' + costUsd.toFixed(4) + '</strong>' + (fromCache ? ' (cached, no new charge)' : ' for this recipe') + '</span>' +
+      '</div>'
+    : '';
+
+  wrap.innerHTML =
+    summaryHtml +
+    '<div class="tone-report" style="margin-top:0;">' + gearCards + '</div>' +
+    costHtml;
 }
 
 function splitterToneCardSpectrum(sp) {
@@ -7753,6 +8580,8 @@ function splitterSetupNotesModal() {
     splitterModalState.toneEndSec = parseFloat(toneEnd.value) || 10;
   };
   if (toneBtn) toneBtn.onclick = () => splitterRunToneAnalysis();
+  const recreateBtn = document.getElementById('tone-recreate-btn');
+  if (recreateBtn) recreateBtn.onclick = () => splitterRunGearRecipe();
   const slider = document.getElementById('notes-modal-zoom-slider');
   if (slider) {
     slider.oninput = () => {
@@ -11168,6 +11997,7 @@ setupMelodyMode();
 setupSongwriter();
 setupMetronome();
 setupCustomChordPanel();
+setupAISettingsPanel();
 setupCollapsibles();
 setupListener();
 splitterSetupNotesModal();
