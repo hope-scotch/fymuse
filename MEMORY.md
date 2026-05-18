@@ -15,7 +15,9 @@ FYMuse/
 ├── server.py     # Tiny local dev server (sets COOP/COEP for ML mode)
 ├── _headers      # Cloudflare Pages response headers (auto-applied on deploy)
 ├── README.md     # User-facing readme: run/deploy instructions
-└── MEMORY.md     # This file
+├── MEMORY.md     # This file
+└── docs/
+    └── CUSTOM_OTHER_SPLITTER.md  # Design doc: custom guitar/keys splitter (parked)
 ```
 
 The HTML file contains everything: HTML structure, CSS, JS, music theory engine, audio synthesis, UI rendering, DSP pipelines (HPSS, FFT, STFT, HPS, Krumhansl-Schmuckler), and ML-mode loaders. External dependencies are loaded from CDNs.
@@ -448,6 +450,7 @@ bindModeButtons();         // legacy no-op
 
 ## Recent change history (newest first)
 
+- **Design doc parked: custom guitar/keys splitter** (`docs/CUSTOM_OTHER_SPLITTER.md`). We discussed building our own ML model that takes htdemucs's `other` stem and splits it into `guitar` + `keys`. Decided against using Meta's `htdemucs_6s` (no public browser-ready ONNX, weak piano stem) in favour of training a specialized MDX-Net-style spectrogram U-Net (~15-30M params) as a post-Demucs second pass. The doc captures: architecture choice + rationale, three-tier data plan (MedleyDB + Cambridge-MT + Slakh + heavy synthetic augmentation from solo recordings), three-phase training (pre-train on Slakh → main train on real data → optional fine-tune on our music), evaluation via `museval` (target: beat htdemucs_6s by ≥1 dB SDR on guitar), deployment as a second ONNX inference pass after the existing Demucs run. Realistic timeline: 6-8 weeks full-time, ~$150-300 GPU rental. Not in active development — pick up later when we want to push past the current `other`-as-soup limitation in Tone Match for guitar+keys-heavy songs.
 - **Tone Match: Phase 1 of the "Music Copier" feature** — per-stem acoustic characterisation. New third tab in the notes modal next to Piano Roll / Sheet. Lets the user pick a region of the stem and runs four pure-DSP measurements over it; no AI yet (that's Phase 2, BYOK Claude + user's gear inventory).
   - **Measurements** (`splitterMeasureTone` orchestrates):
     - `splitterToneSpectrum` — long-term average spectrum on a log frequency axis. 4096-point FFT, 50% hop overlap, average magnitudes across frames, aggregate into 32 log-spaced bands from 25 Hz to 16 kHz, convert to dB-relative-to-peak. Also returns spectral centroid (Hz) + tilt (dB/octave fit between 200 Hz and 8 kHz). Tilt interpretation: <−5 dark, <−2 warm, <+1 balanced, <+4 bright, ≥+4 aggressive.
