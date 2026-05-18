@@ -3,3 +3,5 @@ package-lock.json
 .wrangler/
 .DS_Store
 *.del.*
+__pycache__/
+*.pyc
