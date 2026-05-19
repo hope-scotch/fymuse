@@ -5,7 +5,7 @@ A single-file music-theory + songwriting + audio-analysis tool. Open `index.html
 ## Run locally
 
 - **Plain double-click `index.html`** — works for everything *except* the Splitter's ML mode and the URL feature for YouTube links.
-- **For Splitter ML mode + YouTube URL load:** run `python3 server.py` and open `http://localhost:8765/`.
+- **For Splitter ML mode + YouTube URL load:** run `python3 server.py` and open `http://localhost:4747/`.
   - The server adds the `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers that ONNX Runtime Web needs for multi-threaded WASM (~3–5 min per song instead of ~15–25 min single-threaded).
   - It also exposes `/api/yt?url=` and `/api/proxy?url=` so the Splitter's URL feature can pull from YouTube / SoundCloud / Bandcamp / direct audio hosts.
   - Requires `yt-dlp` for YouTube extraction: `brew install yt-dlp ffmpeg` (macOS) or `pip install --user yt-dlp` (any OS, plus install ffmpeg via your system package manager).
@@ -24,10 +24,10 @@ cd fymuse
 
 # Each session
 python3 server.py
-# Then open http://localhost:8765/ in the browser
+# Then open http://localhost:4747/ in the browser
 ```
 
-Bookmark `http://localhost:8765/` and use it like a website. No shared cookies, no shared infrastructure, no per-user account setup. Each member's YT extractions go through their own residential connection.
+Bookmark `http://localhost:4747/` and use it like a website. No shared cookies, no shared infrastructure, no per-user account setup. Each member's YT extractions go through their own residential connection.
 
 If you want a "Phase 2" setup later — one always-on box that the whole band hits via a stable URL — see *Future ideas* in `MEMORY.md`.
 

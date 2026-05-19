@@ -25,7 +25,7 @@ The HTML file contains everything: HTML structure, CSS, JS, music theory engine,
 ## Local dev / deploy
 
 - **Most features work from `file://`** — open `index.html` directly.
-- **Splitter ML mode** needs SharedArrayBuffer = COOP/COEP headers. For local dev: `python3 server.py` then open `http://localhost:8765/`. For production: Cloudflare Pages picks up the `_headers` file automatically — no build step, just push the repo.
+- **Splitter ML mode** needs SharedArrayBuffer = COOP/COEP headers. For local dev: `python3 server.py` then open `http://localhost:4747/`. For production: Cloudflare Pages picks up the `_headers` file automatically — no build step, just push the repo.
 
 ---
 

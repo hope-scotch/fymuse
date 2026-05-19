@@ -1533,7 +1533,7 @@
     </div>
     <div class="splitter-aux-help">Paste a direct audio link (.mp3 / .wav / .m4a / .ogg / .flac).<br>
       <strong>Direct files:</strong> work everywhere; CORS-blocked hosts retry via <code>/api/proxy</code>.<br>
-      <strong>YouTube / SoundCloud / Bandcamp:</strong> local only — clone the repo, <code>brew install yt-dlp</code>, <code>python3 server.py</code>, open <code>http://localhost:8765/</code>.</div>
+      <strong>YouTube / SoundCloud / Bandcamp:</strong> local only — clone the repo, <code>brew install yt-dlp</code>, <code>python3 server.py</code>, open <code>http://localhost:4747/</code>.</div>
     <div class="splitter-url-form">
       <input type="url" class="splitter-url-input" id="splitter-url-input" placeholder="https://example.com/song.mp3" spellcheck="false" autocomplete="off">
       <button class="primary" id="splitter-url-load" type="button">Load</button>
@@ -9370,7 +9370,7 @@ async function splitterLoadFromUrl(url) {
     if (!isLocal) {
       splitterSetStatus(
         'YouTube / SoundCloud links only work in local mode. ' +
-        'Clone the repo, run python3 server.py, open http://localhost:8765/. ' +
+        'Clone the repo, run python3 server.py, open http://localhost:4747/. ' +
         'For the deployed site, paste a direct .mp3 / .wav / .m4a URL or drag-drop a file.',
         'error'
       );
@@ -9379,7 +9379,7 @@ async function splitterLoadFromUrl(url) {
     if (location.protocol === 'file:') {
       splitterSetStatus(
         'YouTube / SoundCloud links need yt-dlp via server.py. ' +
-        'Run python3 server.py and open http://localhost:8765/ instead of file://.',
+        'Run python3 server.py and open http://localhost:4747/ instead of file://.',
         'error'
       );
       return;

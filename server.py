@@ -36,7 +36,7 @@ Endpoints:
           {"ok": false, "error": "..."}
 
 Usage:
-    python3 server.py            # serves on http://localhost:8765
+    python3 server.py            # serves on http://localhost:4747
     python3 server.py 9000       # serves on http://localhost:9000
 """
 
@@ -358,7 +358,7 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
 
 
 def main():
-    port = 8765
+    port = 4747
     if len(sys.argv) > 1:
         try:
             port = int(sys.argv[1])
