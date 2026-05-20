@@ -434,36 +434,6 @@
     overflow: hidden;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.55);
   }
-  /* AI Settings panel: BYOK Anthropic key + per-gear notes + cache controls */
-  .ai-section { padding: 14px 0; border-bottom: 1px dashed var(--border); }
-  .ai-section:last-child { border-bottom: none; }
-  .ai-row-label { display: block; font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 8px; }
-  .ai-input { width: 100%; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-family: var(--font-mono); font-size: 12px; box-sizing: border-box; }
-  .ai-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-  textarea.ai-input { resize: vertical; min-height: 56px; font-family: var(--font-sans); }
-  .ai-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
-  .ai-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
-  .ai-toggle input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
-  .ai-mode-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-  .ai-mode-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; font-size: 11.5px; color: var(--text-2); cursor: pointer; transition: all 0.12s; }
-  .ai-mode-pill:hover { color: var(--accent); border-color: var(--accent); }
-  .ai-mode-pill input[type="radio"] { accent-color: var(--accent); }
-  .ai-mode-pill:has(input[type="radio"]:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-  .ai-status { margin-top: 8px; padding: 8px 10px; border-radius: 6px; font-family: var(--font-mono); font-size: 11.5px; }
-  .ai-status.ok    { background: rgba(80,200,120,0.10); color: #6dd58c; border: 1px solid rgba(80,200,120,0.30); }
-  .ai-status.err   { background: rgba(255,90,90,0.10);  color: #ff8b8b; border: 1px solid rgba(255,90,90,0.30); }
-  .ai-status.busy  { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
-  .ai-status.idle  { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
-  .ai-note { color: var(--muted); font-size: 11.5px; line-height: 1.55; margin-top: 6px; }
-  .ai-note a { color: var(--accent); text-decoration: none; border-bottom: 1px dashed var(--accent); }
-  .ai-note a:hover { color: var(--accent-2); border-bottom-style: solid; }
-  .ai-gear-card { padding: 12px; margin-bottom: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
-  .ai-gear-card:last-child { margin-bottom: 0; }
-  .ai-gear-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-  .ai-gear-name i { color: var(--accent-2); }
-  .ai-gear-name small { color: var(--muted); font-size: 11px; font-weight: 400; margin-left: 4px; }
-  .ai-gear-notes { min-height: 48px; }
-
   /* When a side panel is open, builder shrinks to leave room for it (side panels take width preference) */
   body.side-panel-open #builder-drawer { right: 460px; }
   @media (max-width: 600px) { body.side-panel-open #builder-drawer { right: 92vw; } }
@@ -733,16 +703,6 @@
   .tr-refined-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; background: rgba(120,180,255,0.15); color: var(--accent-2); border-radius: 3px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
   .tr-refined-note { padding: 8px 10px; background: rgba(120,180,255,0.07); border-left: 2px solid var(--accent-2); color: var(--text-2); font-size: 11.5px; line-height: 1.5; border-radius: 0 4px 4px 0; margin-top: 4px; }
 
-  /* AI Settings popover (anchored to the gear button in tr-header) */
-  .tr-settings-popover { position: absolute; right: 16px; top: 60px; width: 440px; max-height: 78vh; overflow-y: auto; padding: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 32px rgba(0,0,0,0.45); z-index: 120; }
-  .tr-settings-popover[hidden] { display: none; }
-  .tr-pop-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background: var(--panel-2); border-bottom: 1px solid var(--border); border-radius: 10px 10px 0 0; }
-  .tr-pop-title { font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
-  .tr-pop-title i { color: var(--accent-2); font-size: 14px; }
-  .tr-pop-close { padding: 4px 6px; background: transparent; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); cursor: pointer; }
-  .tr-pop-close:hover { color: var(--accent); border-color: var(--accent); }
-  .tr-pop-body { padding: 14px 16px; }
-  .tr-pop-sep { border: 0; border-top: 1px dashed var(--border); margin: 14px 0; }
   /* Chord chart — sits above the stem mixer. Shows the chord underlying
      the song right now (big), plus the full progression as a clickable
      strip. Same vibe as the Listener's current-chord display. */
@@ -4319,373 +4279,17 @@ function setupCustomChordPanel() {
   };
 }
 
-// === AI Settings: mode selector + key/local proxy + gear inventory =========
-// Two transport modes:
-//   - 'local': POSTs to /api/recipe on this same origin. server.py shells
-//     out to the `claude` CLI, which uses the user's Claude.ai subscription.
-//     No API key, no per-call billing — but only works when server.py is
-//     running on localhost and Claude Code is logged in.
-//   - 'api': direct browser → api.anthropic.com using the user's paid API
-//     key. Works anywhere including the deployed Cloudflare Pages site.
-// 'off' is the default-disabled state.
-const AI_LS_MODE      = 'fymuse-ai-mode';            // 'off' | 'local' | 'api'
-const AI_LS_KEY       = 'fymuse-anthropic-key';
-const AI_LS_GEAR_NUX    = 'fymuse-gear-nux-notes';
-const AI_LS_GEAR_ROLAND = 'fymuse-gear-roland-notes';
-const AI_LS_GEAR_MODX   = 'fymuse-gear-modx-notes';
-// Local-proxy connection details — empty url = same-origin (server.py
-// served the page itself). Set to "http://localhost:4747" when the user
-// is on the deployed Pages site and wants to reach back to their laptop.
-const AI_LS_LOCAL_URL   = 'fymuse-ai-local-url';
-const AI_LS_LOCAL_TOKEN = 'fymuse-ai-local-token';
-
-const aiState = {
-  mode: 'off',                  // 'off' | 'local' | 'api'
-  apiKey: '',
-  apiKeyValidated: false,        // true once a Validate call succeeded for this key
-  localHealth: null,             // {ok: bool, version?: string, error?: string, tokenRequired?: bool} once probed
-  localProxyUrl: '',             // empty = same-origin; e.g. "http://localhost:4747"
-  localProxyToken: '',           // matches FYMUSE_TOKEN env var on server.py
-  gear: { nux: '', roland: '', modx: '' },
-};
-
-function aiLoadFromStorage() {
-  try {
-    const m = localStorage.getItem(AI_LS_MODE);
-    aiState.mode = (m === 'local' || m === 'api') ? m : 'off';
-    aiState.apiKey  = localStorage.getItem(AI_LS_KEY) || '';
-    aiState.apiKeyValidated = !!aiState.apiKey; // assume previously-saved keys are valid; revalidates lazily
-    aiState.gear.nux    = localStorage.getItem(AI_LS_GEAR_NUX)    || '';
-    aiState.gear.roland = localStorage.getItem(AI_LS_GEAR_ROLAND) || '';
-    aiState.gear.modx   = localStorage.getItem(AI_LS_GEAR_MODX)   || '';
-    aiState.localProxyUrl   = localStorage.getItem(AI_LS_LOCAL_URL)   || '';
-    aiState.localProxyToken = localStorage.getItem(AI_LS_LOCAL_TOKEN) || '';
-  } catch (e) {
-    console.warn('[AI] localStorage read failed', e);
-  }
-}
-function aiSaveLocalProxyUrl(v)   { aiState.localProxyUrl = v;   try { localStorage.setItem(AI_LS_LOCAL_URL, v); }   catch {} }
-function aiSaveLocalProxyToken(v) { aiState.localProxyToken = v; try { localStorage.setItem(AI_LS_LOCAL_TOKEN, v); } catch {} }
-// Normalised base URL for local-proxy fetches. Empty string = same-origin
-// (use relative '/api/recipe'). Otherwise strip trailing slash so we can
-// concat '/api/recipe'.
-function aiLocalProxyBase() {
-  const u = (aiState.localProxyUrl || '').trim().replace(/\/+$/, '');
-  return u;
-}
-
-function aiSaveMode(m)         { aiState.mode = m; try { localStorage.setItem(AI_LS_MODE, m); } catch {} }
-function aiSaveKey(k)          { aiState.apiKey = k; try { localStorage.setItem(AI_LS_KEY, k); } catch {} }
-function aiClearKey()          { aiState.apiKey = ''; aiState.apiKeyValidated = false; try { localStorage.removeItem(AI_LS_KEY); } catch {} }
-function aiSaveGear(slot, txt) {
-  aiState.gear[slot] = txt;
-  const k = slot === 'nux' ? AI_LS_GEAR_NUX : slot === 'roland' ? AI_LS_GEAR_ROLAND : AI_LS_GEAR_MODX;
-  try { localStorage.setItem(k, txt); } catch {}
-}
-function aiIsReady() {
-  if (aiState.mode === 'local') return !!(aiState.localHealth && aiState.localHealth.ok);
-  if (aiState.mode === 'api')   return !!aiState.apiKey && aiState.apiKeyValidated;
-  return false;
-}
-
-// Probe /api/recipe-health to see whether we're running under server.py +
-// the claude CLI is reachable. Stores the result on aiState.localHealth
-// and returns it.
-async function aiProbeLocalProxy() {
-  aiState.localHealth = { ok: false, error: 'probing…' };
-  const base = aiLocalProxyBase();
-  const url = (base || '') + '/api/recipe-health';
-  try {
-    const res = await fetch(url, { method: 'GET' });
-    const data = await res.json().catch(() => null);
-    if (res.ok && data && data.ok) {
-      aiState.localHealth = {
-        ok: true,
-        version: data.claude_cli_version || 'unknown',
-        tokenRequired: !!data.token_required,
-        base: base || '(same-origin)',
-      };
-    } else {
-      aiState.localHealth = {
-        ok: false,
-        error: (data && data.error) || ('health probe returned HTTP ' + res.status),
-      };
-    }
-  } catch (err) {
-    const hint = base
-      ? 'no response from ' + base + '/api/recipe-health — is `python3 server.py` running on that host? (' + (err.message || err) + ')'
-      : 'no /api/recipe-health response — is `python3 server.py` running? (' + (err.message || err) + ')';
-    aiState.localHealth = { ok: false, error: hint };
-  }
-  return aiState.localHealth;
-}
-
-// Tiny ping call to confirm the key works. Uses the count_tokens endpoint
-// when possible (zero usage cost); falls back to a 1-token messages call.
-async function aiValidateKey(key) {
-  if (!key || !/^sk-ant-/.test(key)) {
-    return { ok: false, error: 'Key should start with "sk-ant-".' };
-  }
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1,
-        messages: [{ role: 'user', content: 'ok' }],
-      }),
-    });
-    if (res.status === 401 || res.status === 403) {
-      const body = await res.text().catch(() => '');
-      return { ok: false, error: 'Auth failed (' + res.status + '). Double-check the key. ' + body.slice(0, 200) };
-    }
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      return { ok: false, error: 'API call failed (' + res.status + '). ' + body.slice(0, 200) };
-    }
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: 'Network error: ' + (err.message || err) };
-  }
-}
-
-function aiSetKeyStatus(state, msg) {
-  const el = document.getElementById('ai-key-status');
-  if (!el) return;
-  el.className = 'ai-status ' + state;
-  el.textContent = msg;
-}
-
-function aiSetLocalStatus(state, msg) {
-  const el = document.getElementById('ai-local-status');
-  if (!el) return;
-  el.className = 'ai-status ' + state;
-  el.textContent = msg;
-}
-
-// Show/hide the local + api sub-sections based on the chosen mode.
-function aiSyncModeSections() {
-  const localSec = document.getElementById('ai-local-section');
-  const apiSec   = document.getElementById('ai-api-section');
-  if (localSec) localSec.hidden = (aiState.mode !== 'local');
-  if (apiSec)   apiSec.hidden   = (aiState.mode !== 'api');
-}
-
-async function aiRefreshLocalProbe() {
-  aiSetLocalStatus('busy', 'Probing /api/recipe-health…');
-  const r = await aiProbeLocalProxy();
-  if (r.ok) {
-    aiSetLocalStatus('ok', 'Connected. claude CLI ' + (r.version || '?') + ' reachable.');
-  } else {
-    aiSetLocalStatus('err', r.error || 'unreachable');
-  }
-}
-
-function setupAISettingsPanel() {
-  aiLoadFromStorage();
-
-  // Mode radios
-  const modeRadios = document.querySelectorAll('input[name="ai-mode"]');
-  modeRadios.forEach(r => {
-    r.checked = (r.value === aiState.mode);
-    r.onchange = async () => {
-      aiSaveMode(r.value);
-      aiSyncModeSections();
-      if (r.value === 'local') {
-        await aiRefreshLocalProbe();
-      }
-      aiUpdateToneMatchAvailability();
-    };
-  });
-  aiSyncModeSections();
-
-  // Local proxy probe + re-check button
-  const probeBtn = document.getElementById('ai-local-probe-btn');
-  if (probeBtn) probeBtn.onclick = async () => {
-    probeBtn.disabled = true;
-    await aiRefreshLocalProbe();
-    probeBtn.disabled = false;
-    aiUpdateToneMatchAvailability();
-    if (typeof splitterUpdateRefineButtonState === 'function') splitterUpdateRefineButtonState();
-  };
-
-  // Local proxy URL + token inputs
-  const urlInput = document.getElementById('ai-local-url-input');
-  if (urlInput) {
-    urlInput.value = aiState.localProxyUrl;
-    urlInput.oninput = () => aiSaveLocalProxyUrl(urlInput.value.trim());
-    urlInput.onchange = async () => {
-      // Re-probe on blur/enter so the user sees instant feedback
-      if (aiState.mode === 'local') {
-        await aiRefreshLocalProbe();
-        aiUpdateToneMatchAvailability();
-        if (typeof splitterUpdateRefineButtonState === 'function') splitterUpdateRefineButtonState();
-      }
-    };
-  }
-  const tokenInput = document.getElementById('ai-local-token-input');
-  if (tokenInput) {
-    tokenInput.value = aiState.localProxyToken ? '••••••••••••' + aiState.localProxyToken.slice(-4) : '';
-    let revealed = false;
-    tokenInput.onfocus = () => {
-      if (!revealed && aiState.localProxyToken) { tokenInput.value = aiState.localProxyToken; revealed = true; }
-    };
-    tokenInput.onblur = () => {
-      if (aiState.localProxyToken && tokenInput.value === aiState.localProxyToken) {
-        tokenInput.value = '••••••••••••' + aiState.localProxyToken.slice(-4);
-        revealed = false;
-      }
-    };
-    tokenInput.oninput = () => {
-      const v = tokenInput.value.trim();
-      // Only persist when it's the actual token, not the masked dots
-      if (!v.startsWith('•')) aiSaveLocalProxyToken(v);
-    };
-  }
-
-  // API key field + buttons
-  const keyInput  = document.getElementById('ai-key-input');
-  const validate  = document.getElementById('ai-validate-btn');
-  const clearKey  = document.getElementById('ai-clear-key-btn');
-  if (keyInput) {
-    keyInput.value = aiState.apiKey ? '••••••••••••••••••••••••' + aiState.apiKey.slice(-4) : '';
-    // Reveal the real key when the user focuses the input — placeholder mask
-    // is a UX nicety, not real security. Real key never leaves localStorage.
-    let revealed = false;
-    keyInput.onfocus = () => {
-      if (!revealed && aiState.apiKey) {
-        keyInput.value = aiState.apiKey;
-        revealed = true;
-      }
-    };
-    keyInput.onblur = () => {
-      if (aiState.apiKey && keyInput.value === aiState.apiKey) {
-        keyInput.value = '••••••••••••••••••••••••' + aiState.apiKey.slice(-4);
-        revealed = false;
-      }
-    };
-  }
-  if (validate) {
-    validate.onclick = async () => {
-      const raw = (keyInput && keyInput.value.includes('sk-ant-')) ? keyInput.value.trim() : aiState.apiKey;
-      if (!raw) {
-        aiSetKeyStatus('err', 'Paste a key first.');
-        return;
-      }
-      aiSetKeyStatus('busy', 'Validating…');
-      validate.disabled = true;
-      const r = await aiValidateKey(raw);
-      validate.disabled = false;
-      if (r.ok) {
-        aiSaveKey(raw);
-        aiState.apiKeyValidated = true;
-        aiSetKeyStatus('ok', 'Key validated and saved. Ready to use.');
-        if (keyInput) keyInput.value = '••••••••••••••••••••••••' + raw.slice(-4);
-        aiUpdateToneMatchAvailability();
-      } else {
-        aiState.apiKeyValidated = false;
-        aiSetKeyStatus('err', r.error || 'Validation failed.');
-      }
-    };
-  }
-  if (clearKey) {
-    clearKey.onclick = () => {
-      aiClearKey();
-      if (keyInput) keyInput.value = '';
-      aiSetKeyStatus('idle', 'Key cleared.');
-      aiUpdateToneMatchAvailability();
-    };
-  }
-
-  // Gear notes textareas — save on input
-  const wireGear = (id, slot) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.value = aiState.gear[slot];
-    el.oninput = () => aiSaveGear(slot, el.value);
-  };
-  wireGear('ai-gear-nux',    'nux');
-  wireGear('ai-gear-roland', 'roland');
-  wireGear('ai-gear-modx',   'modx');
-
-  // Clear cached recipes — wired in Phase 2 step 4 (IndexedDB cache).
-  // Stub here; real impl lands when the cache is built.
-  const clearCache = document.getElementById('ai-clear-cache-btn');
-  if (clearCache) {
-    clearCache.onclick = async () => {
-      try {
-        if (typeof aiCacheClearAll === 'function') {
-          await aiCacheClearAll();
-        }
-        const cacheStatus = document.getElementById('ai-cache-status');
-        if (cacheStatus) cacheStatus.textContent = 'Cleared.';
-      } catch (e) {
-        const cacheStatus = document.getElementById('ai-cache-status');
-        if (cacheStatus) cacheStatus.textContent = 'Clear failed: ' + (e.message || e);
-      }
-    };
-  }
-
-  // Initial status
-  if (aiState.apiKey) {
-    aiSetKeyStatus('ok', 'Key on file (•••' + aiState.apiKey.slice(-4) + '). Re-validate to confirm.');
-  } else {
-    aiSetKeyStatus('idle', 'No key configured.');
-  }
-  aiSetLocalStatus('idle', 'Not yet probed.');
-
-  // If user is already in local mode (from a previous session) auto-probe
-  // so the status pill reflects current reality. Don't block panel init.
-  if (aiState.mode === 'local') {
-    aiRefreshLocalProbe().then(() => aiUpdateToneMatchAvailability());
-  }
-}
-
-// Show / hide the Tone Match "Recreate on my gear" row based on whether
-// the user has AI features configured. Called from the AI Settings panel
-// when mode/key changes, and from splitterRenderTonePane on open.
-function aiUpdateToneMatchAvailability() {
-  const row = document.getElementById('tone-recreate-row');
-  const btn = document.getElementById('tone-recreate-btn');
-  const hint = document.getElementById('tone-recreate-hint');
-  if (!row || !btn) return;
-  const ready = aiIsReady();
-  row.hidden = false;
-  row.classList.toggle('disabled', !ready);
-  btn.disabled = !ready;
-  if (!hint) return;
-  if (ready) {
-    const via = aiState.mode === 'local' ? 'via your Claude subscription (local proxy)' : 'via your Anthropic API key';
-    hint.innerHTML = 'Ask Claude to translate these measurements into gear-specific settings on your NUX MG-30, Roland kit, and MODX 6 — <em>' + via + '</em>.';
-  } else if (aiState.mode === 'off') {
-    hint.innerHTML = 'AI features are off. Pick a mode in the <code>AI</code> panel (top right).';
-  } else if (aiState.mode === 'local') {
-    const err = aiState.localHealth && aiState.localHealth.error;
-    hint.innerHTML = 'Local proxy not reachable. ' + (err ? '<code>' + err + '</code>' : 'Open the <code>AI</code> panel and click <strong>Re-check</strong>.');
-  } else if (aiState.mode === 'api') {
-    if (!aiState.apiKey)            hint.innerHTML = 'Paste your Anthropic API key in the <code>AI</code> panel (top right) to enable gear recipes.';
-    else if (!aiState.apiKeyValidated) hint.innerHTML = 'API key needs validation — re-open the <code>AI</code> panel and click <strong>Validate &amp; save</strong>.';
-  }
-}
-
-// === Claude fetch wrapper for gear recipes =================================
-// Pure async function. Takes the Tone Match measurements + the user's gear +
-// stem/song context, returns a validated structured recipe object. On a
-// malformed response, retries once with the validation error as added user
-// context (Claude is reliably self-correcting when shown its own mistake).
-
-const AI_MODEL = 'claude-sonnet-4-6';
-const AI_MAX_TOKENS = 2000;
-// Anthropic pricing as of 2026-05 for claude-sonnet-4-6 — used for the
-// per-recipe cost readout. Per million tokens.
-const AI_PRICE_INPUT_PER_MTOK  = 3.00;
-const AI_PRICE_OUTPUT_PER_MTOK = 15.00;
+// === AI minimal: same-origin local-proxy Refine =============================
+// Single AI feature: the Tone Recipe panel's "Refine with Claude" button.
+// All settings UI is gone — the only flow is:
+//   browser → /api/recipe (same origin, served by server.py)
+//   server.py → claude CLI → user's Claude.ai subscription
+// On first refine attempt we probe /api/recipe-health; cache the result for
+// the session. If the probe fails (server.py not running, or we're on the
+// deployed Pages site without a local server) the Refine button just stays
+// disabled with a clear hint. The CORS / token machinery on server.py is
+// still in place for a future "use deployed site with my localhost" mode,
+// it's just not wired up in the browser anymore.
 
 const AI_RECIPE_SYSTEM_PROMPT = `You are an audio engineer translating measured acoustic characteristics of a song stem into concrete, recreatable settings on the user's exact gear. Be specific, not generic: name the exact amp / cab / preset / parameter and give a numeric or short-string value for each.
 
@@ -4693,7 +4297,7 @@ Your output MUST be a single JSON object with this exact shape — no prose befo
 
 {
   "stem": "<the stem id you were given>",
-  "summary": "<one sentence describing the overall sound, e.g. 'Bright clean-with-edge tele tone, slap-back delay, light room.'>",
+  "summary": "<one sentence describing the overall sound>",
   "confidence": "high" | "medium" | "low",
   "caveats": "<short prose, 1-3 sentences, naming anything you couldn't determine from the measurements or anything the user's gear can't replicate>",
   "gear_recipes": [
@@ -4715,30 +4319,82 @@ Your output MUST be a single JSON object with this exact shape — no prose befo
 
 Hard rules:
 1. Only emit JSON. No prose outside the object. No code fences.
-2. Use gear-specific block names and preset names. If the gear has an "Amp" block named "Brit 800", say "Brit 800" — not "Marshall-style amp".
+2. Use gear-specific block names and preset names. Use the EXACT on-device labels (e.g. "Brit 800" not "Marshall-style amp", "Twin Rvb" not "Twin Reverb").
 3. Tie each "why" to a specific measured number (centroid, tilt, RT60, crest factor, stereo width, etc.). No hand-waving.
 4. confidence = "low" when measurements don't strongly constrain a choice. Be honest.
-5. If a gear genuinely can't carry the stem (e.g. NUX MG-30 for a vocal), set applicable=false and skip the blocks array (use []).
+5. If a gear genuinely can't carry the stem, set applicable=false and skip the blocks array (use []).
 6. Numbers in params should be in the gear's native units. NUX MG-30 amp params 0-10. Roland reverb send 0-127. MODX cutoff 0-127.`;
 
-// Build the user message. Keeps the measurements compact and labels each
-// number explicitly so Claude can reason from concrete values.
-function aiBuildRecipeUserMessage(measurements, stemId, songContext, gear) {
+// Minimal state: just whether the local proxy is reachable, cached for
+// the session so we don't re-probe on every click.
+const aiState = {
+  probed: false,
+  localHealth: null, // {ok: bool, version?, error?}
+};
+
+async function aiProbeLocalProxy() {
+  try {
+    const res = await fetch('/api/recipe-health', { method: 'GET' });
+    const data = await res.json().catch(() => null);
+    if (res.ok && data && data.ok) {
+      aiState.localHealth = { ok: true, version: data.claude_cli_version || 'unknown' };
+    } else {
+      aiState.localHealth = {
+        ok: false,
+        error: (data && data.error) || ('health probe returned HTTP ' + res.status),
+      };
+    }
+  } catch (err) {
+    aiState.localHealth = {
+      ok: false,
+      error: 'no /api/recipe-health response — open via http://localhost:4747 with `python3 server.py` running. (' + (err.message || err) + ')',
+    };
+  }
+  aiState.probed = true;
+  return aiState.localHealth;
+}
+
+async function aiEnsureLocalReady() {
+  if (!aiState.probed) await aiProbeLocalProxy();
+  return aiState.localHealth && aiState.localHealth.ok;
+}
+
+function aiIsReady() {
+  // Synchronous best-effort: returns true only if we've probed and the
+  // probe succeeded. The Refine click handler calls aiEnsureLocalReady
+  // first which does the actual probe-and-wait.
+  return !!(aiState.localHealth && aiState.localHealth.ok);
+}
+
+// Update the Refine button's disabled / label state based on AI readiness
+// + whether the current window has cached refinements. Called when the
+// active window changes and after the probe.
+function aiUpdateToneMatchAvailability() {
+  // Defer to splitterUpdateRefineButtonState (lives in the Tone Recipe
+  // module). Kept as a stable name so future code can hook here too.
+  if (typeof splitterUpdateRefineButtonState === 'function') {
+    splitterUpdateRefineButtonState();
+  }
+}
+
+// Build the user message for a single refinement call. Gear inventory is
+// hardcoded since the user's setup is fixed; firmware/quirk notes are
+// not supported in this minimal UI.
+function aiBuildRecipeUserMessage(measurements, stemId, songContext) {
   const m = measurements;
   const lines = [];
   lines.push('Stem: ' + stemId);
   lines.push('Region analysed: ' + (m.startSec || 0).toFixed(2) + 's – ' + (m.endSec || 0).toFixed(2) + 's (' + (m.durationSec || 0).toFixed(2) + 's)');
   if (songContext) {
-    if (songContext.songName)  lines.push('Song: ' + songContext.songName);
-    if (songContext.bpm)       lines.push('Tempo: ' + songContext.bpm + ' BPM');
-    if (songContext.key)       lines.push('Key: ' + songContext.key);
+    if (songContext.songName) lines.push('Song: ' + songContext.songName);
+    if (songContext.bpm)      lines.push('Tempo: ' + songContext.bpm + ' BPM');
+    if (songContext.key)      lines.push('Key: ' + songContext.key);
   }
   lines.push('');
   lines.push('MEASUREMENTS');
   if (m.spectrum) {
     lines.push('  Spectral centroid: ' + m.spectrum.centroidHz.toFixed(0) + ' Hz');
     lines.push('  Spectral tilt (200 Hz – 8 kHz): ' + m.spectrum.tiltDbPerOct.toFixed(2) + ' dB / octave');
-    // Compact a few "bump" indicators rather than dumping all 32 bands
     const bumps = aiSpectrumBumps(m.spectrum);
     if (bumps.length) lines.push('  Notable peaks/dips: ' + bumps.join(', '));
   }
@@ -4757,33 +4413,26 @@ function aiBuildRecipeUserMessage(measurements, stemId, songContext, gear) {
     lines.push('  Reverb: no clear decay event found in this region.');
   }
   lines.push('');
-  lines.push('GEAR INVENTORY (only these — no DAW plugins, no other hardware)');
-  lines.push('  • NUX MG-30 (guitar multi-effects: amp models, IR/cab, drive, modulation, delay, reverb)');
-  if (gear && gear.nux)    lines.push('    Notes: ' + gear.nux);
-  lines.push('  • Roland electronic drum kit (kit editor with sample select, tuning, muffling, ambience, multi-effects)');
-  if (gear && gear.roland) lines.push('    Notes: ' + gear.roland);
-  lines.push('  • Yamaha MODX 6 (AWM2 + FM-X synthesis; Performances with parts, insertion FX, system reverb + chorus sends)');
-  if (gear && gear.modx)   lines.push('    Notes: ' + gear.modx);
+  lines.push('GEAR INVENTORY (fixed for this user — no DAW plugins, no other hardware)');
+  lines.push('  • NUX MG-30 (guitar multi-effects: amp models, IR/cab, drive, modulation, delay, reverb). On-device names: Jazz Clean / Deluxe Rvb / Twin Rvb / Hiwire / Class A 15 / Class A 30 / Plexi 100W / Plexi 45 / Brit 800 / 1987 X 50W / Slo 100 / Fireman HBE / Dual Rect / Die VH4 / Vibro King / Budda / Mr Z 38 / Super Rvb / Brit Blues / Match / Brit 2000 / Uber / Vivo. Drives: T Scream / Eat Dist / Muff Fuzz / Red Dirt / Crunch / Distortion + / RC Boost / Blues Drv / Morning Drv. IR cabs: JZ120 / DR112 / A212 / TR212 / 1960 / GB412 / V412. Mods: CE-1 / CE-2 / St. Chorus / SCH-1 / Phase 90 / Tremolo / Rotary. Reverbs: Room / Hall / Plate / Spring / Shimmer / Damp.');
+  lines.push('  • Roland electronic drums (kit editor with sample select, tuning, muffling, ambience, multi-effects).');
+  lines.push('  • Yamaha MODX 6 (AWM2 + FM-X synthesis; Performances with parts, insertion FX, system reverb + chorus sends). Used for keyboard parts only.');
   lines.push('');
   lines.push('Generate gear_recipes for this stem. Be specific about preset/model/patch names. Tie each "why" to a measured value.');
   return lines.join('\n');
 }
 
-// Summarise the 32-band spectrum as a list of "+X dB at YYY Hz" bumps for
-// the prompt, instead of dumping all 32 numbers. Picks the top 2-3 peaks
-// above the local average and the deepest dip.
+// Pick top peaks/dips in the band-DB curve for the prompt.
 function aiSpectrumBumps(sp) {
   const out = [];
   const n = sp.bandDb.length;
   if (n < 5) return out;
-  // Smoothed baseline (rolling 5-band mean)
   const baseline = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     let s = 0, c = 0;
     for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) { s += sp.bandDb[j]; c++; }
     baseline[i] = s / c;
   }
-  // Top 2 peaks above baseline + deepest dip
   const dev = [];
   for (let i = 0; i < n; i++) dev.push({ i, d: sp.bandDb[i] - baseline[i], f: sp.bandFreqs[i] });
   dev.sort((a, b) => b.d - a.d);
@@ -4801,15 +4450,12 @@ function aiSpectrumBumps(sp) {
   return out;
 }
 
-// Validate the structure Claude returned. Returns either {ok: true, recipe}
-// or {ok: false, error: "..."}. Used to detect malformed responses + drive
-// the retry-with-feedback loop.
 function aiValidateRecipe(obj, expectedStem) {
   if (!obj || typeof obj !== 'object') return { ok: false, error: 'response is not an object' };
   if (typeof obj.stem !== 'string') return { ok: false, error: 'missing "stem" string' };
   if (expectedStem && obj.stem !== expectedStem) return { ok: false, error: 'stem mismatch — expected "' + expectedStem + '", got "' + obj.stem + '"' };
   if (typeof obj.summary !== 'string') return { ok: false, error: 'missing "summary" string' };
-  if (!['high', 'medium', 'low'].includes(obj.confidence)) return { ok: false, error: 'invalid "confidence" (must be high/medium/low)' };
+  if (!['high', 'medium', 'low'].includes(obj.confidence)) return { ok: false, error: 'invalid "confidence"' };
   if (typeof obj.caveats !== 'string') return { ok: false, error: 'missing "caveats" string' };
   if (!Array.isArray(obj.gear_recipes)) return { ok: false, error: 'missing "gear_recipes" array' };
   for (let i = 0; i < obj.gear_recipes.length; i++) {
@@ -4826,88 +4472,26 @@ function aiValidateRecipe(obj, expectedStem) {
         if (typeof b.block !== 'string')   return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '].block missing' };
         if (typeof b.setting !== 'string') return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '].setting missing' };
         if (typeof b.why !== 'string')     return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '].why missing' };
-        if (b.params != null && typeof b.params !== 'object') return { ok: false, error: 'gear_recipes[' + i + '].blocks[' + j + '].params must be an object or null' };
       }
     }
   }
   return { ok: true, recipe: obj };
 }
 
-// Extract a JSON object from Claude's text response. Models sometimes
-// emit a markdown fence anyway despite system prompt instructions; strip
-// it if present. Finds the first { and matching final }.
 function aiExtractJSON(text) {
   if (!text) return null;
   let s = text.trim();
-  // Strip markdown fence if present
   s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
   const start = s.indexOf('{');
   const end = s.lastIndexOf('}');
   if (start < 0 || end < 0 || end <= start) return null;
-  try {
-    return JSON.parse(s.slice(start, end + 1));
-  } catch (e) {
-    return null;
-  }
+  try { return JSON.parse(s.slice(start, end + 1)); } catch { return null; }
 }
 
-// Transport-agnostic one-shot call. Returns:
-//   { ok: true, text, usage, costUsd }
-//   { ok: false, error }
-// where `text` is the assistant's raw response (JSON parse + validation
-// happens at the caller level so the retry loop can re-prompt cleanly).
+// Single transport: same-origin POST to /api/recipe (served by server.py).
+// claude -p is one-shot, so multi-turn messages get collapsed into a
+// single annotated user message.
 async function aiCallClaudeOnce(messages) {
-  if (aiState.mode === 'local') return aiCallClaudeLocalProxy(messages);
-  if (aiState.mode === 'api')   return aiCallClaudeAPI(messages);
-  return { ok: false, error: 'AI mode is off' };
-}
-
-async function aiCallClaudeAPI(messages) {
-  let res;
-  try {
-    res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': aiState.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        max_tokens: AI_MAX_TOKENS,
-        system: AI_RECIPE_SYSTEM_PROMPT,
-        messages,
-      }),
-    });
-  } catch (err) {
-    return { ok: false, error: 'Network error calling Claude: ' + (err.message || err) };
-  }
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    return { ok: false, error: 'Claude API ' + res.status + ': ' + body.slice(0, 400) };
-  }
-  const data = await res.json().catch(() => null);
-  if (!data || !Array.isArray(data.content)) {
-    return { ok: false, error: 'Claude returned a malformed envelope.' };
-  }
-  const usage = data.usage || {};
-  const textChunk = data.content.find(c => c.type === 'text');
-  const text = textChunk ? textChunk.text : '';
-  const costUsd =
-    ((usage.input_tokens  || 0) / 1e6) * AI_PRICE_INPUT_PER_MTOK +
-    ((usage.output_tokens || 0) / 1e6) * AI_PRICE_OUTPUT_PER_MTOK;
-  return { ok: true, text, usage, costUsd };
-}
-
-// Local proxy: POSTs to /api/recipe on this same origin (server.py).
-// The server shells out to the `claude` CLI which uses the user's local
-// Claude Code authentication (subscription, no API billing). The CLI
-// only accepts a single user message at a time — to keep the retry
-// machinery transport-agnostic, we collapse the messages array into a
-// single user message with role labels when there's prior context.
-async function aiCallClaudeLocalProxy(messages) {
-  // Collapse multi-turn into a single user message — claude -p is one-shot
   let userMessage;
   if (messages.length === 1 && messages[0].role === 'user') {
     userMessage = messages[0].content;
@@ -4918,15 +4502,11 @@ async function aiCallClaudeLocalProxy(messages) {
       return '=== ' + tag + ' ===\n' + m.content;
     }).join('\n\n');
   }
-  const base = aiLocalProxyBase();
-  const url = (base || '') + '/api/recipe';
-  const headers = { 'content-type': 'application/json' };
-  if (aiState.localProxyToken) headers['x-fymuse-token'] = aiState.localProxyToken;
   let res;
   try {
-    res = await fetch(url, {
+    res = await fetch('/api/recipe', {
       method: 'POST',
-      headers,
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         systemPrompt: AI_RECIPE_SYSTEM_PROMPT,
         userMessage,
@@ -4934,45 +4514,30 @@ async function aiCallClaudeLocalProxy(messages) {
       }),
     });
   } catch (err) {
-    const hint = base
-      ? 'Local proxy unreachable at ' + base + ': ' + (err.message || err) + '. Is server.py running on that host? (Safari blocks HTTPS→localhost.)'
-      : 'Local proxy unreachable: ' + (err.message || err) + '. Is server.py running?';
-    return { ok: false, error: hint };
+    return { ok: false, error: 'Local proxy unreachable: ' + (err.message || err) + '. Open via http://localhost:4747 with server.py running.' };
   }
   let data = null;
   try { data = await res.json(); } catch {}
-  if (!data) {
-    return { ok: false, error: 'Local proxy returned non-JSON response (HTTP ' + res.status + ')' };
-  }
-  if (!data.ok) {
-    if (res.status === 403) {
-      return { ok: false, error: data.error || 'Token rejected by local proxy. Update the shared token in AI Settings.' };
-    }
-    return { ok: false, error: data.error || ('Local proxy HTTP ' + res.status) };
-  }
+  if (!data) return { ok: false, error: 'Local proxy returned non-JSON (HTTP ' + res.status + ')' };
+  if (!data.ok) return { ok: false, error: data.error || ('Local proxy HTTP ' + res.status) };
   return {
     ok: true,
     text: data.text || '',
     usage: data.usage || {},
-    // CLI's reported subscription cost — typically 0 since subscription users
-    // don't see per-call dollar amounts, but we pass it through anyway.
     costUsd: typeof data.cost_usd === 'number' ? data.cost_usd : 0,
   };
 }
 
-// Main entry point. Returns a Promise that resolves to:
-//   { ok: true, recipe, usage: {input_tokens, output_tokens}, costUsd }
-//   { ok: false, error: '...' }
 async function aiGenerateGearRecipe(measurements, stemId, songContext) {
   if (!aiIsReady()) {
-    return { ok: false, error: 'AI features not configured. Open the AI panel and pick a mode.' };
+    const ok = await aiEnsureLocalReady();
+    if (!ok) return { ok: false, error: (aiState.localHealth && aiState.localHealth.error) || 'AI not available' };
   }
-  const userMsg = aiBuildRecipeUserMessage(measurements, stemId, songContext, aiState.gear);
+  const userMsg = aiBuildRecipeUserMessage(measurements, stemId, songContext);
   let messages = [{ role: 'user', content: userMsg }];
   let lastValidationError = null;
   let usageTotal = { input_tokens: 0, output_tokens: 0 };
-  let costTotal  = 0;
-
+  let costTotal = 0;
   for (let attempt = 1; attempt <= 2; attempt++) {
     const r = await aiCallClaudeOnce(messages);
     if (!r.ok) return { ok: false, error: r.error };
@@ -4984,9 +4549,7 @@ async function aiGenerateGearRecipe(measurements, stemId, songContext) {
       lastValidationError = 'response was not valid JSON';
     } else {
       const v = aiValidateRecipe(parsed, stemId);
-      if (v.ok) {
-        return { ok: true, recipe: v.recipe, usage: usageTotal, costUsd: costTotal };
-      }
+      if (v.ok) return { ok: true, recipe: v.recipe, usage: usageTotal, costUsd: costTotal };
       lastValidationError = v.error;
     }
     if (attempt === 1) {
@@ -5002,6 +4565,7 @@ async function aiGenerateGearRecipe(measurements, stemId, songContext) {
   return { ok: false, error: 'Claude could not produce valid JSON after retry. Last error: ' + lastValidationError };
 }
 
+// === Recipe cache (IndexedDB) ==============================================
 // === Rules-based recipe engine =============================================
 // Deterministic mapping from acoustic measurements to gear-specific recipes.
 // Same JSON shape as the AI path so the renderer is shared. AI (when on) is
@@ -7784,7 +7348,6 @@ function buildSplitterViewSkeleton(root) {
           <span class="tr-now" id="tr-now" hidden><i class="ph-duotone ph-waveform sz-sm"></i> <span id="tr-now-time">0:00</span></span>
           <button class="tr-btn-analyze" id="tr-analyze-btn"><i class="ph-duotone ph-waveform sz-sm"></i> Analyze song</button>
           <button class="tr-btn-refine" id="tr-refine-btn" disabled title="Send the current moment's recipes through Claude for a musical-context revision"><i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude</button>
-          <button class="tr-btn-ghost" id="tr-settings-btn" title="AI Settings"><i class="ph-duotone ph-gear sz-sm"></i></button>
         </div>
       </div>
       <div class="tr-status" id="tr-status" hidden></div>
@@ -7799,62 +7362,6 @@ function buildSplitterViewSkeleton(root) {
       </div>
     </div>
 
-    <!-- AI Settings popover anchored to the gear button -->
-    <div class="tr-settings-popover" id="tr-settings-popover" hidden>
-      <div class="tr-pop-header">
-        <span class="tr-pop-title"><i class="ph-duotone ph-sparkle sz-sm"></i> AI Settings</span>
-        <button class="tr-pop-close" id="tr-pop-close" title="Close"><i class="ph-duotone ph-x"></i></button>
-      </div>
-      <div class="tr-pop-body">
-        <label class="ai-row-label">Refinement source</label>
-        <div class="ai-mode-row">
-          <label class="ai-mode-pill" data-mode="off"><input type="radio" name="ai-mode" value="off"> Off</label>
-          <label class="ai-mode-pill" data-mode="local"><input type="radio" name="ai-mode" value="local"> Local · subscription</label>
-          <label class="ai-mode-pill" data-mode="api"><input type="radio" name="ai-mode" value="api"> API · paid key</label>
-        </div>
-        <div class="ai-note" style="margin-top:8px;margin-bottom:14px;">
-          <strong>Local</strong>: routes through <code>server.py</code> + your Claude.ai subscription. Only works when <code>python3 server.py</code> is running.
-          <strong>API</strong>: direct browser → <code>api.anthropic.com</code> with a paid key. Works on the deployed site too.
-        </div>
-        <div id="ai-local-section" hidden>
-          <label class="ai-row-label">Local proxy status</label>
-          <div class="ai-status" id="ai-local-status">Not yet probed.</div>
-          <div class="ai-row"><button class="play-btn" id="ai-local-probe-btn"><i class="ph-duotone ph-arrows-clockwise sz-sm"></i> Re-check</button></div>
-          <hr class="tr-pop-sep">
-          <label class="ai-row-label" for="ai-local-url-input">Proxy URL <small style="color:var(--muted);font-weight:400;">(only when on deployed site)</small></label>
-          <input type="text" id="ai-local-url-input" class="ai-input" placeholder="leave empty for same-origin · e.g. http://localhost:4747" spellcheck="false" autocomplete="off">
-          <div class="ai-note">Leave empty when opening FYmuse directly via <code>http://localhost:4747</code>. Set to <code>http://localhost:4747</code> when using the deployed Pages site and you want it to reach back to <code>server.py</code> on this laptop. Safari blocks this; use Chrome / Firefox / Edge.</div>
-          <label class="ai-row-label" for="ai-local-token-input" style="margin-top:10px;">Shared token <small style="color:var(--muted);font-weight:400;">(optional)</small></label>
-          <input type="password" id="ai-local-token-input" class="ai-input" placeholder="matches FYMUSE_TOKEN env var on server.py" spellcheck="false" autocomplete="off">
-          <div class="ai-note">If <code>server.py</code> was started with <code>FYMUSE_TOKEN=…</code>, paste the same value here so the server accepts your requests. Recommended when using the deployed site so randos can't burn your subscription if they find your localhost.</div>
-        </div>
-        <div id="ai-api-section" hidden>
-          <label class="ai-row-label" for="ai-key-input">Anthropic API key</label>
-          <input type="password" id="ai-key-input" class="ai-input" placeholder="sk-ant-..." spellcheck="false" autocomplete="off">
-          <div class="ai-row">
-            <button class="play-btn" id="ai-validate-btn"><i class="ph-duotone ph-check-circle sz-sm"></i> Validate &amp; save</button>
-            <button class="secondary-btn" id="ai-clear-key-btn"><i class="ph-duotone ph-trash sz-sm"></i> Clear</button>
-          </div>
-          <div class="ai-status" id="ai-key-status">No key configured.</div>
-        </div>
-        <hr class="tr-pop-sep">
-        <label class="ai-row-label">Your gear</label>
-        <div class="ai-gear-card">
-          <div class="ai-gear-name"><i class="ph-duotone ph-guitar sz-sm"></i> NUX MG-30</div>
-          <textarea class="ai-input ai-gear-notes" id="ai-gear-nux" placeholder="firmware, custom IRs, missing modules..."></textarea>
-        </div>
-        <div class="ai-gear-card">
-          <div class="ai-gear-name"><i class="ph-duotone ph-drum sz-sm"></i> Roland kit</div>
-          <textarea class="ai-input ai-gear-notes" id="ai-gear-roland" placeholder="model, pads, pedals..."></textarea>
-        </div>
-        <div class="ai-gear-card">
-          <div class="ai-gear-name"><i class="ph-duotone ph-piano-keys sz-sm"></i> Yamaha MODX 6</div>
-          <textarea class="ai-input ai-gear-notes" id="ai-gear-modx" placeholder="firmware, presets, controllers..."></textarea>
-        </div>
-        <hr class="tr-pop-sep">
-        <div class="ai-row"><button class="secondary-btn" id="ai-clear-cache-btn"><i class="ph-duotone ph-broom sz-sm"></i> Clear cached recipes</button></div>
-      </div>
-    </div>
   `;
 
   // Wire dynamic controls now that the skeleton lives in the DOM.
@@ -7921,10 +7428,9 @@ function buildSplitterViewSkeleton(root) {
     };
   }
 
-  // Tone Recipe + AI Settings popover live inside the splitter skeleton —
-  // wire them up now that their elements exist.
+  // Tone Recipe controls live inside the splitter skeleton — wire them up
+  // now that their elements exist.
   splitterSetupToneRecipeControls(root);
-  setupAISettingsPanel();
 }
 
 // Stub — gets a real implementation when per-stem timelines land.
@@ -7977,27 +7483,15 @@ const splitterToneRecipeState = {
 function splitterSetupToneRecipeControls(root) {
   const analyzeBtn = root.querySelector('#tr-analyze-btn');
   const refineBtn  = root.querySelector('#tr-refine-btn');
-  const settings   = root.querySelector('#tr-settings-btn');
-  const popClose   = root.querySelector('#tr-pop-close');
   const timeline   = root.querySelector('#tr-timeline');
   if (analyzeBtn) analyzeBtn.onclick = () => splitterAnalyseSongWindowed({ force: true });
   if (refineBtn) refineBtn.onclick = () => splitterRefineCurrentWindow();
-  if (settings) settings.onclick = () => splitterToggleAISettingsPopover(true);
-  if (popClose) popClose.onclick = () => splitterToggleAISettingsPopover(false);
   if (timeline) timeline.onclick = (e) => {
     if (!splitterState.duration) return;
     const rect = timeline.getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     splitterSeek(frac * splitterState.duration);
   };
-  // Click outside the popover to close it
-  document.addEventListener('mousedown', (e) => {
-    const pop = document.getElementById('tr-settings-popover');
-    if (!pop || pop.hidden) return;
-    if (pop.contains(e.target)) return;
-    if (e.target.closest && e.target.closest('#tr-settings-btn')) return;
-    splitterToggleAISettingsPopover(false);
-  });
 }
 
 // Imperative refine: fires Claude refinement for the current window's
@@ -8071,12 +7565,6 @@ async function splitterRefineCurrentWindow() {
   } else {
     splitterSetToneRecipeStatus(null);
   }
-}
-
-function splitterToggleAISettingsPopover(show) {
-  const pop = document.getElementById('tr-settings-popover');
-  if (!pop) return;
-  pop.hidden = !show;
 }
 
 // Called after splitterAnalyzeStems finishes — reveals the panel.
@@ -8363,13 +7851,25 @@ function splitterUpdateRefineButtonState() {
     btn.disabled = true;
     btn.classList.remove('is-refined', 'is-busy');
     btn.innerHTML = '<i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude';
+    btn.title = 'Click Analyze song first.';
+    return;
+  }
+  // First time we reach here after analysis lands, kick off a background
+  // probe of the local proxy. Updates the button when the probe finishes.
+  if (!aiState.probed) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph-duotone ph-circle-notch sz-sm"></i> Checking local proxy…';
+    aiProbeLocalProxy().then(() => splitterUpdateRefineButtonState());
     return;
   }
   if (!aiIsReady()) {
     btn.disabled = true;
     btn.classList.remove('is-refined', 'is-busy');
-    btn.innerHTML = '<i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude';
-    btn.title = 'Configure AI (Local / API) in the ⚙ panel to enable refinement.';
+    btn.innerHTML = '<i class="ph-duotone ph-sparkle sz-sm"></i> Refine unavailable';
+    const err = aiState.localHealth && aiState.localHealth.error;
+    btn.title = err
+      ? err
+      : 'Local proxy not reachable. Open via http://localhost:4747 with `python3 server.py` running.';
     return;
   }
   // Has THIS window been refined already?
@@ -13714,8 +13214,6 @@ setupMelodyMode();
 setupSongwriter();
 setupMetronome();
 setupCustomChordPanel();
-// setupAISettingsPanel() is called from buildSplitterViewSkeleton — the
-// popover that hosts the AI settings lives inside the splitter view DOM.
 setupCollapsibles();
 setupListener();
 splitterSetupNotesModal();
