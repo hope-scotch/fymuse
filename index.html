@@ -4926,7 +4926,7 @@ async function aiGenerateGearRecipe(measurements, stemId, songContext) {
 // a refinement layer that takes this baseline and edits it; it is no longer
 // the primary path. Bump RULES_VERSION on any logic change so cached
 // recipes invalidate cleanly.
-const RULES_VERSION = 2;
+const RULES_VERSION = 3;
 
 // ---- NUX MG-30 authoritative preset names --------------------------------
 // Source: NUX MG-30 firmware 3.2.3 official model list (Aria Guitars JP
@@ -5123,8 +5123,7 @@ function rulesStemNotApplicableReason(gear, stemId) {
   if (gear === 'NUX MG-30') {
     if (stemId === 'vocals')           return 'No dedicated vocal processor in the MG-30 chain. Vocals go through a DAW chain.';
     if (stemId === 'drums')            return 'Guitar multi-effects — not a drum processor. Drums go through the Roland kit + multi-FX.';
-    // Note: the MG-30 DOES have a bass-amp section (Bassguy / Mld / Dglass /
-    // Starlift + 7 bass IRs). Bass is now applicable through NUX.
+    if (stemId === 'bass')             return 'Configured as guitar-only — bass goes through a separate chain not in this inventory.';
     return '';
   }
   if (gear === 'Roland electronic drums') {
@@ -5133,6 +5132,7 @@ function rulesStemNotApplicableReason(gear, stemId) {
   }
   if (gear === 'Yamaha MODX 6') {
     if (stemId === 'drums')            return 'Synth workstation — not a drum module. Drums go through the Roland kit.';
+    if (stemId === 'bass')             return 'Configured as keyboard-only — bass goes through a separate chain not in this inventory.';
     return '';
   }
   return '';
@@ -5244,36 +5244,34 @@ function rulesRecipeNux(m, stemId) {
   const reason = rulesStemNotApplicableReason('NUX MG-30', stemId);
   if (reason) return { gear: 'NUX MG-30', applicable: false, reason_if_not: reason, blocks: [] };
 
+  // Guitar chain only (user's NUX is configured guitar-only — see
+  // rulesStemNotApplicableReason). Bass stems get filtered out at
+  // TONE_EXCLUDED_STEMS in the Tone Recipe panel before this function
+  // sees them, but the not-applicable reason is set defensively too.
   const blocks = [];
-  if (stemId === 'bass') {
-    // Bass chain: bass amp + bass cab + comp + EQ
-    const amp = rulesPickNuxBassAmp(m);
-    if (amp) blocks.push(amp);
-    const cab = rulesPickNuxBassCab(m);
-    if (cab) blocks.push(cab);
-  } else {
-    // Guitar chain (or 'other' / guitar-leaning content from the other stem)
-    const amp = rulesPickGuitarAmp(m);
-    if (amp) blocks.push(amp);
-    const drive = rulesPickGuitarDrive(m);
-    if (drive) blocks.push(drive);
-    const cab = rulesPickGuitarCab(m);
-    if (cab) blocks.push(cab);
-  }
+  const amp = rulesPickGuitarAmp(m);
+  if (amp) blocks.push(amp);
+  const drive = rulesPickGuitarDrive(m);
+  if (drive) blocks.push(drive);
+  const cab = rulesPickGuitarCab(m);
+  if (cab) blocks.push(cab);
   const comp = rulesPickCompressorBlock(m, 'NUX MG-30');
   if (comp) blocks.push(comp);
   const eq = rulesPickEQBlock(m, 'NUX MG-30');
   if (eq) blocks.push(eq);
-  if (stemId !== 'bass') {
-    const mod = rulesPickModulationBlock(m, 'NUX MG-30');
-    if (mod) blocks.push(mod);
-  }
+  const mod = rulesPickModulationBlock(m, 'NUX MG-30');
+  if (mod) blocks.push(mod);
   const rvb = rulesPickReverbBlock(m, 'NUX MG-30');
   if (rvb) blocks.push(rvb);
 
   return { gear: 'NUX MG-30', applicable: true, reason_if_not: '', blocks };
 }
 
+// Bass-chain pickers are kept here as DEAD CODE for two reasons:
+// (a) easy to re-enable if the user adds a bass rig to the NUX inventory
+// later, just by flipping the rulesStemNotApplicableReason gate;
+// (b) the MG-30 firmware really does have these blocks, so leaving the
+// authoritative names + selection rules in source is useful documentation.
 function rulesPickNuxBassAmp(m) {
   const cen = m.spectrum ? m.spectrum.centroidHz : 400;
   const tilt = m.spectrum ? m.spectrum.tiltDbPerOct : -2;
@@ -5465,12 +5463,13 @@ function rulesRecipeModx(m, stemId) {
   const reason = rulesStemNotApplicableReason('Yamaha MODX 6', stemId);
   if (reason) return { gear: 'Yamaha MODX 6', applicable: false, reason_if_not: reason, blocks: [] };
 
-  // MODX handles: bass, keys/synth (in 'other'), and is the primary
-  // vocal-effects fallback (chorus + reverb sends for vocal doubling).
+  // MODX is configured keyboard-only here: handles keys/synth content (in
+  // the 'other' stem) and offers an optional vocal-FX bus via A/D inputs.
+  // Bass is not-applicable on this MODX (user opted out — see
+  // rulesStemNotApplicableReason). The rulesPickModxBassPerf function is
+  // kept below as dead code for easy re-enable if the config changes.
   const blocks = [];
-  if (stemId === 'bass') {
-    blocks.push(rulesPickModxBassPerf(m));
-  } else if (stemId === 'vocals') {
+  if (stemId === 'vocals') {
     blocks.push(rulesPickModxVocalFX(m));
   } else {
     // 'other' — assume keys/synth content
@@ -7865,11 +7864,17 @@ function splitterUpdateStemCursors() {
 // the rules engine at render time. As the playhead moves, the visible
 // recipe swaps to whichever window contains the current time.
 //
-// Vocals are excluded — none of the user's gear (NUX MG-30, Roland kit,
-// MODX 6) is a vocal processor, so the card would always be "not applicable".
+// Excluded stems: stems where NONE of the user's gear inventory carries
+// the sound, so the cards would always be "not applicable":
+//   - vocals: no vocal processor in the rig
+//   - bass:   user configured NUX MG-30 as guitar-only and MODX 6 as
+//             keyboard-only (bass goes through a separate chain not in
+//             FYmuse's inventory). The MG-30 itself has bass-amp models
+//             and MODX has bass Performances, but the user explicitly
+//             opted out, so we hide the bass card here.
 const TONE_WINDOW_SEC = 4.0;     // analysis window width
 const TONE_HOP_SEC    = 2.0;     // step between window starts
-const TONE_EXCLUDED_STEMS = new Set(['vocals']);
+const TONE_EXCLUDED_STEMS = new Set(['vocals', 'bass']);
 
 const splitterToneRecipeState = {
   refine: false,              // "Refine with Claude" toggle
