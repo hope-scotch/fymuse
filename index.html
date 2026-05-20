@@ -678,12 +678,24 @@
   .tr-timeline-tick.is-change.k-kit     { background: #ff9b6b; }
   .tr-timeline-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); box-shadow: 0 0 6px var(--accent); pointer-events: none; transition: left 0.06s linear; }
   .tr-timeline-label { position: absolute; bottom: 2px; font-family: var(--font-mono); font-size: 8.5px; color: var(--muted); padding: 0 3px; pointer-events: none; }
-  .tr-refine-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; color: var(--text-2); font-size: 11.5px; cursor: pointer; }
-  .tr-refine-toggle:has(input:checked) { color: var(--accent-2); border-color: var(--accent-2); background: rgba(120,180,255,0.06); }
-  .tr-refine-toggle input[type="checkbox"] { accent-color: var(--accent-2); }
-  .tr-status { padding: 8px 12px; border-radius: 6px; font-family: var(--font-mono); font-size: 11.5px; background: var(--panel); border: 1px solid var(--border); color: var(--muted); }
-  .tr-status.busy { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .tr-btn-refine { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--text-2); font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: var(--font-sans); transition: all 0.15s; }
+  .tr-btn-refine:hover:not(:disabled) { color: var(--accent-2); border-color: var(--accent-2); background: rgba(120,180,255,0.08); }
+  .tr-btn-refine:disabled { opacity: 0.45; cursor: not-allowed; }
+  .tr-btn-refine.is-busy { color: var(--accent-2); border-color: var(--accent-2); background: rgba(120,180,255,0.10); cursor: wait; }
+  .tr-btn-refine.is-busy i { animation: spin 1s linear infinite; }
+  .tr-btn-refine.is-refined { color: var(--accent-2); border-color: var(--accent-2); }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+  /* Progress bar status (matches the Splitter processing-modal style) */
+  .tr-status { position: relative; padding: 10px 14px; border-radius: 6px; font-family: var(--font-mono); font-size: 11.5px; background: var(--panel); border: 1px solid var(--border); color: var(--muted); overflow: hidden; }
+  .tr-status.busy { background: var(--panel-2); color: var(--accent); border-color: var(--accent); }
   .tr-status.err  { background: rgba(255,90,90,0.10); color: #ff8b8b; border-color: rgba(255,90,90,0.30); }
+  .tr-status-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg, var(--accent-soft), var(--accent-soft) 60%, rgba(245,165,36,0.25)); border-right: 2px solid var(--accent); transition: width 0.15s linear; z-index: 0; pointer-events: none; }
+  .tr-status-row { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+  .tr-status-label { display: inline-flex; align-items: center; gap: 8px; }
+  .tr-status-label i { font-size: 14px; }
+  .tr-status.busy .tr-status-label i { animation: spin 1.4s linear infinite; }
+  .tr-status-pct { font-weight: 700; }
   .tr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
   .tr-placeholder { grid-column: 1 / -1; padding: 24px; color: var(--muted); text-align: center; font-size: 12.5px; }
 
@@ -7701,7 +7713,7 @@ function buildSplitterViewSkeleton(root) {
         <div class="tr-controls">
           <span class="tr-now" id="tr-now" hidden><i class="ph-duotone ph-waveform sz-sm"></i> <span id="tr-now-time">0:00</span></span>
           <button class="tr-btn-analyze" id="tr-analyze-btn"><i class="ph-duotone ph-waveform sz-sm"></i> Analyze song</button>
-          <label class="tr-refine-toggle" title="Optional: send recipes through Claude for musical-context refinement"><input type="checkbox" id="tr-refine-toggle"> <i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude</label>
+          <button class="tr-btn-refine" id="tr-refine-btn" disabled title="Send the current moment's recipes through Claude for a musical-context revision"><i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude</button>
           <button class="tr-btn-ghost" id="tr-settings-btn" title="AI Settings"><i class="ph-duotone ph-gear sz-sm"></i></button>
         </div>
       </div>
@@ -7887,19 +7899,12 @@ const splitterToneRecipeState = {
 
 function splitterSetupToneRecipeControls(root) {
   const analyzeBtn = root.querySelector('#tr-analyze-btn');
-  const refine     = root.querySelector('#tr-refine-toggle');
+  const refineBtn  = root.querySelector('#tr-refine-btn');
   const settings   = root.querySelector('#tr-settings-btn');
   const popClose   = root.querySelector('#tr-pop-close');
   const timeline   = root.querySelector('#tr-timeline');
   if (analyzeBtn) analyzeBtn.onclick = () => splitterAnalyseSongWindowed({ force: true });
-  if (refine) {
-    refine.checked = splitterToneRecipeState.refine;
-    refine.onchange = () => {
-      splitterToneRecipeState.refine = refine.checked;
-      // Re-render current window to pick up cached refinements or trigger new ones
-      splitterRenderToneRecipeForWindow(splitterToneRecipeState.currentIdx, { refresh: true });
-    };
-  }
+  if (refineBtn) refineBtn.onclick = () => splitterRefineCurrentWindow();
   if (settings) settings.onclick = () => splitterToggleAISettingsPopover(true);
   if (popClose) popClose.onclick = () => splitterToggleAISettingsPopover(false);
   if (timeline) timeline.onclick = (e) => {
@@ -7916,6 +7921,79 @@ function splitterSetupToneRecipeControls(root) {
     if (e.target.closest && e.target.closest('#tr-settings-btn')) return;
     splitterToggleAISettingsPopover(false);
   });
+}
+
+// Imperative refine: fires Claude refinement for the current window's
+// visible stems. Lets users explicitly decide when to spend subscription /
+// API tokens, rather than auto-firing on every window the playhead crosses.
+async function splitterRefineCurrentWindow() {
+  if (!aiIsReady()) {
+    splitterSetToneRecipeStatus('err', 'AI not configured. Click the ⚙ icon to set up Local or API mode.');
+    return;
+  }
+  const idx = splitterToneRecipeState.currentIdx;
+  if (idx < 0) return;
+  const w = splitterToneRecipeState.windows[idx];
+  if (!w) return;
+  const stems = splitterStems().filter(s =>
+    !TONE_EXCLUDED_STEMS.has(s.id) &&
+    splitterState.stems[s.id] && splitterState.stems[s.id].buffer
+  );
+  const btn = document.getElementById('tr-refine-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('is-busy');
+    btn.classList.remove('is-refined');
+    btn.innerHTML = '<i class="ph-duotone ph-circle-notch sz-sm"></i> Refining…';
+  }
+  splitterSetToneRecipeStatus('busy', 'Refining ' + stems.length + ' stem' + (stems.length !== 1 ? 's' : '') + ' with Claude…', 0.5);
+  const songContext = {
+    songName: splitterState.fileName || null,
+    bpm:      splitterState.detectedTempo || null,
+    key:      splitterFormatDetectedKey ? splitterFormatDetectedKey() : null,
+  };
+  let anySuccess = false;
+  let firstError = null;
+  for (const def of stems) {
+    const slot = w.perStem[def.id];
+    if (!slot || !slot.measurements || slot.measurements.error) continue;
+    const baseRecipe = rulesGenerateRecipe(
+      Object.assign({}, slot.measurements, { startSec: w.startSec, endSec: w.endSec }),
+      def.id,
+      songContext
+    );
+    try {
+      const r = await splitterRefineRecipeWithAI(baseRecipe, slot.measurements, def.id, songContext);
+      if (r && r.ok) {
+        splitterToneRecipeState.refineCache[def.id + ':' + idx] = { recipe: r.recipe, contextNote: r.contextNote };
+        anySuccess = true;
+        // Only re-render if we're STILL on this window — user may have scrubbed
+        if (splitterToneRecipeState.currentIdx === idx) {
+          splitterRenderToneRecipeCard(def.id, def, r.recipe, slot.measurements, true, r.contextNote);
+        }
+      } else if (r && r.error && !firstError) {
+        firstError = r.error;
+      }
+    } catch (err) {
+      if (!firstError) firstError = (err && err.message) || String(err);
+    }
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.remove('is-busy');
+    if (anySuccess) {
+      btn.classList.add('is-refined');
+      btn.innerHTML = '<i class="ph-duotone ph-sparkle sz-sm"></i> Re-refine';
+    } else {
+      btn.classList.remove('is-refined');
+      btn.innerHTML = '<i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude';
+    }
+  }
+  if (firstError && !anySuccess) {
+    splitterSetToneRecipeStatus('err', 'Refinement failed: ' + firstError.slice(0, 140));
+  } else {
+    splitterSetToneRecipeStatus(null);
+  }
 }
 
 function splitterToggleAISettingsPopover(show) {
@@ -7941,6 +8019,7 @@ function splitterShowToneRecipe() {
     btn.classList.remove('is-done');
     btn.innerHTML = '<i class="ph-duotone ph-waveform sz-sm"></i> Analyze song';
   }
+  splitterUpdateRefineButtonState();
   const grid = document.getElementById('tr-grid');
   if (grid) grid.innerHTML = '<div class="tr-placeholder">Click <strong>Analyze song</strong> to build recipes across the full song. Cards then update live as the playhead moves.</div>';
   const tlw = document.getElementById('tr-timeline-wrap');
@@ -7949,13 +8028,27 @@ function splitterShowToneRecipe() {
   if (now) now.hidden = true;
 }
 
-function splitterSetToneRecipeStatus(state, msg) {
+// Status pill / progress bar. State is 'busy' | 'err' | null. When state
+// is 'busy', `progress` (0..1) drives a filled bar that mirrors the Demucs
+// Split processing modal's visual style. When state is null, hides.
+function splitterSetToneRecipeStatus(state, msg, progress) {
   const el = document.getElementById('tr-status');
   if (!el) return;
-  if (!msg) { el.hidden = true; el.textContent = ''; el.className = 'tr-status'; return; }
+  if (!msg) { el.hidden = true; el.innerHTML = ''; el.className = 'tr-status'; return; }
   el.hidden = false;
   el.className = 'tr-status ' + (state || '');
-  el.textContent = msg;
+  const pct = (typeof progress === 'number' && progress >= 0)
+    ? Math.max(0, Math.min(1, progress)) * 100
+    : null;
+  const icon = state === 'busy' ? 'ph-circle-notch'
+             : state === 'err'  ? 'ph-warning-circle'
+                                : 'ph-info';
+  el.innerHTML =
+    (pct != null ? '<div class="tr-status-bar" style="width:' + pct.toFixed(1) + '%"></div>' : '') +
+    '<div class="tr-status-row">' +
+      '<span class="tr-status-label"><i class="ph-duotone ' + icon + ' sz-sm"></i> ' + msg + '</span>' +
+      (pct != null ? '<span class="tr-status-pct">' + pct.toFixed(0) + '%</span>' : '') +
+    '</div>';
 }
 
 // Build the list of (startSec, endSec) windows that cover the song.
@@ -8033,7 +8126,11 @@ async function splitterAnalyseSongWindowed(opts) {
         w.perStem[def.id] = { measurements: { error: (err && err.message) || String(err) } };
       }
     }
-    splitterSetToneRecipeStatus('busy', 'Analysing window ' + (i + 1) + ' / ' + total + ' (' + w.startSec.toFixed(1) + 's → ' + w.endSec.toFixed(1) + 's)');
+    splitterSetToneRecipeStatus(
+      'busy',
+      'Analysing window ' + (i + 1) + ' / ' + total + ' · ' + splitterFormatTime(w.startSec) + ' → ' + splitterFormatTime(w.endSec),
+      (i + 1) / total
+    );
     if (i === 0) {
       // Render the first window immediately so the user sees something
       splitterToneRecipeState.currentIdx = 0;
@@ -8162,35 +8259,56 @@ function splitterRenderToneRecipeForWindow(idx, opts) {
     let refined = false;
     let refineNote = '';
     const cacheKey = def.id + ':' + idx;
-    if (splitterToneRecipeState.refine && splitterToneRecipeState.refineCache[cacheKey]) {
+    // Refine is now imperative (click the Refine button) — but if THIS
+    // window was previously refined, keep showing the refined version
+    // instead of falling back to the rules baseline.
+    if (splitterToneRecipeState.refineCache[cacheKey]) {
       const c = splitterToneRecipeState.refineCache[cacheKey];
       recipe = c.recipe; refined = true; refineNote = c.contextNote || '';
     }
     splitterRenderToneRecipeCard(def.id, def, recipe, slot.measurements, refined, refineNote);
   }
 
-  // Kick off async refinement for stems that don't have it cached yet
-  if (splitterToneRecipeState.refine && aiIsReady()) {
-    for (const def of stems) {
-      const cacheKey = def.id + ':' + idx;
-      if (splitterToneRecipeState.refineCache[cacheKey]) continue;
-      const slot = w.perStem[def.id];
-      if (!slot || !slot.measurements || slot.measurements.error) continue;
-      const baseRecipe = rulesGenerateRecipe(
-        Object.assign({}, slot.measurements, { startSec: w.startSec, endSec: w.endSec }),
-        def.id,
-        songContext
-      );
-      splitterRefineRecipeWithAI(baseRecipe, slot.measurements, def.id, songContext).then(r => {
-        if (!r || !r.ok) return;
-        splitterToneRecipeState.refineCache[cacheKey] = { recipe: r.recipe, contextNote: r.contextNote };
-        // Only re-render if we're STILL on this window — user may have scrubbed
-        if (splitterToneRecipeState.currentIdx === idx) {
-          splitterRenderToneRecipeCard(def.id, def, r.recipe, slot.measurements, true, r.contextNote);
-        }
-      }).catch(() => {});
-    }
+  // Update the Refine button to reflect whether THIS window already has
+  // cached refinements (so the user knows clicking will re-run, not refine
+  // fresh).
+  splitterUpdateRefineButtonState();
+}
+
+// Refresh the Refine button's enabled/label state based on:
+//   - is AI configured? (else disabled)
+//   - is windowed analysis done?
+//   - does the current window already have cached refinements?
+function splitterUpdateRefineButtonState() {
+  const btn = document.getElementById('tr-refine-btn');
+  if (!btn) return;
+  if (!splitterToneRecipeState.analysed) {
+    btn.disabled = true;
+    btn.classList.remove('is-refined', 'is-busy');
+    btn.innerHTML = '<i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude';
+    return;
   }
+  if (!aiIsReady()) {
+    btn.disabled = true;
+    btn.classList.remove('is-refined', 'is-busy');
+    btn.innerHTML = '<i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude';
+    btn.title = 'Configure AI (Local / API) in the ⚙ panel to enable refinement.';
+    return;
+  }
+  // Has THIS window been refined already?
+  const idx = splitterToneRecipeState.currentIdx;
+  const stems = splitterStems().filter(s =>
+    !TONE_EXCLUDED_STEMS.has(s.id) &&
+    splitterState.stems[s.id] && splitterState.stems[s.id].buffer
+  );
+  const anyRefined = stems.some(s => !!splitterToneRecipeState.refineCache[s.id + ':' + idx]);
+  btn.disabled = false;
+  btn.classList.remove('is-busy');
+  btn.classList.toggle('is-refined', anyRefined);
+  btn.innerHTML = '<i class="ph-duotone ph-sparkle sz-sm"></i> ' + (anyRefined ? 'Re-refine' : 'Refine with Claude');
+  btn.title = anyRefined
+    ? 'Re-run Claude refinement for this moment'
+    : 'Send the current moment\'s recipes through Claude for a musical-context revision';
 }
 
 // Render the timeline strip: ticks where any stem's recipe changes from
