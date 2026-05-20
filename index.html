@@ -4590,7 +4590,7 @@ function aiUpdateToneMatchAvailability() {
   if (!hint) return;
   if (ready) {
     const via = aiState.mode === 'local' ? 'via your Claude subscription (local proxy)' : 'via your Anthropic API key';
-    hint.innerHTML = 'Ask Claude to translate these measurements into gear-specific settings on your NUX MG 300, Roland kit, and MODX 6 — <em>' + via + '</em>.';
+    hint.innerHTML = 'Ask Claude to translate these measurements into gear-specific settings on your NUX MG-30, Roland kit, and MODX 6 — <em>' + via + '</em>.';
   } else if (aiState.mode === 'off') {
     hint.innerHTML = 'AI features are off. Pick a mode in the <code>AI</code> panel (top right).';
   } else if (aiState.mode === 'local') {
@@ -4646,8 +4646,8 @@ Hard rules:
 2. Use gear-specific block names and preset names. If the gear has an "Amp" block named "Brit 800", say "Brit 800" — not "Marshall-style amp".
 3. Tie each "why" to a specific measured number (centroid, tilt, RT60, crest factor, stereo width, etc.). No hand-waving.
 4. confidence = "low" when measurements don't strongly constrain a choice. Be honest.
-5. If a gear genuinely can't carry the stem (e.g. NUX MG 300 for a vocal), set applicable=false and skip the blocks array (use []).
-6. Numbers in params should be in the gear's native units. NUX MG 300 amp params 0-10. Roland reverb send 0-127. MODX cutoff 0-127.`;
+5. If a gear genuinely can't carry the stem (e.g. NUX MG-30 for a vocal), set applicable=false and skip the blocks array (use []).
+6. Numbers in params should be in the gear's native units. NUX MG-30 amp params 0-10. Roland reverb send 0-127. MODX cutoff 0-127.`;
 
 // Build the user message. Keeps the measurements compact and labels each
 // number explicitly so Claude can reason from concrete values.
@@ -4686,7 +4686,7 @@ function aiBuildRecipeUserMessage(measurements, stemId, songContext, gear) {
   }
   lines.push('');
   lines.push('GEAR INVENTORY (only these — no DAW plugins, no other hardware)');
-  lines.push('  • NUX MG 300 (guitar multi-effects: amp models, IR/cab, drive, modulation, delay, reverb)');
+  lines.push('  • NUX MG-30 (guitar multi-effects: amp models, IR/cab, drive, modulation, delay, reverb)');
   if (gear && gear.nux)    lines.push('    Notes: ' + gear.nux);
   lines.push('  • Roland electronic drum kit (kit editor with sample select, tuning, muffling, ambience, multi-effects)');
   if (gear && gear.roland) lines.push('    Notes: ' + gear.roland);
@@ -4926,7 +4926,141 @@ async function aiGenerateGearRecipe(measurements, stemId, songContext) {
 // a refinement layer that takes this baseline and edits it; it is no longer
 // the primary path. Bump RULES_VERSION on any logic change so cached
 // recipes invalidate cleanly.
-const RULES_VERSION = 1;
+const RULES_VERSION = 2;
+
+// ---- NUX MG-30 authoritative preset names --------------------------------
+// Source: NUX MG-30 firmware 3.2.3 official model list (Aria Guitars JP
+// distributor PDF + community-verified mirrors). These are the EXACT
+// on-device labels the user will see scrolling through the amp/IR/FX
+// blocks. Keep the comment alongside each name showing the real-world
+// gear it models — used in the "why" field so the user can recognise it.
+const NUX_GUITAR_AMPS = {
+  'Jazz Clean':   'Roland JC-120',
+  'Deluxe Rvb':   'Fender Deluxe Reverb',
+  'F Princeton':  'Fender Princeton Reverb',
+  'Bass Mate':    'Fender Bassman',
+  'Tweedy':       'Fender Tweed Deluxe',
+  'Twin Rvb':     'Fender Twin Reverb',
+  'Hiwire':       'Hiwatt DR103',
+  'Cali Crunch':  'Mesa Boogie MK1',
+  'Class A 15':   'Vox AC15',
+  'Class A 30':   'Vox AC30',
+  'Plexi 100W':   'Marshall JTM45/100',
+  'Plexi 45':     'Marshall JTM45',
+  'Brit 800':     'Marshall JCM800',
+  '1987 X 50W':   'Marshall 1987x',
+  'Slo 100':      'Soldano SLO100',
+  'Fireman HBE':  'Friedman HBE-100',
+  'Dual Rect':    'Mesa Boogie Dual Rectifier',
+  'Die VH4':      'Diezel VH4',
+  'Vibro King':   'Fender Vibro King',
+  'Budda':        'Budda Superdrive',
+  'Mr Z 38':      'Dr.Z Max 38',
+  'Super Rvb':    'Fender Super-Sonic',
+  'Brit Blues':   'Marshall Bluesbreaker',
+  'Match':        'Matchless DC30',
+  'Brit 2000':    'Marshall JCM2000',
+  'Uber':         'Bogner Überschall',
+  'Vivo':         'Peavey 5150',
+  'Agl':          'Aguilar Tone Hammer 500',
+};
+const NUX_BASS_AMPS = {
+  'Bassguy':      'Fender Bassman 100',
+  'Mld':          'NUX Melvin Lee Davis Bass Preamp + DI',
+  'Dglass':       'Darkglass Microtubes B7K Ultra',
+  'Starlift':     'Rocket Surgeon Starlifter',
+};
+const NUX_GUITAR_CABS = {
+  'JZ120':        '2x12 Roland JC-120',
+  'DR112':        '1x12 Fender Deluxe Reverb',
+  'BS410':        '4x10 Fender Bassman (guitar)',
+  'A212':         '2x12 Vox AC30',
+  'TR212':        '2x12 Fender Twin Reverb',
+  '1960':         '4x12 Marshall 1960',
+  'GB412':        '4x12 Marshall Basketweave Greenback',
+  'V412':         '4x12 Marshall Basketweave V30',
+  'AGL DB810':    '8x10 Aguilar DB',
+};
+const NUX_BASS_CABS = {
+  'AMP SV810':    '8x10 Ampeg SVT',
+  'AMP SV410':    '4x10 Ampeg SVT',
+  'AMP SV212':    '2x12 Ampeg SVT',
+  'MKB 410':      '4x10 Mark Bass 104HF',
+  'TRC 410':      '4x10 Trace Elliot 1048',
+  'EDEN 410':     '4x10 Eden D410XST',
+  'BASSGUY 410':  '4x10 Fender Bassman',
+};
+const NUX_DRIVES = {
+  'Distortion +': 'MXR Distortion +',
+  'RC Boost':     'Xotic RC Booster',
+  'AC Boost':     'Xotic AC Booster',
+  'Dist One':     'Boss DS-1',
+  'T Scream':     'Ibanez TS808 Tube Screamer',
+  'Blues Drv':    'Boss BD-2',
+  'Morning Drv':  'JHS Morning Glory',
+  'Eat Dist':     'Pro Co RAT',
+  'Red Dirt':     'Keeley Red Dirt',
+  'Crunch':       'JHS Angry Charlie',
+  'Muff Fuzz':    'Electro-Harmonix Big Muff',
+  'Katana':       'Keeley Katana Clean Boost',
+  'ST Singer':    'NUX Steel Singer Drive',
+  'Red Fuzz':     'Arbiter Fuzz Face',
+};
+const NUX_MODS = {
+  'CE-1':         'Boss CE-1 Chorus',
+  'CE-2':         'Boss CE-2 Chorus',
+  'St. Chorus':   'MXR M134 Stereo Chorus',
+  'SCH-1':        'Arion SCH-1 Stereo Chorus',
+  'Vibrator':     'Boss VB-2 Vibrato',
+  'Flanger':      'Boss BF-3 Flanger',
+  'Phase 90':     'MXR Phase 90',
+  'Phase 100':    'MXR Phase 100',
+  'U-Vibe':       'Dunlop UV-1 Uni-Vibe',
+  'Tremolo':      'Boss TR-2',
+  'Rotary':       'Strymon Lex Rotary',
+};
+const NUX_DELAYS = {
+  'Analog Delay': 'Boss DM-2',
+  'Digi Delay':   'Boss DD-7',
+  'Modulation':   'Ibanez DML-10',
+  'Tape Echo':    'Roland RE-101 Space Echo',
+  'Reverse':      'TC Electronic Alter Ego (reverse)',
+  'Pan Delay':    'Ibanez DPL-10',
+  'Duotime':      'NUX DuoTime',
+  'ΦPhi Delay':   'NUX original',
+};
+const NUX_REVERBS = {
+  'Room':         'MXR M300 Room',
+  'Hall':         'Lexicon 480L Hall',
+  'Plate':        'EMT 140 Plate',
+  'Spring':       'Boss FRV-1 Spring',
+  'Shimmer':      'Neunaber Seraphim Shimmer',
+  'Damp':         'Neunaber Wet (damped)',
+};
+const NUX_COMPS = {
+  'Rose Comp':    'Ross Compressor',
+  'K Comp':       'Keeley C4 4-knob',
+  'Studio Comp':  'Studio Compressor',
+};
+
+// ---- MODX 6 best-known Performance names ---------------------------------
+// NOTE: The Yamaha MODX Data List is 223 pages and couldn't be reliably
+// scraped through the sandbox. Names below are confident family-level
+// matches from training data; specific factory numbering may vary by
+// firmware. The AI refinement layer is well-positioned to correct any
+// preset that's slightly off for the user's actual unit.
+const MODX_PIANOS = ['CFX Concert', 'CFX Pop/Rock', 'S700 Grand', 'C7 Studio Grand', 'CFX + FM EP'];
+const MODX_EPS    = ['Stage EP', 'Suit Case EP', 'Wurli Tremolo', 'DX7 Tine EP', 'Vintage EP', 'Comp Tine EP'];
+const MODX_ORGANS = ['B3 Vintage', 'Full Tonewheel', 'Jazz Organ', 'Drawbar Pad'];
+const MODX_PADS   = ['Analog Pad', 'Strings Hall', 'Soft Pad', 'Wave Sweep Pad', 'Vintage Pad'];
+const MODX_LEADS  = ['Saw Lead', 'Square Lead', 'Mini Mono', 'FM Lead', 'Buzz Lead'];
+const MODX_BASSES = {
+  acoustic: ['Acoustic Bass'],
+  fingered: ['Fingered Bass', 'P-Bass'],
+  picked:   ['Pick Bass', 'J-Bass'],
+  fretless: ['Fretless Bass'],
+  synth:    ['Synth Bass DX', 'Sub Bass FM', 'Saw Bass', 'Acid Bass'],
+};
 
 // Top-level entry: given the measurements + stem id (+ optional song
 // context), produce the same {stem, summary, confidence, caveats,
@@ -4986,10 +5120,11 @@ function rulesBuildCaveats(m, stemId) {
 }
 
 function rulesStemNotApplicableReason(gear, stemId) {
-  if (gear === 'NUX MG 300') {
-    if (stemId === 'vocals')           return 'Guitar multi-effects — not designed for vocal processing. Vocals go through a DAW chain.';
+  if (gear === 'NUX MG-30') {
+    if (stemId === 'vocals')           return 'No dedicated vocal processor in the MG-30 chain. Vocals go through a DAW chain.';
     if (stemId === 'drums')            return 'Guitar multi-effects — not a drum processor. Drums go through the Roland kit + multi-FX.';
-    if (stemId === 'bass')             return 'Guitar multi-effects — bass through NUX clips the low end. Bass goes through MODX or a dedicated bass chain.';
+    // Note: the MG-30 DOES have a bass-amp section (Bassguy / Mld / Dglass /
+    // Starlift + 7 bass IRs). Bass is now applicable through NUX.
     return '';
   }
   if (gear === 'Roland electronic drums') {
@@ -5006,21 +5141,22 @@ function rulesStemNotApplicableReason(gear, stemId) {
 // ---- Block-pickers shared across the per-stem generators ----------------
 
 // Reverb recipe from RT60. Returns a block descriptor or null if dry.
+// NUX preset names from NUX_REVERBS (Room / Hall / Plate / Spring / Shimmer / Damp).
+// "Cathedral" → use NUX 'Shimmer' which is the most ethereal/long option.
 function rulesPickReverbBlock(m, gearName) {
   const rt60 = (m.reverb && m.reverb.rt60) || 0;
   if (!rt60 || rt60 < 0.20) return null;
   let preset, decay, mix, kind;
-  if      (rt60 < 0.45) { preset = 'Spring';      decay = 0.4; mix = 12; kind = 'tight spring'; }
-  else if (rt60 < 0.85) { preset = 'Room';        decay = 0.6; mix = 18; kind = 'small room';   }
-  else if (rt60 < 1.40) { preset = 'Plate';       decay = 1.1; mix = 25; kind = 'medium plate'; }
-  else if (rt60 < 2.30) { preset = 'Hall';        decay = 1.9; mix = 30; kind = 'large hall';   }
-  else                  { preset = 'Cathedral';   decay = 3.0; mix = 38; kind = 'cathedral';    }
-  // Gear-specific param ranges
-  const params = gearName === 'NUX MG 300'
+  if      (rt60 < 0.45) { preset = 'Spring';   decay = 0.4; mix = 12; kind = 'tight spring (Boss FRV-1-style)';   }
+  else if (rt60 < 0.85) { preset = 'Room';     decay = 0.6; mix = 18; kind = 'small room (MXR M300)';            }
+  else if (rt60 < 1.40) { preset = 'Plate';    decay = 1.1; mix = 25; kind = 'medium plate (EMT 140)';           }
+  else if (rt60 < 2.30) { preset = 'Hall';     decay = 1.9; mix = 30; kind = 'large hall (Lexicon 480L)';        }
+  else                  { preset = 'Shimmer';  decay = 3.0; mix = 38; kind = 'shimmer/cathedral (Neunaber Seraphim)'; }
+  const params = gearName === 'NUX MG-30'
     ? { type: preset, decay: decay.toFixed(1), mix: mix, level: 50 }
     : gearName === 'Roland electronic drums'
-      ? { ambience_send: Math.round(mix * 1.27), decay: decay.toFixed(1) }      // Roland uses 0-127
-      : { type: preset, time: decay.toFixed(1), wet: Math.round(mix * 1.27) };  // MODX 0-127
+      ? { ambience_send: Math.round(mix * 1.27), decay: decay.toFixed(1) }
+      : { type: preset, time: decay.toFixed(1), wet: Math.round(mix * 1.27) };
   return {
     block: 'Reverb',
     setting: preset,
@@ -5039,7 +5175,7 @@ function rulesPickCompressorBlock(m, gearName) {
   else if (crest >  9) { ratio = '3:1'; thresholdDb = -16; attackMs = 15; releaseMs = 60;  label = 'medium comp';    }
   else if (crest >  6) { ratio = '6:1'; thresholdDb = -12; attackMs =  8; releaseMs = 40;  label = 'heavy comp';     }
   else                 { ratio = '10:1';thresholdDb = -8;  attackMs =  3; releaseMs = 25;  label = 'limiting';       }
-  const params = gearName === 'NUX MG 300'
+  const params = gearName === 'NUX MG-30'
     ? { ratio, threshold: thresholdDb, attack: attackMs, release: releaseMs, level: 50 }
     : gearName === 'Roland electronic drums'
       ? { ratio, threshold: thresholdDb }
@@ -5053,16 +5189,17 @@ function rulesPickCompressorBlock(m, gearName) {
 }
 
 // Modulation (chorus / stereo widener) from stereo width.
+// NUX preset names from NUX_MODS (CE-1 / CE-2 / St. Chorus / SCH-1 / etc.).
 function rulesPickModulationBlock(m, gearName) {
   if (!m.stereo) return null;
   const w = m.stereo.overallWidth;
   if (w < 0.10) return null;                                                     // effectively mono
   let preset, rate, depth, mix, label;
-  if      (w < 0.22) { preset = 'Subtle Chorus';  rate = 0.4; depth = 0.20; mix = 18; label = 'subtle chorus';    }
-  else if (w < 0.35) { preset = 'Stereo Chorus';  rate = 0.6; depth = 0.35; mix = 28; label = 'standard chorus';  }
-  else if (w < 0.48) { preset = 'Wide Chorus';    rate = 0.8; depth = 0.50; mix = 38; label = 'wide chorus';      }
-  else               { preset = 'Stereo Doubler'; rate = 1.0; depth = 0.40; mix = 45; label = 'doubling + chorus';}
-  const params = gearName === 'NUX MG 300'
+  if      (w < 0.22) { preset = 'CE-2';        rate = 0.4; depth = 0.20; mix = 18; label = 'subtle Boss CE-2 chorus';   }
+  else if (w < 0.35) { preset = 'CE-1';        rate = 0.6; depth = 0.35; mix = 28; label = 'classic Boss CE-1 chorus';  }
+  else if (w < 0.48) { preset = 'St. Chorus';  rate = 0.8; depth = 0.50; mix = 38; label = 'MXR M134 stereo chorus';    }
+  else               { preset = 'SCH-1';       rate = 1.0; depth = 0.40; mix = 45; label = 'Arion SCH-1 wide stereo';   }
+  const params = gearName === 'NUX MG-30'
     ? { type: preset, rate: rate.toFixed(2), depth: Math.round(depth * 100), mix }
     : { rate: rate.toFixed(2), depth: Math.round(depth * 100), mix: Math.round(mix * 1.27) };
   return {
@@ -5102,29 +5239,77 @@ function rulesPickEQBlock(m, gearName) {
   };
 }
 
-// ---- NUX MG 300 generator -------------------------------------------------
+// ---- NUX MG-30 generator -------------------------------------------------
 function rulesRecipeNux(m, stemId) {
-  const reason = rulesStemNotApplicableReason('NUX MG 300', stemId);
-  if (reason) return { gear: 'NUX MG 300', applicable: false, reason_if_not: reason, blocks: [] };
+  const reason = rulesStemNotApplicableReason('NUX MG-30', stemId);
+  if (reason) return { gear: 'NUX MG-30', applicable: false, reason_if_not: reason, blocks: [] };
 
-  // For 'other' (guitar+keys) and any 'guitar'-named stem, build a guitar chain.
   const blocks = [];
-  const amp = rulesPickGuitarAmp(m);
-  if (amp) blocks.push(amp);
-  const drive = rulesPickGuitarDrive(m);
-  if (drive) blocks.push(drive);
-  const cab = rulesPickGuitarCab(m);
-  if (cab) blocks.push(cab);
-  const comp = rulesPickCompressorBlock(m, 'NUX MG 300');
+  if (stemId === 'bass') {
+    // Bass chain: bass amp + bass cab + comp + EQ
+    const amp = rulesPickNuxBassAmp(m);
+    if (amp) blocks.push(amp);
+    const cab = rulesPickNuxBassCab(m);
+    if (cab) blocks.push(cab);
+  } else {
+    // Guitar chain (or 'other' / guitar-leaning content from the other stem)
+    const amp = rulesPickGuitarAmp(m);
+    if (amp) blocks.push(amp);
+    const drive = rulesPickGuitarDrive(m);
+    if (drive) blocks.push(drive);
+    const cab = rulesPickGuitarCab(m);
+    if (cab) blocks.push(cab);
+  }
+  const comp = rulesPickCompressorBlock(m, 'NUX MG-30');
   if (comp) blocks.push(comp);
-  const eq = rulesPickEQBlock(m, 'NUX MG 300');
+  const eq = rulesPickEQBlock(m, 'NUX MG-30');
   if (eq) blocks.push(eq);
-  const mod = rulesPickModulationBlock(m, 'NUX MG 300');
-  if (mod) blocks.push(mod);
-  const rvb = rulesPickReverbBlock(m, 'NUX MG 300');
+  if (stemId !== 'bass') {
+    const mod = rulesPickModulationBlock(m, 'NUX MG-30');
+    if (mod) blocks.push(mod);
+  }
+  const rvb = rulesPickReverbBlock(m, 'NUX MG-30');
   if (rvb) blocks.push(rvb);
 
-  return { gear: 'NUX MG 300', applicable: true, reason_if_not: '', blocks };
+  return { gear: 'NUX MG-30', applicable: true, reason_if_not: '', blocks };
+}
+
+function rulesPickNuxBassAmp(m) {
+  const cen = m.spectrum ? m.spectrum.centroidHz : 400;
+  const tilt = m.spectrum ? m.spectrum.tiltDbPerOct : -2;
+  const crest = m.dynamics ? m.dynamics.crestDb : 12;
+  let model, basedOn, label;
+  if (tilt > 1 || cen > 800) {
+    // Bright / cutting / aggressive bass
+    if (crest < 8)        { model = 'Dglass';  basedOn = NUX_BASS_AMPS.Dglass;  label = 'modern aggressive (Darkglass)'; }
+    else                  { model = 'Mld';     basedOn = NUX_BASS_AMPS.Mld;     label = 'studio fingerstyle preamp + DI'; }
+  } else if (cen < 300 && crest > 12) {
+    model = 'Bassguy';  basedOn = NUX_BASS_AMPS.Bassguy;  label = 'vintage Fender Bassman warmth';
+  } else {
+    model = 'Starlift'; basedOn = NUX_BASS_AMPS.Starlift; label = 'all-rounder rock bass';
+  }
+  return {
+    block: 'Bass Amp',
+    setting: model,
+    params: { gain: crest < 8 ? 6 : 4, bass: 6, mid: 5, treble: 5, master: 6 },
+    why: 'Bass centroid ' + cen.toFixed(0) + ' Hz, tilt ' + tilt.toFixed(1) + ' dB/oct, crest ' + crest.toFixed(1) + ' dB → ' + label + ' (' + basedOn + ').',
+  };
+}
+
+function rulesPickNuxBassCab(m) {
+  if (!m.spectrum) return null;
+  const tilt = m.spectrum.tiltDbPerOct;
+  let cab, basedOn, label;
+  if      (tilt > 1)   { cab = 'AMP SV810';   basedOn = NUX_BASS_CABS['AMP SV810']; label = 'Ampeg SVT 8x10 — articulate and aggressive'; }
+  else if (tilt > -2)  { cab = 'AMP SV410';   basedOn = NUX_BASS_CABS['AMP SV410']; label = 'Ampeg SVT 4x10 — punchy mid-forward'; }
+  else if (tilt > -4)  { cab = 'EDEN 410';    basedOn = NUX_BASS_CABS['EDEN 410'];  label = 'Eden D410XST — warm, even response'; }
+  else                 { cab = 'AMP SV212';   basedOn = NUX_BASS_CABS['AMP SV212']; label = 'Ampeg SVT 2x12 — thick low end'; }
+  return {
+    block: 'Bass Cab/IR',
+    setting: cab,
+    params: { mic_distance: 'close', mic_offset: '1in' },
+    why: 'Spectral tilt ' + tilt.toFixed(1) + ' dB/oct → ' + label + ' (' + basedOn + ').',
+  };
 }
 
 function rulesPickGuitarAmp(m) {
@@ -5132,71 +5317,76 @@ function rulesPickGuitarAmp(m) {
   const tilt = m.spectrum ? m.spectrum.tiltDbPerOct : 0;
   const crest = m.dynamics ? m.dynamics.crestDb : 12;
   // Decision tree by spectral character, with crest factor differentiating
-  // clean vs saturated for similar centroids.
+  // clean vs saturated for similar centroids. Names below are EXACT on-
+  // device labels from the NUX MG-30 amp block (see NUX_GUITAR_AMPS above).
   let model, gain, bass, mid, treble, presence, master, label;
   if (cen < 1600) {
     // Dark / bass-heavy
-    if (crest < 8) { model = 'Recto Modern'; gain = 6.5; bass = 7; mid = 5; treble = 5; presence = 5; master = 5; label = 'modern hi-gain (dark)'; }
-    else           { model = 'Bassman';      gain = 3.5; bass = 6; mid = 6; treble = 4; presence = 5; master = 6; label = 'vintage clean (dark)'; }
+    if (crest < 8) { model = 'Dual Rect';  gain = 6.5; bass = 7; mid = 5; treble = 5; presence = 5; master = 5; label = 'modern hi-gain (dark)'; }
+    else           { model = 'Bass Mate';  gain = 3.5; bass = 6; mid = 6; treble = 4; presence = 5; master = 6; label = 'Fender Bassman vintage clean (dark)'; }
   } else if (cen < 2500) {
     // Balanced midrange (rock norm)
-    if (crest < 8) { model = 'Brit 800';     gain = 6.0; bass = 5; mid = 7; treble = 6; presence = 6; master = 5; label = 'classic British crunch'; }
-    else           { model = 'Brit 800';     gain = 3.0; bass = 5; mid = 6; treble = 6; presence = 5; master = 6; label = 'British clean-with-edge'; }
+    if (crest < 8) { model = 'Brit 800';   gain = 6.0; bass = 5; mid = 7; treble = 6; presence = 6; master = 5; label = 'JCM800 classic British crunch'; }
+    else           { model = 'Plexi 45';   gain = 3.0; bass = 5; mid = 6; treble = 6; presence = 5; master = 6; label = 'JTM45 clean-with-edge'; }
   } else if (cen < 3500) {
-    // Bright midrange (jangle)
-    if (crest > 10) { model = 'Vox AC30';    gain = 4.0; bass = 5; mid = 6; treble = 7; presence = 7; master = 6; label = 'Vox jangle';        }
-    else            { model = 'Vox AC30';    gain = 6.0; bass = 5; mid = 5; treble = 7; presence = 7; master = 5; label = 'Vox top boost crunch'; }
+    // Bright midrange (jangle / chime)
+    if (crest > 10) { model = 'Class A 30';gain = 4.0; bass = 5; mid = 6; treble = 7; presence = 7; master = 6; label = 'Vox AC30 jangle';        }
+    else            { model = 'Class A 30';gain = 6.0; bass = 5; mid = 5; treble = 7; presence = 7; master = 5; label = 'Vox AC30 top boost crunch'; }
   } else {
     // Very bright (sparkly clean or aggressive)
-    if (crest > 11) { model = 'Twin Reverb'; gain = 3.0; bass = 4; mid = 5; treble = 7; presence = 7; master = 6; label = 'Fender sparkle';    }
-    else            { model = 'Recto Modern';gain = 7.0; bass = 5; mid = 4; treble = 7; presence = 7; master = 5; label = 'modern bright hi-gain'; }
+    if (crest > 11) { model = 'Twin Rvb';  gain = 3.0; bass = 4; mid = 5; treble = 7; presence = 7; master = 6; label = 'Fender Twin Reverb sparkle';    }
+    else            { model = 'Uber';      gain = 7.0; bass = 5; mid = 4; treble = 7; presence = 7; master = 5; label = 'Bogner Überschall bright hi-gain'; }
   }
+  const basedOn = NUX_GUITAR_AMPS[model] || '';
   return {
     block: 'Amp',
     setting: model,
     params: { gain, bass, mid, treble, presence, master },
-    why: 'Centroid ' + cen.toFixed(0) + ' Hz + tilt ' + tilt.toFixed(1) + ' dB/oct + crest ' + crest.toFixed(1) + ' dB → ' + label + '.',
+    why: 'Centroid ' + cen.toFixed(0) + ' Hz + tilt ' + tilt.toFixed(1) + ' dB/oct + crest ' + crest.toFixed(1) + ' dB → ' + label + (basedOn ? ' (' + basedOn + ').' : '.'),
   };
 }
 
 function rulesPickGuitarDrive(m) {
   if (!m.dynamics) return null;
   const crest = m.dynamics.crestDb;
-  const flat = m.spectrum && m.spectrum.bandDb ? Math.min(...m.spectrum.bandDb.slice(8, 24)) : 0;
   // Heavily compressed + broadband content → driven; otherwise no drive
   // (the amp's own gain stage handles the character).
   if (crest > 10) return null;
   let pedal, drive, tone, level, label;
   if (crest > 7) {
-    pedal = 'TS-Style';   drive = 4.5; tone = 6; level = 6; label = 'tube-screamer-style mid-hump';
+    pedal = 'T Scream';  drive = 4.5; tone = 6; level = 6; label = 'TS808 tube-screamer mid-hump';
   } else if (crest > 5) {
-    pedal = 'RAT';        drive = 5.5; tone = 5; level = 5; label = 'RAT for grittier saturation';
+    pedal = 'Eat Dist';  drive = 5.5; tone = 5; level = 5; label = 'Pro Co RAT for grittier saturation';
   } else {
-    pedal = 'Big Muff';   drive = 7.0; tone = 5; level = 5; label = 'Big Muff fuzz';
+    pedal = 'Muff Fuzz'; drive = 7.0; tone = 5; level = 5; label = 'Electro-Harmonix Big Muff fuzz';
   }
+  const basedOn = NUX_DRIVES[pedal] || '';
   return {
     block: 'Drive',
     setting: pedal,
     params: { drive, tone, level },
-    why: 'Crest factor ' + crest.toFixed(1) + ' dB indicates ' + label + ' in front of the amp.',
+    why: 'Crest factor ' + crest.toFixed(1) + ' dB indicates ' + label + (basedOn ? ' (' + basedOn + ').' : '.'),
   };
 }
 
 function rulesPickGuitarCab(m) {
   if (!m.spectrum) return null;
   const tilt = m.spectrum.tiltDbPerOct;
-  // High-end character drives cab choice. V30s are brighter, Greenbacks
-  // are smoother / darker, 2x12 vs 4x12 affects low-end thump.
-  let cab, label;
-  if (tilt > 3)         { cab = '4x12 V30 close-mic';        label = 'V30 for the bright top end';        }
-  else if (tilt > 0)    { cab = '4x12 V30 + Greenback mix';  label = 'V30/Greenback blend for balance';   }
-  else if (tilt > -3)   { cab = '4x12 Greenback close-mic';  label = 'Greenback for smooth midrange';     }
-  else                  { cab = '2x12 Vintage close-mic';    label = 'smaller cab for the darker tone';   }
+  // High-end character drives IR choice. V30s are brighter, Greenbacks
+  // smoother / darker, 2x12 vs 4x12 affects low-end thump. Names below
+  // are EXACT on-device MG-30 IR labels (see NUX_GUITAR_CABS).
+  let ir, label;
+  if (tilt > 3)         { ir = 'V412';  label = '4x12 V30 close-mic — bright top end';       }
+  else if (tilt > 0)    { ir = '1960';  label = '4x12 Marshall 1960 — balanced rock cab';    }
+  else if (tilt > -3)   { ir = 'GB412'; label = '4x12 Greenback — smooth midrange';          }
+  else if (tilt > -5)   { ir = 'TR212'; label = '2x12 Twin Reverb — warm clean';             }
+  else                  { ir = 'A212';  label = '2x12 AC30 cab — chime + low-end weight';    }
+  const basedOn = NUX_GUITAR_CABS[ir] || '';
   return {
     block: 'Cab/IR',
-    setting: cab,
-    params: { mic_distance: 'close', mic_offset: '1in' },
-    why: 'Spectral tilt ' + tilt.toFixed(1) + ' dB/oct → ' + label + '.',
+    setting: ir,
+    params: { mic: 'S57', mic_distance: 'close', mic_offset: '1in' },
+    why: 'Spectral tilt ' + tilt.toFixed(1) + ' dB/oct → ' + label + (basedOn ? ' (' + basedOn + ', Shure SM57 close-mic).' : '.'),
   };
 }
 
@@ -5301,17 +5491,21 @@ function rulesRecipeModx(m, stemId) {
 function rulesPickModxBassPerf(m) {
   const cen = m.spectrum ? m.spectrum.centroidHz : 350;
   const tilt = m.spectrum ? m.spectrum.tiltDbPerOct : -2;
-  let perf, family, label;
-  if (cen < 250)        { perf = 'FingerBass'; family = 'AWM2'; label = 'P-bass-style fingered electric'; }
-  else if (cen < 450)   { perf = 'PickBass';   family = 'AWM2'; label = 'picked electric bass with attack'; }
-  else if (cen < 700 && tilt > 0) { perf = 'SynthBass DX'; family = 'FM-X'; label = 'FM synth bass (Moog/DX-style)'; }
-  else if (cen < 700)   { perf = 'JBass';      family = 'AWM2'; label = 'J-bass with bright bridge tone'; }
-  else                  { perf = 'SubBass FM'; family = 'FM-X'; label = 'electronic sub-bass synth'; }
+  const crest = m.dynamics ? m.dynamics.crestDb : 12;
+  // MODX Performance names from MODX_BASSES. Family hints help the user
+  // find the right preset bank quickly.
+  let perf, family, label, category;
+  if (cen < 250)        { perf = MODX_BASSES.fingered[0]; family = 'AWM2'; category = 'Bass / Electric'; label = 'P-bass-style fingered electric'; }
+  else if (cen < 450 && crest > 8) { perf = MODX_BASSES.picked[0]; family = 'AWM2'; category = 'Bass / Electric'; label = 'picked electric bass with attack'; }
+  else if (cen < 450)   { perf = MODX_BASSES.fingered[1] || MODX_BASSES.fingered[0]; family = 'AWM2'; category = 'Bass / Electric'; label = 'J-bass mellow tone'; }
+  else if (cen < 700 && tilt > 0) { perf = MODX_BASSES.synth[0]; family = 'FM-X'; category = 'Bass / Synth'; label = 'FM synth bass (DX-style)'; }
+  else if (cen < 700)   { perf = MODX_BASSES.fretless[0]; family = 'AWM2'; category = 'Bass / Electric'; label = 'fretless bass with bright bridge tone'; }
+  else                  { perf = MODX_BASSES.synth[1]; family = 'FM-X'; category = 'Bass / Synth'; label = 'sub-bass FM synth'; }
   return {
     block: 'Performance',
     setting: perf,
-    params: { engine: family },
-    why: 'Bass centroid ' + cen.toFixed(0) + ' Hz, tilt ' + tilt.toFixed(1) + ' dB/oct → ' + label + '.',
+    params: { engine: family, category },
+    why: 'Bass centroid ' + cen.toFixed(0) + ' Hz, tilt ' + tilt.toFixed(1) + ' dB/oct, crest ' + crest.toFixed(1) + ' dB → ' + label + '. Find in MODX ' + category + ' bank.',
   };
 }
 
@@ -5319,18 +5513,21 @@ function rulesPickModxKeysPerf(m) {
   const cen = m.spectrum ? m.spectrum.centroidHz : 2000;
   const rt60 = m.reverb ? m.reverb.rt60 : 0;
   const crest = m.dynamics ? m.dynamics.crestDb : 12;
-  let perf, family, label;
-  if (cen < 1200 && crest > 12)       { perf = 'CFX Concert';  family = 'AWM2'; label = 'acoustic grand piano';                                                        }
-  else if (cen < 1500 && crest < 10)  { perf = 'Suit. Rhodes'; family = 'AWM2'; label = 'electric piano (Rhodes-style), compressed for sustain';                       }
-  else if (cen < 2000 && rt60 > 1.0)  { perf = 'Vintage Pad';  family = 'AWM2'; label = 'lush analog-style pad';                                                       }
-  else if (cen < 2500 && crest > 10)  { perf = 'Drawbar B3';   family = 'AWM2'; label = 'Hammond B3 organ';                                                            }
-  else if (cen < 3500)                { perf = 'Saw Lead';     family = 'AWM2'; label = 'bright saw-based lead synth';                                                 }
-  else                                { perf = 'FM Bell';      family = 'FM-X'; label = 'high-register FM bell/lead';                                                  }
+  // Preset names from MODX_PIANOS / MODX_EPS / MODX_ORGANS / MODX_PADS /
+  // MODX_LEADS. Specific factory numbering may vary by firmware; the AI
+  // refinement layer can correct preset names per the user's actual unit.
+  let perf, family, category, label;
+  if (cen < 1200 && crest > 12)       { perf = MODX_PIANOS[0];                          family = 'AWM2'; category = 'Piano / Acoustic'; label = 'Yamaha CFX concert grand'; }
+  else if (cen < 1500 && crest < 10)  { perf = MODX_EPS[1];                             family = 'AWM2'; category = 'Keyboard / E.Piano'; label = 'Suit Case (Rhodes-style) EP, compressed for sustain'; }
+  else if (cen < 2000 && rt60 > 1.0)  { perf = MODX_PADS[0];                            family = 'AWM2'; category = 'Pad / Saw'; label = 'lush analog-style pad'; }
+  else if (cen < 2500 && crest > 10)  { perf = MODX_ORGANS[0];                          family = 'AWM2'; category = 'Organ / Tonewheel'; label = 'Hammond B3 vintage tonewheel'; }
+  else if (cen < 3500)                { perf = MODX_LEADS[0];                           family = 'AWM2'; category = 'Synth Lead / Analog'; label = 'bright saw-based lead synth'; }
+  else                                { perf = MODX_LEADS[3];                           family = 'FM-X'; category = 'Synth Lead / FM'; label = 'high-register FM lead'; }
   return {
     block: 'Performance',
     setting: perf,
-    params: { engine: family },
-    why: 'Centroid ' + cen.toFixed(0) + ' Hz, RT60 ' + (rt60 ? rt60.toFixed(2) + ' s' : 'n/a') + ', crest ' + crest.toFixed(1) + ' dB → ' + label + '.',
+    params: { engine: family, category },
+    why: 'Centroid ' + cen.toFixed(0) + ' Hz, RT60 ' + (rt60 ? rt60.toFixed(2) + ' s' : 'n/a') + ', crest ' + crest.toFixed(1) + ' dB → ' + label + '. Find in MODX ' + category + ' bank.',
   };
 }
 
@@ -7555,7 +7752,7 @@ function buildSplitterViewSkeleton(root) {
         <hr class="tr-pop-sep">
         <label class="ai-row-label">Your gear</label>
         <div class="ai-gear-card">
-          <div class="ai-gear-name"><i class="ph-duotone ph-guitar sz-sm"></i> NUX MG 300</div>
+          <div class="ai-gear-name"><i class="ph-duotone ph-guitar sz-sm"></i> NUX MG-30</div>
           <textarea class="ai-input ai-gear-notes" id="ai-gear-nux" placeholder="firmware, custom IRs, missing modules..."></textarea>
         </div>
         <div class="ai-gear-card">
@@ -7668,7 +7865,7 @@ function splitterUpdateStemCursors() {
 // the rules engine at render time. As the playhead moves, the visible
 // recipe swaps to whichever window contains the current time.
 //
-// Vocals are excluded — none of the user's gear (NUX MG 300, Roland kit,
+// Vocals are excluded — none of the user's gear (NUX MG-30, Roland kit,
 // MODX 6) is a vocal processor, so the card would always be "not applicable".
 const TONE_WINDOW_SEC = 4.0;     // analysis window width
 const TONE_HOP_SEC    = 2.0;     // step between window starts
