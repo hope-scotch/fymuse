@@ -4605,14 +4605,13 @@ async function aiGenerateGearRecipe(measurements, stemId, songContext) {
   return { ok: false, error: 'Claude could not produce valid JSON after retry. Last error: ' + lastValidationError };
 }
 
-// === Recipe cache (IndexedDB) ==============================================
 // === Rules-based recipe engine =============================================
 // Deterministic mapping from acoustic measurements to gear-specific recipes.
 // Same JSON shape as the AI path so the renderer is shared. AI (when on) is
 // a refinement layer that takes this baseline and edits it; it is no longer
 // the primary path. Bump RULES_VERSION on any logic change so cached
 // recipes invalidate cleanly.
-const RULES_VERSION = 3;
+const RULES_VERSION = 4;
 
 // ---- NUX MG-30 authoritative preset names --------------------------------
 // Source: NUX MG-30 firmware 3.2.3 official model list (Aria Guitars JP
@@ -4735,17 +4734,92 @@ const NUX_COMPS = {
 // matches from training data; specific factory numbering may vary by
 // firmware. The AI refinement layer is well-positioned to correct any
 // preset that's slightly off for the user's actual unit.
-const MODX_PIANOS = ['CFX Concert', 'CFX Pop/Rock', 'S700 Grand', 'C7 Studio Grand', 'CFX + FM EP'];
-const MODX_EPS    = ['Stage EP', 'Suit Case EP', 'Wurli Tremolo', 'DX7 Tine EP', 'Vintage EP', 'Comp Tine EP'];
-const MODX_ORGANS = ['B3 Vintage', 'Full Tonewheel', 'Jazz Organ', 'Drawbar Pad'];
-const MODX_PADS   = ['Analog Pad', 'Strings Hall', 'Soft Pad', 'Wave Sweep Pad', 'Vintage Pad'];
-const MODX_LEADS  = ['Saw Lead', 'Square Lead', 'Mini Mono', 'FM Lead', 'Buzz Lead'];
-const MODX_BASSES = {
-  acoustic: ['Acoustic Bass'],
-  fingered: ['Fingered Bass', 'P-Bass'],
-  picked:   ['Pick Bass', 'J-Bass'],
-  fretless: ['Fretless Bass'],
-  synth:    ['Synth Bass DX', 'Sub Bass FM', 'Saw Bass', 'Acid Bass'],
+// ---- NUX MG-30 factory preset map ----------------------------------------
+// 8 banks x 4 slots = 32 factory presets. Each entry describes the tonal
+// fingerprint we'd expect from the preset so the picker can match against
+// measured stem characteristics. `tags` give a coarse genre hint that
+// matters when measurements alone don't disambiguate (e.g. centroid 1800 Hz
+// and tilt 0 could be Brit 800 OR JCM800 OR Plexi — the song-tempo or BPM
+// context breaks the tie).
+const NUX_MG30_PRESETS = [
+  // Bank 01 — Clean / Ambient
+  { slot: '01A', name: 'Twinverb',       tone: 'clean',     gain: 1, centroidHz: 2400, tilt:  1.0, amp: 'Twin Rvb',   notes: 'warm clear Fender clean with room verb' },
+  { slot: '01B', name: 'JC-120 Clean',   tone: 'clean',     gain: 1, centroidHz: 2800, tilt:  2.0, amp: 'Jazz Clean', notes: 'Roland JC-120 chorus + room — sparkly modern clean' },
+  { slot: '01C', name: 'AC30',           tone: 'clean',     gain: 2, centroidHz: 3100, tilt:  3.0, amp: 'Class A 30', notes: 'Vox AC30 vintage chime + tape delay' },
+  { slot: '01D', name: 'Acoustic Sim',   tone: 'acoustic',  gain: 0, centroidHz: 2200, tilt:  1.5, amp: 'Optima Air', notes: 'electric → acoustic emulation' },
+  // Bank 02 — Crunch / Blues
+  { slot: '02A', name: 'Plexi',          tone: 'crunch',    gain: 4, centroidHz: 2000, tilt:  0.5, amp: 'Plexi 45',   notes: 'classic 70s rock rhythm crunch' },
+  { slot: '02B', name: 'Tweed',          tone: 'mid-gain',  gain: 5, centroidHz: 1800, tilt: -0.5, amp: 'Tweedy',     notes: 'tweed blues with TS in front' },
+  { slot: '02C', name: 'Deluxe',         tone: 'mid-gain',  gain: 4, centroidHz: 2100, tilt:  0.0, amp: 'Deluxe Rvb', notes: 'thick dynamic Fender Deluxe lead tone' },
+  { slot: '02D', name: 'Morning Drive',  tone: 'overdrive', gain: 3, centroidHz: 2300, tilt:  0.5, amp: 'Twin Rvb',   notes: 'transparent overdrive (Morning Glory pedal)' },
+  // Bank 03 — Overdrive / Hard Rock
+  { slot: '03A', name: 'JCM800',         tone: 'hard-rock', gain: 6, centroidHz: 1900, tilt:  0.0, amp: 'Brit 800',   notes: '80s hard rock / metal rhythm — the workhorse' },
+  { slot: '03B', name: 'Soldano',        tone: 'hi-gain',   gain: 7, centroidHz: 2000, tilt:  0.5, amp: 'Slo 100',    notes: 'Soldano SLO-100 singing lead with delay' },
+  { slot: '03C', name: 'Friedman',       tone: 'hi-gain',   gain: 7, centroidHz: 2200, tilt:  0.5, amp: 'Fireman HBE',notes: 'aggressive Friedman punch' },
+  { slot: '03D', name: 'Heavy Crunch',   tone: 'hard-rock', gain: 6, centroidHz: 1700, tilt: -1.0, amp: 'Brit 800',   notes: 'tight defined rhythm crunch' },
+  // Bank 04 — Metal / High-Gain
+  { slot: '04A', name: 'Dual Rectifier', tone: 'metal',     gain: 8, centroidHz: 1500, tilt: -2.0, amp: 'Dual Rect',  notes: 'scooped modern metal' },
+  { slot: '04B', name: 'Fireball',       tone: 'metal',     gain: 8, centroidHz: 2400, tilt:  1.5, amp: 'Fireman HBE',notes: 'ENGL Fireball — cutting extreme metal lead' },
+  { slot: '04C', name: 'Diezel',         tone: 'metal',     gain: 8, centroidHz: 1800, tilt: -1.0, amp: 'Die VH4',    notes: 'Diezel VH4 — tight ultra-high gain' },
+  { slot: '04D', name: '8-String Djent', tone: 'metal',     gain: 9, centroidHz: 1600, tilt: -1.5, amp: 'Die VH4',    notes: 'aggressive articulate modern metal / djent' },
+  // Bank 05 — Pop / Funk / Modulation
+  { slot: '05A', name: 'Funk Clean',     tone: 'clean',     gain: 1, centroidHz: 3200, tilt:  2.5, amp: 'Twin Rvb',   notes: 'Strat-style funk with auto-wah' },
+  { slot: '05B', name: 'Phaser 90',      tone: 'clean',     gain: 2, centroidHz: 2700, tilt:  1.5, amp: 'Deluxe Rvb', notes: 'phase-shifting pop ballad' },
+  { slot: '05C', name: 'Flanger',        tone: 'clean',     gain: 3, centroidHz: 2600, tilt:  1.0, amp: 'Brit 800',   notes: '80s sweeping rhythm' },
+  { slot: '05D', name: 'Detune',         tone: 'clean',     gain: 1, centroidHz: 2900, tilt:  1.5, amp: 'Twin Rvb',   notes: 'spacious stereo chorus' },
+  // Bank 06 — Lead / Solo
+  { slot: '06A', name: 'Mark IIC+',      tone: 'lead',      gain: 7, centroidHz: 2200, tilt:  0.5, amp: 'Cali Crunch',notes: 'Mesa Mark IIC+ singing progressive lead' },
+  { slot: '06B', name: 'Solo Delay',     tone: 'lead',      gain: 6, centroidHz: 2300, tilt:  0.5, amp: 'Brit 800',   notes: 'analog echo lead' },
+  { slot: '06C', name: 'Shimmer Verb',   tone: 'lead',      gain: 5, centroidHz: 2500, tilt:  1.0, amp: 'Plexi 45',   notes: 'ambient cathedral-like leads' },
+  { slot: '06D', name: 'Octave Lead',    tone: 'lead',      gain: 6, centroidHz: 2400, tilt:  0.5, amp: 'Brit 800',   notes: 'adds upper/lower octave to solos' },
+  // Bank 07 — Ambient / Experimental
+  { slot: '07A', name: 'Reverse Delay',  tone: 'ambient',   gain: 3, centroidHz: 2600, tilt:  1.0, amp: 'Class A 30', notes: 'psychedelic reverse echo' },
+  { slot: '07B', name: 'Tremolo',        tone: 'ambient',   gain: 2, centroidHz: 2400, tilt:  0.5, amp: 'Deluxe Rvb', notes: 'pulsating vintage tremolo' },
+  { slot: '07C', name: 'Rotary',         tone: 'ambient',   gain: 3, centroidHz: 2200, tilt:  0.5, amp: 'Class A 30', notes: 'Leslie speaker simulation' },
+  { slot: '07D', name: 'Ambient Wash',   tone: 'ambient',   gain: 2, centroidHz: 2800, tilt:  1.5, amp: 'Twin Rvb',   notes: 'deep infinite reverb pads' },
+  // Bank 08 — Bass / Special  (bass-leaning; we exclude bass stem so these
+  // rarely get picked, but kept for completeness)
+  { slot: '08A', name: 'Clean Bass',     tone: 'bass',      gain: 1, centroidHz:  500, tilt: -3.0, amp: 'Bassguy',    notes: 'transparent bass DI' },
+  { slot: '08B', name: 'Drive Bass',     tone: 'bass',      gain: 5, centroidHz:  700, tilt: -1.5, amp: 'Bassguy',    notes: 'SVT-based dirty bass' },
+  { slot: '08C', name: 'Synth Bass',     tone: 'bass',      gain: 3, centroidHz:  900, tilt: -1.0, amp: 'Mld',        notes: 'sub-harmonic / octave synth bass' },
+  { slot: '08D', name: 'Lo-Fi/Utility',  tone: 'special',   gain: 2, centroidHz: 1500, tilt: -2.5, amp: 'Jazz Clean', notes: 'radio / telephone effect' },
+];
+
+// ---- Yamaha MODX Performance bank (from official Data List PDF) ----------
+// Categories follow the on-device Main/Sub category split. The picker
+// chooses a category by measured spectral character + dynamics, then names
+// the first canonical preset in that category. Numeric Performance IDs
+// aren't included because they shift across firmware updates, but the
+// names are stable and the user can find them by scrolling the bank.
+const MODX_PERFORMANCES = {
+  'Piano / Acoustic':         ['Full Concert Grand', 'Mellow Grand Piano', 'Glasgow', 'Romantic Piano'],
+  'Piano / Layer':            ['Ballad Key', '80s Layer', 'Ballad Stack', 'Piano & Strings'],
+  'Piano / Modern':           ['Rock Grand Piano', 'Aggressive Grand', 'House Piano', 'Rock Brite Piano'],
+  'Piano / Vintage':          ['Old and Squashed', 'CP 1979', 'CP70 Chorus', '1968'],
+  'Keyboard / Electric Piano':['Stage EP', 'Suit Case EP', 'Tine Transformer', 'Wr Tremolo Amp'],
+  'Keyboard / FM Piano':      ['DX Road', 'Classic 80\'s DX7 EP', 'The TX816 E.Piano 1', 'FM Roads'],
+  'Keyboard / Clavi':         ['Power Clavi', 'Clavi Stuff', 'Clavi Amp Gallery', 'Nu Touch Clavi'],
+  'Organ / Tone Wheel':       ['All 9 Bars!', 'The Basics', '8.8.8.8.6.2.2.0.0', 'Hot Smoky'],
+  'Organ / Combo':            ['FM YC Combo Organ', 'BOX FM Combo Organ', 'YD-45C', 'Tiny Combo Bars 1'],
+  'Organ / Pipe':             ['Cathedral', 'AccordionTrnsfrmer', 'FM Church Pipes', 'Jahrmarkt'],
+  'Pad/Choir / Warm':         ['FM Cloud Sine Pad', 'Apollo', 'FM Heavenly Pad', 'Rotary Bell Voices'],
+  'Pad/Choir / Bright':       ['FM Linear Synth', 'Wax And Wane', 'Color Wheel', 'Trigger Horizon'],
+  'Pad/Choir / Analog':       ['Universal Comp', 'Octo Supreme', 'UnderWater Worlds', 'R\'s Logo'],
+  'Pad/Choir / Choir':        ['Choir Service', 'Gospel Hmm', 'Gospel Wow', 'Latin Vocal'],
+  'Strings / Ensemble':       ['Seattle Violins 1', 'Seattle Cellos', 'Seattle Basses', 'Seattle Violas'],
+  'Strings / Synth':          ['FM Strings', 'FM Syn Strings', 'FM Tron Strings', 'FM Square Strings'],
+  'Strings / Pizzicato':      ['Concert Harp', 'Mellow Harp', 'Celtic Harp Choral', 'FM Harp'],
+  'Brass / Ensemble':         ['Trumpet Ensemble', 'Trombone Ensemble', 'FrenchHornSection3', 'Trumpets Swell'],
+  'Brass / Solo':             ['Attack Brass', 'Horn To Horns', 'Trumpet 3', 'Euphonium 2'],
+  'Brass / Synth':            ['Hybrid Ana Brass', 'Brassy Synth MW', 'FM Dual Trumpets', 'FM Horn'],
+  'Syn Lead / Analog':        ['Monster Lead', 'Singleline 2', 'Anemone Lead', 'Milk & Honey'],
+  'Syn Lead / Digital':       ['FM Sync', 'FM Syn Lead 1', 'FM Syn Lead 2', 'FM MotionSeq Ld DA'],
+  'Syn Lead / Dance':         ['MainRoomRiff Maker', 'EDM PiTCh Bomb', 'Major Fazor', 'ComercialLd & Cmp'],
+  'Syn Comp / Analog':        ['One&Only massive', 'Pluck Away', 'Caramel Ice', 'Breathless Safri'],
+  'Syn Comp / Digital':       ['Turn It On', 'Kool Dis Comp', 'Saws Vs Bells', '90s Harp'],
+  'Syn Comp / Hook':          ['Mega Stack', 'Multi Saw MW DA', 'Power Hook', 'Dance Synth MW DA'],
+  'Chromatic Perc / Bell':    ['Bell Majestic', 'Expanded DX Bells', 'FM Music Box', 'FM Carillon'],
+  'Chromatic Perc / Mallet':  ['FM Celesta', 'FM Glocken', 'Beaten Gong', 'FM Metal Glocken'],
 };
 
 // Top-level entry: given the measurements + stem id (+ optional song
@@ -4926,21 +5000,27 @@ function rulesPickEQBlock(m, gearName) {
 }
 
 // ---- NUX MG-30 generator -------------------------------------------------
+// PRESET-FIRST: the headline recommendation is "Load preset XYZ from bank
+// X" — one button-press on the device. Block-level details (Amp / Drive /
+// Cab / Mod / Reverb) follow as a fine-tuning section in case the user
+// wants to nudge the preset or build their own from scratch.
 function rulesRecipeNux(m, stemId) {
   const reason = rulesStemNotApplicableReason('NUX MG-30', stemId);
   if (reason) return { gear: 'NUX MG-30', applicable: false, reason_if_not: reason, blocks: [] };
 
-  // Guitar chain only (user's NUX is configured guitar-only — see
-  // rulesStemNotApplicableReason). Bass stems get filtered out at
-  // TONE_EXCLUDED_STEMS in the Tone Recipe panel before this function
-  // sees them, but the not-applicable reason is set defensively too.
+  // Pick the best factory preset by tonal-fingerprint distance.
+  const preset = rulesPickNuxFactoryPreset(m, stemId);
   const blocks = [];
+  if (preset) blocks.push(preset);
+
+  // Block-level fine-tuning recommendations (kept so users can refine
+  // beyond the chosen preset)
   const amp = rulesPickGuitarAmp(m);
-  if (amp) blocks.push(amp);
+  if (amp) { amp.block = 'Amp (fine-tune)'; blocks.push(amp); }
   const drive = rulesPickGuitarDrive(m);
-  if (drive) blocks.push(drive);
+  if (drive) { drive.block = 'Drive (fine-tune)'; blocks.push(drive); }
   const cab = rulesPickGuitarCab(m);
-  if (cab) blocks.push(cab);
+  if (cab) { cab.block = 'Cab/IR (fine-tune)'; blocks.push(cab); }
   const comp = rulesPickCompressorBlock(m, 'NUX MG-30');
   if (comp) blocks.push(comp);
   const eq = rulesPickEQBlock(m, 'NUX MG-30');
@@ -4951,6 +5031,43 @@ function rulesRecipeNux(m, stemId) {
   if (rvb) blocks.push(rvb);
 
   return { gear: 'NUX MG-30', applicable: true, reason_if_not: '', blocks };
+}
+
+// Score each factory preset against the measured tonal fingerprint and
+// return the best match. Lower score = better match.
+function rulesPickNuxFactoryPreset(m, stemId) {
+  if (stemId === 'bass') return null; // bass excluded from this device per user config
+  const cen = m.spectrum ? m.spectrum.centroidHz : 1800;
+  const tilt = m.spectrum ? m.spectrum.tiltDbPerOct : 0;
+  const crest = m.dynamics ? m.dynamics.crestDb : 12;
+  const rt60 = m.reverb ? m.reverb.rt60 : 0.6;
+  // Saturation level: crest < 6 → very compressed/distorted (gain 7-9);
+  // 6-8 → hi-gain (gain 6-8); 8-11 → mid-gain (gain 3-6); >11 → clean (gain 0-3).
+  const targetGain = crest > 14 ? 1 : crest > 11 ? 2 : crest > 9 ? 4 : crest > 6.5 ? 6 : crest > 4 ? 8 : 9;
+  // Ambient bank (07) presets expect long reverb tails. Penalise them when
+  // the song's reverb is short, otherwise they win clean-gain ties unfairly.
+  const ambientMatch = rt60 > 1.8 ? 0 : (1.8 - rt60) / 1.8;  // 0..1, higher = less ambient
+  let best = null, bestScore = Infinity;
+  for (const p of NUX_MG30_PRESETS) {
+    if (p.tone === 'bass') continue; // skip bass presets for non-bass stems
+    if (p.tone === 'acoustic' && stemId !== 'other') continue; // acoustic preset only for 'other'
+    const dCen   = Math.abs(p.centroidHz - cen) / 800;          // ~normalised
+    const dTilt  = Math.abs(p.tilt - tilt) / 2.5;
+    const dGain  = Math.abs(p.gain - targetGain) / 3;
+    // Bank-character penalty: ambient bank (07) only when measured RT60 is long
+    const bankPenalty = (p.tone === 'ambient') ? 0.30 * ambientMatch : 0;
+    const score  = dCen * 0.40 + dTilt * 0.25 + dGain * 0.25 + bankPenalty;
+    if (score < bestScore) { bestScore = score; best = p; }
+  }
+  if (!best) return null;
+  const conf = bestScore < 0.35 ? 'strong' : bestScore < 0.65 ? 'reasonable' : 'best-fit-but-loose';
+  return {
+    block: 'Preset (load this)',
+    setting: best.slot + ' · ' + best.name,
+    params: { bank: best.slot.slice(0, 2), slot: best.slot.slice(2), match: conf },
+    why: best.notes + ' — measured centroid ' + cen.toFixed(0) + ' Hz, tilt ' + tilt.toFixed(1) + ' dB/oct, crest ' + crest.toFixed(1) + ' dB ' +
+         '(preset target: ' + best.centroidHz + ' Hz, ' + best.tilt.toFixed(1) + ' dB/oct, gain ' + best.gain + ').',
+  };
 }
 
 // Bass-chain pickers are kept here as DEAD CODE for two reasons:
@@ -5198,21 +5315,29 @@ function rulesPickModxKeysPerf(m) {
   const cen = m.spectrum ? m.spectrum.centroidHz : 2000;
   const rt60 = m.reverb ? m.reverb.rt60 : 0;
   const crest = m.dynamics ? m.dynamics.crestDb : 12;
-  // Preset names from MODX_PIANOS / MODX_EPS / MODX_ORGANS / MODX_PADS /
-  // MODX_LEADS. Specific factory numbering may vary by firmware; the AI
-  // refinement layer can correct preset names per the user's actual unit.
-  let perf, family, category, label;
-  if (cen < 1200 && crest > 12)       { perf = MODX_PIANOS[0];                          family = 'AWM2'; category = 'Piano / Acoustic'; label = 'Yamaha CFX concert grand'; }
-  else if (cen < 1500 && crest < 10)  { perf = MODX_EPS[1];                             family = 'AWM2'; category = 'Keyboard / E.Piano'; label = 'Suit Case (Rhodes-style) EP, compressed for sustain'; }
-  else if (cen < 2000 && rt60 > 1.0)  { perf = MODX_PADS[0];                            family = 'AWM2'; category = 'Pad / Saw'; label = 'lush analog-style pad'; }
-  else if (cen < 2500 && crest > 10)  { perf = MODX_ORGANS[0];                          family = 'AWM2'; category = 'Organ / Tonewheel'; label = 'Hammond B3 vintage tonewheel'; }
-  else if (cen < 3500)                { perf = MODX_LEADS[0];                           family = 'AWM2'; category = 'Synth Lead / Analog'; label = 'bright saw-based lead synth'; }
-  else                                { perf = MODX_LEADS[3];                           family = 'FM-X'; category = 'Synth Lead / FM'; label = 'high-register FM lead'; }
+  // Real factory Performance names pulled from the MODX Data List PDF
+  // (see MODX_PERFORMANCES map above). The picker chooses a category +
+  // a representative name from that category; the user can swap to any
+  // sibling preset in the same bank if our specific choice doesn't fit.
+  let category, family, label;
+  if      (cen < 1200 && crest > 12)  { category = 'Piano / Acoustic';     family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
+  else if (cen < 1500 && crest < 10)  { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style electric piano, compressed for sustain'; }
+  else if (cen < 1500 && crest > 14)  { category = 'Piano / Vintage';     family = 'AWM2'; label = 'CP-style vintage electric grand'; }
+  else if (cen < 2000 && rt60 > 1.5)  { category = 'Pad/Choir / Warm';    family = 'AWM2'; label = 'lush warm pad'; }
+  else if (cen < 2000 && rt60 > 0.8)  { category = 'Pad/Choir / Analog';  family = 'AWM2'; label = 'analog-style synth pad'; }
+  else if (cen < 2500 && crest > 10)  { category = 'Organ / Tone Wheel';  family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
+  else if (cen < 2500 && crest < 8)   { category = 'Syn Comp / Hook';     family = 'AWM2'; label = 'mid-register synth comp / hook'; }
+  else if (cen < 3500 && crest < 8)   { category = 'Syn Lead / Analog';   family = 'AWM2'; label = 'bright saw-based lead synth'; }
+  else if (cen < 4500)                { category = 'Syn Lead / Digital';  family = 'FM-X'; label = 'FM digital lead'; }
+  else                                { category = 'Chromatic Perc / Bell'; family = 'FM-X'; label = 'high-register FM bell'; }
+  const picks = MODX_PERFORMANCES[category] || [];
+  const perf = picks[0] || '(no preset in category)';
+  const alts = picks.slice(1).join(', ');
   return {
-    block: 'Performance',
+    block: 'Performance (load this)',
     setting: perf,
-    params: { engine: family, category },
-    why: 'Centroid ' + cen.toFixed(0) + ' Hz, RT60 ' + (rt60 ? rt60.toFixed(2) + ' s' : 'n/a') + ', crest ' + crest.toFixed(1) + ' dB → ' + label + '. Find in MODX ' + category + ' bank.',
+    params: { engine: family, category, alternates: alts || undefined },
+    why: 'Centroid ' + cen.toFixed(0) + ' Hz, RT60 ' + (rt60 ? rt60.toFixed(2) + ' s' : 'n/a') + ', crest ' + crest.toFixed(1) + ' dB → ' + label + '. Browse the ' + category + ' bank' + (alts ? ' — similar options: ' + alts : '') + '.',
   };
 }
 
