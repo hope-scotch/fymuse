@@ -4333,12 +4333,19 @@ const AI_LS_KEY       = 'fymuse-anthropic-key';
 const AI_LS_GEAR_NUX    = 'fymuse-gear-nux-notes';
 const AI_LS_GEAR_ROLAND = 'fymuse-gear-roland-notes';
 const AI_LS_GEAR_MODX   = 'fymuse-gear-modx-notes';
+// Local-proxy connection details — empty url = same-origin (server.py
+// served the page itself). Set to "http://localhost:4747" when the user
+// is on the deployed Pages site and wants to reach back to their laptop.
+const AI_LS_LOCAL_URL   = 'fymuse-ai-local-url';
+const AI_LS_LOCAL_TOKEN = 'fymuse-ai-local-token';
 
 const aiState = {
   mode: 'off',                  // 'off' | 'local' | 'api'
   apiKey: '',
   apiKeyValidated: false,        // true once a Validate call succeeded for this key
-  localHealth: null,             // {ok: bool, version?: string, error?: string} once probed
+  localHealth: null,             // {ok: bool, version?: string, error?: string, tokenRequired?: bool} once probed
+  localProxyUrl: '',             // empty = same-origin; e.g. "http://localhost:4747"
+  localProxyToken: '',           // matches FYMUSE_TOKEN env var on server.py
   gear: { nux: '', roland: '', modx: '' },
 };
 
@@ -4351,9 +4358,20 @@ function aiLoadFromStorage() {
     aiState.gear.nux    = localStorage.getItem(AI_LS_GEAR_NUX)    || '';
     aiState.gear.roland = localStorage.getItem(AI_LS_GEAR_ROLAND) || '';
     aiState.gear.modx   = localStorage.getItem(AI_LS_GEAR_MODX)   || '';
+    aiState.localProxyUrl   = localStorage.getItem(AI_LS_LOCAL_URL)   || '';
+    aiState.localProxyToken = localStorage.getItem(AI_LS_LOCAL_TOKEN) || '';
   } catch (e) {
     console.warn('[AI] localStorage read failed', e);
   }
+}
+function aiSaveLocalProxyUrl(v)   { aiState.localProxyUrl = v;   try { localStorage.setItem(AI_LS_LOCAL_URL, v); }   catch {} }
+function aiSaveLocalProxyToken(v) { aiState.localProxyToken = v; try { localStorage.setItem(AI_LS_LOCAL_TOKEN, v); } catch {} }
+// Normalised base URL for local-proxy fetches. Empty string = same-origin
+// (use relative '/api/recipe'). Otherwise strip trailing slash so we can
+// concat '/api/recipe'.
+function aiLocalProxyBase() {
+  const u = (aiState.localProxyUrl || '').trim().replace(/\/+$/, '');
+  return u;
 }
 
 function aiSaveMode(m)         { aiState.mode = m; try { localStorage.setItem(AI_LS_MODE, m); } catch {} }
@@ -4375,11 +4393,18 @@ function aiIsReady() {
 // and returns it.
 async function aiProbeLocalProxy() {
   aiState.localHealth = { ok: false, error: 'probing…' };
+  const base = aiLocalProxyBase();
+  const url = (base || '') + '/api/recipe-health';
   try {
-    const res = await fetch('/api/recipe-health', { method: 'GET' });
+    const res = await fetch(url, { method: 'GET' });
     const data = await res.json().catch(() => null);
     if (res.ok && data && data.ok) {
-      aiState.localHealth = { ok: true, version: data.claude_cli_version || 'unknown' };
+      aiState.localHealth = {
+        ok: true,
+        version: data.claude_cli_version || 'unknown',
+        tokenRequired: !!data.token_required,
+        base: base || '(same-origin)',
+      };
     } else {
       aiState.localHealth = {
         ok: false,
@@ -4387,10 +4412,10 @@ async function aiProbeLocalProxy() {
       };
     }
   } catch (err) {
-    aiState.localHealth = {
-      ok: false,
-      error: 'no /api/recipe-health response — is `python3 server.py` running? (' + (err.message || err) + ')',
-    };
+    const hint = base
+      ? 'no response from ' + base + '/api/recipe-health — is `python3 server.py` running on that host? (' + (err.message || err) + ')'
+      : 'no /api/recipe-health response — is `python3 server.py` running? (' + (err.message || err) + ')';
+    aiState.localHealth = { ok: false, error: hint };
   }
   return aiState.localHealth;
 }
@@ -4487,7 +4512,42 @@ function setupAISettingsPanel() {
     await aiRefreshLocalProbe();
     probeBtn.disabled = false;
     aiUpdateToneMatchAvailability();
+    if (typeof splitterUpdateRefineButtonState === 'function') splitterUpdateRefineButtonState();
   };
+
+  // Local proxy URL + token inputs
+  const urlInput = document.getElementById('ai-local-url-input');
+  if (urlInput) {
+    urlInput.value = aiState.localProxyUrl;
+    urlInput.oninput = () => aiSaveLocalProxyUrl(urlInput.value.trim());
+    urlInput.onchange = async () => {
+      // Re-probe on blur/enter so the user sees instant feedback
+      if (aiState.mode === 'local') {
+        await aiRefreshLocalProbe();
+        aiUpdateToneMatchAvailability();
+        if (typeof splitterUpdateRefineButtonState === 'function') splitterUpdateRefineButtonState();
+      }
+    };
+  }
+  const tokenInput = document.getElementById('ai-local-token-input');
+  if (tokenInput) {
+    tokenInput.value = aiState.localProxyToken ? '••••••••••••' + aiState.localProxyToken.slice(-4) : '';
+    let revealed = false;
+    tokenInput.onfocus = () => {
+      if (!revealed && aiState.localProxyToken) { tokenInput.value = aiState.localProxyToken; revealed = true; }
+    };
+    tokenInput.onblur = () => {
+      if (aiState.localProxyToken && tokenInput.value === aiState.localProxyToken) {
+        tokenInput.value = '••••••••••••' + aiState.localProxyToken.slice(-4);
+        revealed = false;
+      }
+    };
+    tokenInput.oninput = () => {
+      const v = tokenInput.value.trim();
+      // Only persist when it's the actual token, not the masked dots
+      if (!v.startsWith('•')) aiSaveLocalProxyToken(v);
+    };
+  }
 
   // API key field + buttons
   const keyInput  = document.getElementById('ai-key-input');
@@ -4858,11 +4918,15 @@ async function aiCallClaudeLocalProxy(messages) {
       return '=== ' + tag + ' ===\n' + m.content;
     }).join('\n\n');
   }
+  const base = aiLocalProxyBase();
+  const url = (base || '') + '/api/recipe';
+  const headers = { 'content-type': 'application/json' };
+  if (aiState.localProxyToken) headers['x-fymuse-token'] = aiState.localProxyToken;
   let res;
   try {
-    res = await fetch('/api/recipe', {
+    res = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify({
         systemPrompt: AI_RECIPE_SYSTEM_PROMPT,
         userMessage,
@@ -4870,7 +4934,10 @@ async function aiCallClaudeLocalProxy(messages) {
       }),
     });
   } catch (err) {
-    return { ok: false, error: 'Local proxy unreachable: ' + (err.message || err) + '. Is server.py running?' };
+    const hint = base
+      ? 'Local proxy unreachable at ' + base + ': ' + (err.message || err) + '. Is server.py running on that host? (Safari blocks HTTPS→localhost.)'
+      : 'Local proxy unreachable: ' + (err.message || err) + '. Is server.py running?';
+    return { ok: false, error: hint };
   }
   let data = null;
   try { data = await res.json(); } catch {}
@@ -4878,6 +4945,9 @@ async function aiCallClaudeLocalProxy(messages) {
     return { ok: false, error: 'Local proxy returned non-JSON response (HTTP ' + res.status + ')' };
   }
   if (!data.ok) {
+    if (res.status === 403) {
+      return { ok: false, error: data.error || 'Token rejected by local proxy. Update the shared token in AI Settings.' };
+    }
     return { ok: false, error: data.error || ('Local proxy HTTP ' + res.status) };
   }
   return {
@@ -7750,6 +7820,13 @@ function buildSplitterViewSkeleton(root) {
           <label class="ai-row-label">Local proxy status</label>
           <div class="ai-status" id="ai-local-status">Not yet probed.</div>
           <div class="ai-row"><button class="play-btn" id="ai-local-probe-btn"><i class="ph-duotone ph-arrows-clockwise sz-sm"></i> Re-check</button></div>
+          <hr class="tr-pop-sep">
+          <label class="ai-row-label" for="ai-local-url-input">Proxy URL <small style="color:var(--muted);font-weight:400;">(only when on deployed site)</small></label>
+          <input type="text" id="ai-local-url-input" class="ai-input" placeholder="leave empty for same-origin · e.g. http://localhost:4747" spellcheck="false" autocomplete="off">
+          <div class="ai-note">Leave empty when opening FYmuse directly via <code>http://localhost:4747</code>. Set to <code>http://localhost:4747</code> when using the deployed Pages site and you want it to reach back to <code>server.py</code> on this laptop. Safari blocks this; use Chrome / Firefox / Edge.</div>
+          <label class="ai-row-label" for="ai-local-token-input" style="margin-top:10px;">Shared token <small style="color:var(--muted);font-weight:400;">(optional)</small></label>
+          <input type="password" id="ai-local-token-input" class="ai-input" placeholder="matches FYMUSE_TOKEN env var on server.py" spellcheck="false" autocomplete="off">
+          <div class="ai-note">If <code>server.py</code> was started with <code>FYMUSE_TOKEN=…</code>, paste the same value here so the server accepts your requests. Recommended when using the deployed site so randos can't burn your subscription if they find your localhost.</div>
         </div>
         <div id="ai-api-section" hidden>
           <label class="ai-row-label" for="ai-key-input">Anthropic API key</label>

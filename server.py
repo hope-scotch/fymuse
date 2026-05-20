@@ -41,6 +41,7 @@ Usage:
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -54,6 +55,29 @@ PROXY_MAX_BYTES = 200 * 1024 * 1024  # 200 MB hard cap
 RECIPE_TIMEOUT_SEC = 90              # Claude CLI invocation timeout
 RECIPE_DEFAULT_MODEL = "sonnet"      # 'sonnet', 'opus', 'haiku', or full ID
 
+# ---- Cross-origin from the deployed Pages site ---------------------------
+# When the user has FYmuse open on https://fymuse.pages.dev (or another
+# allowed origin) and wants to route AI refinement through THIS local
+# server, the browser sends a CORS preflight. Whitelist known origins
+# below — anything else gets no Access-Control headers and the browser
+# silently blocks the call (which is what we want).
+#
+# Mixed-content note: HTTPS pages CAN reach http://localhost in Chrome /
+# Firefox (localhost is "potentially trustworthy" per W3C spec). Safari
+# blocks it — users on Safari can't use prod→local; they need API mode
+# or to open the site directly via http://localhost:4747.
+ALLOWED_ORIGINS = {
+    "https://fymuse.pages.dev",
+    "http://localhost:4747",
+    "http://127.0.0.1:4747",
+}
+
+# Optional shared-token auth: when FYMUSE_TOKEN is set in the environment,
+# /api/recipe requires an X-Fymuse-Token: <value> header that matches.
+# Prevents random other tabs/sites from burning your subscription if they
+# happen to find localhost while server.py is running.
+RECIPE_SHARED_TOKEN = os.environ.get("FYMUSE_TOKEN", "").strip()
+
 
 class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
@@ -62,7 +86,31 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         # Allow loading from third-party CDNs (jsdelivr, esm.sh, HuggingFace)
         self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
+        # Emit cross-origin (CORS + PNA) headers when the request came from
+        # an allowed external origin — lets the deployed Pages site reach
+        # back here for AI refinement.
+        self._send_cors_headers()
         super().end_headers()
+
+    def _send_cors_headers(self):
+        origin = self.headers.get("Origin", "")
+        if origin and origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "content-type, x-fymuse-token")
+            # Private Network Access — Chrome flags public→private fetches
+            # without this header. Required even when origin is on localhost.
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+            # Echo Vary so caches don't merge responses across origins
+            self.send_header("Vary", "Origin")
+
+    def do_OPTIONS(self):
+        # Preflight: respond 204 with the CORS headers (added by end_headers).
+        # No body required. Browsers cache preflights for the duration set
+        # by Access-Control-Max-Age (we don't set it; default is 5s in Chrome).
+        self.send_response(204)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_GET(self):
         if self.path.startswith("/api/proxy"):
@@ -77,6 +125,15 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/recipe"):
             return self._handle_recipe()
         self._send_text(404, "not found")
+
+    def _check_recipe_token(self):
+        """Return True if a shared-token gate is enforced AND the
+        request's X-Fymuse-Token header matches. Returns True
+        immediately when no token is configured (open mode)."""
+        if not RECIPE_SHARED_TOKEN:
+            return True
+        sent = (self.headers.get("X-Fymuse-Token") or "").strip()
+        return sent == RECIPE_SHARED_TOKEN
 
     def _read_json_body(self):
         try:
@@ -112,6 +169,9 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
         )
 
     def _handle_recipe_health(self):
+        # Health probe is callable without a token — the browser uses it
+        # to verify connectivity before prompting the user for their token.
+        # Response indicates whether a token is required.
         path = self._claude_cli_path()
         if not path:
             return self._send_json(503, {
@@ -132,11 +192,18 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
                 "claude_cli_path": path,
                 "claude_cli_version": version,
                 "default_model": RECIPE_DEFAULT_MODEL,
+                "token_required": bool(RECIPE_SHARED_TOKEN),
             })
         except Exception as e:
             return self._send_json(503, {"ok": False, "error": f"claude --version failed: {e}"})
 
     def _handle_recipe(self):
+        # Token gate (only when FYMUSE_TOKEN env var is set)
+        if not self._check_recipe_token():
+            return self._send_json(403, {
+                "ok": False,
+                "error": "Missing or invalid X-Fymuse-Token. Set the matching token in the AI Settings popover.",
+            })
         body = self._read_json_body()
         if not body or not isinstance(body, dict):
             return self._send_json(400, {"ok": False, "error": "request body must be JSON object"})
@@ -380,6 +447,13 @@ def main():
     else:
         print("Claude Code CLI NOT installed — /api/recipe will return 503. "
               "Install from https://docs.claude.com/en/docs/claude-code and run `claude login`.")
+    print("CORS allowed origins: " + ", ".join(sorted(ALLOWED_ORIGINS)))
+    if RECIPE_SHARED_TOKEN:
+        masked = RECIPE_SHARED_TOKEN[:4] + "…" + RECIPE_SHARED_TOKEN[-4:] if len(RECIPE_SHARED_TOKEN) > 8 else "***"
+        print(f"Shared token enforced ({masked}) — set the same value in AI Settings.")
+    else:
+        print("No shared token (FYMUSE_TOKEN env var not set) — anyone reaching localhost can call /api/recipe.")
+        print("  To restrict: `FYMUSE_TOKEN=$(openssl rand -hex 16) python3 server.py`")
     print("Ctrl+C to stop.")
     try:
         server.serve_forever()
