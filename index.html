@@ -2917,8 +2917,10 @@ Object.values(GENRES).forEach(g => spreadChords(g.chords));
 // STATE
 //==================================================================
 const state = {
-  genreKey: 'pop',
-  genre: GENRES.pop,
+  // Splitter is the default view — most users open the app to drop a song
+  // and tone-match it, not to browse the chord-progression genre picker.
+  genreKey: 'splitter',
+  genre: GENRES.splitter,
   key: 'C',
   mode: 'major', // 'major' or 'minor'
   selectedChord: null,
