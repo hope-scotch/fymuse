@@ -654,12 +654,30 @@
   .tr-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.8px; text-transform: uppercase; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
   .tr-title i { color: var(--accent-2); font-size: 14px; }
   .tr-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .tr-region { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-2); font-family: var(--font-mono); }
-  .tr-input { width: 56px; padding: 4px 6px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
-  .tr-sep { color: var(--muted); font-size: 11px; }
+  .tr-btn-analyze { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: var(--accent); color: #1a1a1a; border: none; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: var(--font-sans); transition: all 0.12s; }
+  .tr-btn-analyze:hover { background: var(--accent-2); color: #0a0a10; }
+  .tr-btn-analyze:disabled { background: var(--panel); color: var(--muted); border: 1px solid var(--border); cursor: wait; }
+  .tr-btn-analyze.is-done { background: var(--panel-2); color: var(--text-2); border: 1px solid var(--border); padding: 6px 10px; font-weight: 600; }
+  .tr-btn-analyze.is-done:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
   .tr-btn-ghost { padding: 6px 8px; background: transparent; border: 1px solid var(--border); border-radius: 5px; color: var(--text-2); cursor: pointer; transition: all 0.12s; display: inline-flex; align-items: center; gap: 4px; }
   .tr-btn-ghost:hover { color: var(--accent); border-color: var(--accent); }
   .tr-btn-ghost i { font-size: 13px; }
+  .tr-now { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; background: var(--accent-soft); color: var(--accent); border-radius: 4px; }
+  .tr-now i { color: var(--accent); font-size: 12px; }
+
+  /* Timeline strip: shows where in the song the current recipe is from + click-to-seek */
+  .tr-timeline-wrap { padding: 4px 2px; }
+  .tr-timeline { position: relative; height: 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; overflow: hidden; }
+  .tr-timeline-track { position: absolute; inset: 0; }
+  .tr-timeline-tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); opacity: 0.7; }
+  .tr-timeline-tick.is-change { width: 2px; background: var(--accent-2); opacity: 0.85; }
+  .tr-timeline-tick.is-change.k-amp     { background: #ff8a8a; }
+  .tr-timeline-tick.is-change.k-drive   { background: #f5a524; }
+  .tr-timeline-tick.is-change.k-reverb  { background: #6cc4ff; }
+  .tr-timeline-tick.is-change.k-perf    { background: #b388ff; }
+  .tr-timeline-tick.is-change.k-kit     { background: #ff9b6b; }
+  .tr-timeline-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); box-shadow: 0 0 6px var(--accent); pointer-events: none; transition: left 0.06s linear; }
+  .tr-timeline-label { position: absolute; bottom: 2px; font-family: var(--font-mono); font-size: 8.5px; color: var(--muted); padding: 0 3px; pointer-events: none; }
   .tr-refine-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; color: var(--text-2); font-size: 11.5px; cursor: pointer; }
   .tr-refine-toggle:has(input:checked) { color: var(--accent-2); border-color: var(--accent-2); background: rgba(120,180,255,0.06); }
   .tr-refine-toggle input[type="checkbox"] { accent-color: var(--accent-2); }
@@ -5420,6 +5438,72 @@ async function aiCacheClearAll() {
   } catch (e) { console.warn('[AI] cache clear failed', e); }
 }
 
+// === Tone Recipe windowed-measurement cache (IndexedDB) ====================
+// Stores per-window measurements (NOT recipes) keyed by song hash. Recipes
+// regenerate cheaply from the rules engine at render time, so bumping
+// RULES_VERSION doesn't invalidate this heavy DSP cache.
+const TONE_CACHE_DB_STORE = 'tone_windows';
+
+function splitterToneCacheKey(songHash) {
+  return songHash + '::win' + TONE_WINDOW_SEC + '::hop' + TONE_HOP_SEC;
+}
+
+async function splitterToneCacheOpenDB() {
+  // Reuse the AI cache DB — bump version + add a second store.
+  if (aiCacheDBHandle && aiCacheDBHandle.objectStoreNames.contains(TONE_CACHE_DB_STORE)) {
+    return aiCacheDBHandle;
+  }
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB unavailable'));
+    const req = indexedDB.open(AI_CACHE_DB_NAME, AI_CACHE_DB_VERSION + 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(AI_CACHE_DB_STORE)) {
+        db.createObjectStore(AI_CACHE_DB_STORE, { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains(TONE_CACHE_DB_STORE)) {
+        db.createObjectStore(TONE_CACHE_DB_STORE, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = () => { aiCacheDBHandle = req.result; resolve(aiCacheDBHandle); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function splitterToneCacheGet(songHash) {
+  if (!songHash) return null;
+  try {
+    const db = await splitterToneCacheOpenDB();
+    if (!db.objectStoreNames.contains(TONE_CACHE_DB_STORE)) return null;
+    const key = splitterToneCacheKey(songHash);
+    return await new Promise((resolve) => {
+      const tx = db.transaction([TONE_CACHE_DB_STORE], 'readonly');
+      const req = tx.objectStore(TONE_CACHE_DB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result ? req.result.windows : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { console.warn('[Tone] cache get failed', e); return null; }
+}
+
+async function splitterToneCacheSave(songHash, windows) {
+  if (!songHash || !windows || !windows.length) return;
+  try {
+    const db = await splitterToneCacheOpenDB();
+    if (!db.objectStoreNames.contains(TONE_CACHE_DB_STORE)) return;
+    const key = splitterToneCacheKey(songHash);
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction([TONE_CACHE_DB_STORE], 'readwrite');
+      const req = tx.objectStore(TONE_CACHE_DB_STORE).put({
+        key, windows,
+        createdAt: Date.now(),
+        windowSec: TONE_WINDOW_SEC, hopSec: TONE_HOP_SEC,
+      });
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { console.warn('[Tone] cache save failed', e); }
+}
+
 // === Header tool buttons & side panels (Path Finder, Melody Mode) ===
 function setupHeaderButtons() {
   // Playground button — switches the "current view" to playground (it's no longer a genre pill)
@@ -7417,20 +7501,21 @@ function buildSplitterViewSkeleton(root) {
       <div class="tr-header">
         <span class="tr-title"><i class="ph-duotone ph-sliders-horizontal sz-sm"></i> Tone Recipe</span>
         <div class="tr-controls">
-          <label class="tr-region">Region
-            <input type="number" id="tr-start" class="tr-input" value="0" min="0" step="0.5" title="Analysis start (s)">
-            <span class="tr-sep">→</span>
-            <input type="number" id="tr-end" class="tr-input" value="10" min="0.5" step="0.5" title="Analysis end (s)">
-            <span class="tr-sep">s</span>
-          </label>
-          <button class="tr-btn-ghost" id="tr-regenerate-btn" title="Re-analyze region and rebuild recipes"><i class="ph-duotone ph-arrows-clockwise sz-sm"></i></button>
+          <span class="tr-now" id="tr-now" hidden><i class="ph-duotone ph-waveform sz-sm"></i> <span id="tr-now-time">0:00</span></span>
+          <button class="tr-btn-analyze" id="tr-analyze-btn"><i class="ph-duotone ph-waveform sz-sm"></i> Analyze song</button>
           <label class="tr-refine-toggle" title="Optional: send recipes through Claude for musical-context refinement"><input type="checkbox" id="tr-refine-toggle"> <i class="ph-duotone ph-sparkle sz-sm"></i> Refine with Claude</label>
           <button class="tr-btn-ghost" id="tr-settings-btn" title="AI Settings"><i class="ph-duotone ph-gear sz-sm"></i></button>
         </div>
       </div>
       <div class="tr-status" id="tr-status" hidden></div>
+      <div class="tr-timeline-wrap" id="tr-timeline-wrap" hidden>
+        <div class="tr-timeline" id="tr-timeline">
+          <div class="tr-timeline-track" id="tr-timeline-track"></div>
+          <div class="tr-timeline-cursor" id="tr-timeline-cursor"></div>
+        </div>
+      </div>
       <div class="tr-grid" id="tr-grid">
-        <div class="tr-placeholder">Recipes appear here once a region is set above. Defaults to the first 10&nbsp;s of the song.</div>
+        <div class="tr-placeholder">Click <strong>Analyze song</strong> to build recipes across the full song. Cards then update live as the playhead moves.</div>
       </div>
     </div>
 
@@ -7564,6 +7649,7 @@ function splitterUpdateStemCursors() {
     el.style.left = pct.toFixed(2) + '%';
   });
   splitterUpdateChordChartCursor(elapsed);
+  splitterUpdateToneRecipeForPlayhead();
 }
 
 // ---- Chord chart: shows the song's underlying chord progression ---------
@@ -7573,39 +7659,51 @@ function splitterUpdateStemCursors() {
 // rules-based recipes first (instant, free, deterministic). If the user
 // toggles "Refine with Claude" AND has AI configured, each stem's recipe
 // gets sent through Claude for musical-context refinement.
+//
+// Windowed analysis model: when the user clicks "Analyze song", we run
+// per-stem measurements in a sliding window across the whole song. Each
+// window stores its own measurements; recipes get regenerated cheaply from
+// the rules engine at render time. As the playhead moves, the visible
+// recipe swaps to whichever window contains the current time.
+//
+// Vocals are excluded — none of the user's gear (NUX MG 300, Roland kit,
+// MODX 6) is a vocal processor, so the card would always be "not applicable".
+const TONE_WINDOW_SEC = 4.0;     // analysis window width
+const TONE_HOP_SEC    = 2.0;     // step between window starts
+const TONE_EXCLUDED_STEMS = new Set(['vocals']);
+
 const splitterToneRecipeState = {
-  startSec: 0,
-  endSec: 10,
   refine: false,              // "Refine with Claude" toggle
-  recipes: {},                // {stemId: {recipe, measurements, refined: bool}}
-  measurementCache: {},       // {stemId:start:end → measurements}
-  generating: false,
+  analysing: false,
+  analysed: false,            // true once windowed analysis has completed once for this song
+  windows: [],                // [{startSec, endSec, perStem: {stemId: {measurements, recipeKey}}}]
+  currentIdx: -1,             // index of the window the playhead is currently in
+  refineCache: {},            // {`${stemId}:${windowIdx}` → {recipe, contextNote}} — only populated when user toggles Refine
 };
 
 function splitterSetupToneRecipeControls(root) {
-  const startInput = root.querySelector('#tr-start');
-  const endInput   = root.querySelector('#tr-end');
-  const regen      = root.querySelector('#tr-regenerate-btn');
+  const analyzeBtn = root.querySelector('#tr-analyze-btn');
   const refine     = root.querySelector('#tr-refine-toggle');
   const settings   = root.querySelector('#tr-settings-btn');
   const popClose   = root.querySelector('#tr-pop-close');
-  if (startInput) startInput.oninput = () => {
-    splitterToneRecipeState.startSec = parseFloat(startInput.value) || 0;
-  };
-  if (endInput) endInput.oninput = () => {
-    splitterToneRecipeState.endSec = parseFloat(endInput.value) || 10;
-  };
-  if (regen) regen.onclick = () => splitterRenderToneRecipe({ force: true });
+  const timeline   = root.querySelector('#tr-timeline');
+  if (analyzeBtn) analyzeBtn.onclick = () => splitterAnalyseSongWindowed({ force: true });
   if (refine) {
     refine.checked = splitterToneRecipeState.refine;
     refine.onchange = () => {
       splitterToneRecipeState.refine = refine.checked;
-      // Re-render existing recipes against the new toggle state
-      splitterRenderToneRecipe({ force: true });
+      // Re-render current window to pick up cached refinements or trigger new ones
+      splitterRenderToneRecipeForWindow(splitterToneRecipeState.currentIdx, { refresh: true });
     };
   }
   if (settings) settings.onclick = () => splitterToggleAISettingsPopover(true);
   if (popClose) popClose.onclick = () => splitterToggleAISettingsPopover(false);
+  if (timeline) timeline.onclick = (e) => {
+    if (!splitterState.duration) return;
+    const rect = timeline.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    splitterSeek(frac * splitterState.duration);
+  };
   // Click outside the popover to close it
   document.addEventListener('mousedown', (e) => {
     const pop = document.getElementById('tr-settings-popover');
@@ -7622,23 +7720,29 @@ function splitterToggleAISettingsPopover(show) {
   pop.hidden = !show;
 }
 
-// Called after splitterAnalyzeStems finishes — reveals the panel + auto-
-// generates the first recipe pass against the default region.
+// Called after splitterAnalyzeStems finishes — reveals the panel.
+// Does NOT auto-run the windowed analysis (user clicks Analyze).
 function splitterShowToneRecipe() {
   const wrap = document.getElementById('splitter-tone-recipe');
   if (!wrap) return;
   wrap.hidden = false;
-  // Snap region to song duration
-  const dur = splitterState.duration || 0;
-  const s = Math.max(0, Math.min(dur - 0.5, splitterToneRecipeState.startSec || 0));
-  const e = Math.max(s + 0.5, Math.min(dur, splitterToneRecipeState.endSec || Math.min(10, dur)));
-  splitterToneRecipeState.startSec = s;
-  splitterToneRecipeState.endSec   = e;
-  const startInput = document.getElementById('tr-start');
-  const endInput   = document.getElementById('tr-end');
-  if (startInput) startInput.value = s.toFixed(2);
-  if (endInput)   endInput.value   = e.toFixed(2);
-  splitterRenderToneRecipe();
+  // Reset Analyze button state for the newly loaded song
+  splitterToneRecipeState.windows = [];
+  splitterToneRecipeState.analysed = false;
+  splitterToneRecipeState.currentIdx = -1;
+  splitterToneRecipeState.refineCache = {};
+  const btn = document.getElementById('tr-analyze-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.remove('is-done');
+    btn.innerHTML = '<i class="ph-duotone ph-waveform sz-sm"></i> Analyze song';
+  }
+  const grid = document.getElementById('tr-grid');
+  if (grid) grid.innerHTML = '<div class="tr-placeholder">Click <strong>Analyze song</strong> to build recipes across the full song. Cards then update live as the playhead moves.</div>';
+  const tlw = document.getElementById('tr-timeline-wrap');
+  if (tlw) tlw.hidden = true;
+  const now = document.getElementById('tr-now');
+  if (now) now.hidden = true;
 }
 
 function splitterSetToneRecipeStatus(state, msg) {
@@ -7650,93 +7754,326 @@ function splitterSetToneRecipeStatus(state, msg) {
   el.textContent = msg;
 }
 
-// Orchestrator. Runs measurements per stem, builds rules recipes, then
-// optionally chains AI refinement per stem. Renders cards as they come in.
-async function splitterRenderToneRecipe(opts) {
+// Build the list of (startSec, endSec) windows that cover the song.
+function splitterBuildToneWindowGrid() {
+  const dur = splitterState.duration || 0;
+  if (dur < 1) return [];
+  const win = Math.min(TONE_WINDOW_SEC, dur);
+  const hop = Math.max(0.5, Math.min(TONE_HOP_SEC, win / 2));
+  const out = [];
+  let s = 0;
+  while (s < dur) {
+    const e = Math.min(s + win, dur);
+    if (e - s < 0.5) break;
+    out.push({ startSec: s, endSec: e, perStem: {} });
+    if (e >= dur) break;
+    s += hop;
+  }
+  return out;
+}
+
+// Windowed analysis. For each window, measure each non-vocal stem.
+// Renders the current window's recipe as soon as it lands, and updates
+// the timeline strip progressively.
+async function splitterAnalyseSongWindowed(opts) {
   opts = opts || {};
-  const grid = document.getElementById('tr-grid');
-  if (!grid) return;
-  const stems = splitterStems().filter(s => splitterState.stems[s.id] && splitterState.stems[s.id].buffer);
-  if (!stems.length) {
-    grid.innerHTML = '<div class="tr-placeholder">No stems loaded yet — drop a song first.</div>';
-    return;
+  if (splitterToneRecipeState.analysing) return;
+  const stems = splitterStems().filter(s =>
+    !TONE_EXCLUDED_STEMS.has(s.id) &&
+    splitterState.stems[s.id] && splitterState.stems[s.id].buffer
+  );
+  if (!stems.length) return;
+
+  // Try cache restore first (per song hash + window/hop config)
+  if (!opts.force) {
+    const restored = await splitterToneCacheGet(splitterState.fileHash);
+    if (restored) {
+      splitterToneRecipeState.windows = restored;
+      splitterToneRecipeState.analysed = true;
+      splitterToneFinaliseAfterAnalysis();
+      return;
+    }
   }
 
-  if (splitterToneRecipeState.generating && !opts.force) return;
-  splitterToneRecipeState.generating = true;
-  splitterSetToneRecipeStatus('busy', 'Analysing region ' + splitterToneRecipeState.startSec.toFixed(1) + 's → ' + splitterToneRecipeState.endSec.toFixed(1) + 's…');
+  splitterToneRecipeState.analysing = true;
+  splitterToneRecipeState.analysed = false;
+  splitterToneRecipeState.windows = splitterBuildToneWindowGrid();
+  splitterToneRecipeState.refineCache = {};
+  splitterToneRecipeState.currentIdx = -1;
+  const total = splitterToneRecipeState.windows.length;
+  splitterRenderToneTimeline();
 
-  // Render skeleton cards immediately (placeholder content swapped in as
-  // each stem's analysis lands).
-  grid.innerHTML = stems.map(s =>
-    '<div class="tr-stem-card" id="tr-card-' + s.id + '">' +
-      '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + s.icon + '"></i> ' + s.name + '</span></div>' +
-      '<div class="tr-stem-summary">Analysing…</div>' +
-    '</div>'
-  ).join('');
+  const grid = document.getElementById('tr-grid');
+  if (grid) {
+    grid.innerHTML = stems.map(s =>
+      '<div class="tr-stem-card" id="tr-card-' + s.id + '">' +
+        '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + s.icon + '"></i> ' + s.name + '</span></div>' +
+        '<div class="tr-stem-summary">Analysing first window…</div>' +
+      '</div>'
+    ).join('');
+  }
+  const btn = document.getElementById('tr-analyze-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph-duotone ph-circle-notch sz-sm"></i> Analysing…';
+  }
 
-  const s = splitterToneRecipeState.startSec;
-  const e = splitterToneRecipeState.endSec;
+  for (let i = 0; i < total; i++) {
+    const w = splitterToneRecipeState.windows[i];
+    for (const def of stems) {
+      const stem = splitterState.stems[def.id];
+      try {
+        const m = splitterMeasureTone(stem.buffer, w.startSec, w.endSec);
+        w.perStem[def.id] = { measurements: m };
+      } catch (err) {
+        w.perStem[def.id] = { measurements: { error: (err && err.message) || String(err) } };
+      }
+    }
+    splitterSetToneRecipeStatus('busy', 'Analysing window ' + (i + 1) + ' / ' + total + ' (' + w.startSec.toFixed(1) + 's → ' + w.endSec.toFixed(1) + 's)');
+    if (i === 0) {
+      // Render the first window immediately so the user sees something
+      splitterToneRecipeState.currentIdx = 0;
+      splitterRenderToneRecipeForWindow(0);
+    }
+    splitterRenderToneTimeline();
+    // Yield between windows so UI stays responsive (and DSP doesn't block the playhead RAF)
+    await new Promise(r => setTimeout(r, 4));
+  }
+  splitterToneRecipeState.analysing = false;
+  splitterToneRecipeState.analysed = true;
+  splitterSetToneRecipeStatus(null);
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.add('is-done');
+    btn.innerHTML = '<i class="ph-duotone ph-arrows-clockwise sz-sm"></i> Re-analyze';
+  }
+  splitterToneFinaliseAfterAnalysis();
+  // Persist measurements to cache (recipes regenerate cheaply from rules engine)
+  if (splitterState.fileHash) {
+    splitterToneCacheSave(splitterState.fileHash, splitterToneRecipeState.windows).catch(() => {});
+  }
+}
+
+function splitterToneFinaliseAfterAnalysis() {
+  const btn = document.getElementById('tr-analyze-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.add('is-done');
+    btn.innerHTML = '<i class="ph-duotone ph-arrows-clockwise sz-sm"></i> Re-analyze';
+  }
+  splitterRenderToneTimeline();
+  // Snap currentIdx to wherever the playhead currently is
+  const t = splitterCurrentTime ? splitterCurrentTime() : 0;
+  const idx = splitterToneCurrentWindowIdx(t);
+  splitterToneRecipeState.currentIdx = idx;
+  splitterRenderToneRecipeForWindow(idx);
+}
+
+// Given a time in seconds, return the index of the window whose midpoint
+// is closest to it. Returns -1 if no windows.
+function splitterToneCurrentWindowIdx(timeSec) {
+  const wins = splitterToneRecipeState.windows;
+  if (!wins.length) return -1;
+  // Pick the window whose midpoint is nearest. (Windows overlap by design,
+  // so multiple cover any given moment; nearest-midpoint is the most
+  // representative one.)
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < wins.length; i++) {
+    const mid = (wins[i].startSec + wins[i].endSec) / 2;
+    const d = Math.abs(mid - timeSec);
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  }
+  return bestIdx;
+}
+
+// Hook called from the RAF tick — swaps the rendered cards if the playhead
+// crossed into a new window. Cheap (only re-renders when idx changes).
+function splitterUpdateToneRecipeForPlayhead() {
+  if (!splitterToneRecipeState.analysed) return;
+  const t = splitterCurrentTime ? splitterCurrentTime() : 0;
+  const idx = splitterToneCurrentWindowIdx(t);
+  splitterRenderToneTimelineCursor(t);
+  if (idx !== splitterToneRecipeState.currentIdx) {
+    splitterToneRecipeState.currentIdx = idx;
+    splitterRenderToneRecipeForWindow(idx);
+  }
+}
+
+// Render the cards for a specific window index. Pulls measurements from
+// the window, runs the rules engine, optionally chains AI refinement
+// (uses per-window cache).
+function splitterRenderToneRecipeForWindow(idx, opts) {
+  opts = opts || {};
+  const wins = splitterToneRecipeState.windows;
+  if (idx < 0 || idx >= wins.length) return;
+  const w = wins[idx];
+  const stems = splitterStems().filter(s =>
+    !TONE_EXCLUDED_STEMS.has(s.id) &&
+    splitterState.stems[s.id] && splitterState.stems[s.id].buffer
+  );
+
+  // Update the "Now playing" pill in the header
+  const nowEl  = document.getElementById('tr-now');
+  const nowT   = document.getElementById('tr-now-time');
+  if (nowEl && nowT) {
+    nowEl.hidden = false;
+    const mid = (w.startSec + w.endSec) / 2;
+    nowT.textContent = splitterFormatTime(mid) + ' · window ' + (idx + 1) + '/' + wins.length;
+  }
+
   const songContext = {
     songName: splitterState.fileName || null,
     bpm:      splitterState.detectedTempo || null,
     key:      splitterFormatDetectedKey ? splitterFormatDetectedKey() : null,
   };
 
-  // Yield once so the skeleton cards paint
-  await new Promise(r => setTimeout(r, 16));
-
-  // 1) Measurements + rules-based recipes — fast, run synchronously per stem
   for (const def of stems) {
-    const stem = splitterState.stems[def.id];
-    const cacheKey = def.id + ':' + s.toFixed(2) + ':' + e.toFixed(2);
-    let measurements = splitterToneRecipeState.measurementCache[cacheKey];
-    if (!measurements || opts.force) {
-      try {
-        measurements = splitterMeasureTone(stem.buffer, s, e);
-        splitterToneRecipeState.measurementCache[cacheKey] = measurements;
-      } catch (err) {
-        measurements = { error: (err && err.message) || String(err) };
+    const slot = w.perStem[def.id];
+    if (!slot || !slot.measurements) {
+      // Hasn't been analysed yet (mid-progress)
+      const card = document.getElementById('tr-card-' + def.id);
+      if (card) {
+        card.innerHTML =
+          '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + def.icon + '"></i> ' + def.name + '</span></div>' +
+          '<div class="tr-stem-summary">Pending…</div>';
       }
-    }
-    if (measurements && measurements.error) {
-      splitterToneRecipeState.recipes[def.id] = { error: measurements.error };
-      splitterRenderToneRecipeCard(def.id, def, null, measurements, false);
       continue;
     }
-    const recipe = rulesGenerateRecipe(Object.assign({}, measurements, { startSec: s, endSec: e }), def.id, songContext);
-    splitterToneRecipeState.recipes[def.id] = { recipe, measurements, refined: false };
-    splitterRenderToneRecipeCard(def.id, def, recipe, measurements, false);
-    await new Promise(r => setTimeout(r, 4)); // yield between stems so UI stays responsive
-  }
-  splitterSetToneRecipeStatus(null);
-
-  // 2) Optional AI refinement — only if toggle is on AND AI is ready
-  if (splitterToneRecipeState.refine && aiIsReady()) {
-    splitterSetToneRecipeStatus('busy', 'Refining recipes with Claude…');
-    for (const def of stems) {
-      const r = splitterToneRecipeState.recipes[def.id];
-      if (!r || !r.recipe) continue;
-      try {
-        const refined = await splitterRefineRecipeWithAI(r.recipe, r.measurements, def.id, songContext);
-        if (refined && refined.ok) {
-          splitterToneRecipeState.recipes[def.id].recipe = refined.recipe;
-          splitterToneRecipeState.recipes[def.id].refined = true;
-          splitterToneRecipeState.recipes[def.id].refineNote = refined.contextNote;
-          splitterRenderToneRecipeCard(def.id, def, refined.recipe, r.measurements, true, refined.contextNote);
-        } else if (refined && refined.error) {
-          splitterSetToneRecipeStatus('err', 'Refinement failed for ' + def.name + ': ' + refined.error.slice(0, 120));
-        }
-      } catch (err) {
-        console.warn('[ToneRecipe] refinement crashed for', def.id, err);
+    if (slot.measurements.error) {
+      const card = document.getElementById('tr-card-' + def.id);
+      if (card) {
+        card.innerHTML =
+          '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + def.icon + '"></i> ' + def.name + '</span></div>' +
+          '<div class="tr-stem-summary">Analysis error: ' + slot.measurements.error + '</div>';
       }
+      continue;
     }
-    splitterSetToneRecipeStatus(null);
-  } else if (splitterToneRecipeState.refine && !aiIsReady()) {
-    splitterSetToneRecipeStatus('err', 'Refine is on, but AI is not configured. Click the gear icon to set up Local or API mode.');
+    const baseRecipe = rulesGenerateRecipe(
+      Object.assign({}, slot.measurements, { startSec: w.startSec, endSec: w.endSec }),
+      def.id,
+      songContext
+    );
+    let recipe = baseRecipe;
+    let refined = false;
+    let refineNote = '';
+    const cacheKey = def.id + ':' + idx;
+    if (splitterToneRecipeState.refine && splitterToneRecipeState.refineCache[cacheKey]) {
+      const c = splitterToneRecipeState.refineCache[cacheKey];
+      recipe = c.recipe; refined = true; refineNote = c.contextNote || '';
+    }
+    splitterRenderToneRecipeCard(def.id, def, recipe, slot.measurements, refined, refineNote);
   }
 
-  splitterToneRecipeState.generating = false;
+  // Kick off async refinement for stems that don't have it cached yet
+  if (splitterToneRecipeState.refine && aiIsReady()) {
+    for (const def of stems) {
+      const cacheKey = def.id + ':' + idx;
+      if (splitterToneRecipeState.refineCache[cacheKey]) continue;
+      const slot = w.perStem[def.id];
+      if (!slot || !slot.measurements || slot.measurements.error) continue;
+      const baseRecipe = rulesGenerateRecipe(
+        Object.assign({}, slot.measurements, { startSec: w.startSec, endSec: w.endSec }),
+        def.id,
+        songContext
+      );
+      splitterRefineRecipeWithAI(baseRecipe, slot.measurements, def.id, songContext).then(r => {
+        if (!r || !r.ok) return;
+        splitterToneRecipeState.refineCache[cacheKey] = { recipe: r.recipe, contextNote: r.contextNote };
+        // Only re-render if we're STILL on this window — user may have scrubbed
+        if (splitterToneRecipeState.currentIdx === idx) {
+          splitterRenderToneRecipeCard(def.id, def, r.recipe, slot.measurements, true, r.contextNote);
+        }
+      }).catch(() => {});
+    }
+  }
+}
+
+// Render the timeline strip: ticks where any stem's recipe changes from
+// one window to the next, plus the live cursor.
+function splitterRenderToneTimeline() {
+  const wrap = document.getElementById('tr-timeline-wrap');
+  const track = document.getElementById('tr-timeline-track');
+  if (!wrap || !track) return;
+  const wins = splitterToneRecipeState.windows;
+  const dur = splitterState.duration || 0;
+  if (!wins.length || dur < 1) {
+    wrap.hidden = true;
+    track.innerHTML = '';
+    return;
+  }
+  wrap.hidden = false;
+  const stems = splitterStems().filter(s =>
+    !TONE_EXCLUDED_STEMS.has(s.id) &&
+    splitterState.stems[s.id] && splitterState.stems[s.id].buffer
+  );
+  // For each consecutive pair of windows, check if any stem's amp/perf/kit
+  // setting changed. If so, place a coloured tick at the boundary.
+  const songContext = {
+    songName: splitterState.fileName || null,
+    bpm:      splitterState.detectedTempo || null,
+    key:      splitterFormatDetectedKey ? splitterFormatDetectedKey() : null,
+  };
+  const recipesByWin = wins.map(w =>
+    stems.reduce((acc, def) => {
+      const slot = w.perStem[def.id];
+      if (slot && slot.measurements && !slot.measurements.error) {
+        acc[def.id] = rulesGenerateRecipe(
+          Object.assign({}, slot.measurements, { startSec: w.startSec, endSec: w.endSec }),
+          def.id, songContext
+        );
+      }
+      return acc;
+    }, {})
+  );
+  const ticks = [];
+  for (let i = 1; i < wins.length; i++) {
+    const prev = recipesByWin[i - 1];
+    const cur  = recipesByWin[i];
+    if (!prev || !cur) continue;
+    // Detect: did any top-level block (amp/drive/kit/performance/reverb)
+    // change setting from prev to cur? If so, classify the change kind.
+    let kind = null;
+    for (const def of stems) {
+      const pr = prev[def.id]; const cr = cur[def.id];
+      if (!pr || !cr) continue;
+      for (let gi = 0; gi < pr.gear_recipes.length; gi++) {
+        const pg = pr.gear_recipes[gi]; const cg = cr.gear_recipes[gi];
+        if (!pg || !cg || !pg.applicable || !cg.applicable) continue;
+        for (const pblock of (pg.blocks || [])) {
+          const cblock = (cg.blocks || []).find(b => b.block === pblock.block);
+          if (!cblock || cblock.setting === pblock.setting) continue;
+          const bn = pblock.block.toLowerCase();
+          if (bn.indexOf('amp') >= 0)        { kind = 'amp';    break; }
+          if (bn.indexOf('drive') >= 0)      { kind = 'drive';  break; }
+          if (bn.indexOf('reverb') >= 0)     { kind = 'reverb'; break; }
+          if (bn.indexOf('performance') >= 0){ kind = 'perf';   break; }
+          if (bn.indexOf('kit') >= 0)        { kind = 'kit';    break; }
+        }
+        if (kind) break;
+      }
+      if (kind) break;
+    }
+    if (kind) {
+      const t = wins[i].startSec;
+      const frac = t / dur;
+      ticks.push({ frac, kind });
+    }
+  }
+  track.innerHTML = ticks.map(t =>
+    '<div class="tr-timeline-tick is-change k-' + t.kind + '" style="left:' + (t.frac * 100).toFixed(2) + '%"></div>'
+  ).join('');
+  // Initial cursor position
+  splitterRenderToneTimelineCursor(splitterCurrentTime ? splitterCurrentTime() : 0);
+}
+
+function splitterRenderToneTimelineCursor(timeSec) {
+  const cur = document.getElementById('tr-timeline-cursor');
+  if (!cur) return;
+  const dur = splitterState.duration || 0;
+  if (dur < 1) { cur.style.left = '0%'; return; }
+  const frac = Math.max(0, Math.min(1, timeSec / dur));
+  cur.style.left = (frac * 100).toFixed(3) + '%';
 }
 
 // Per-card renderer. Builds the HTML inside #tr-card-<stemId>.
@@ -12739,10 +13076,19 @@ function splitterClose() {
   splitterState.fileBuffer = null;
   splitterState.fileName = null;
   splitterState.duration = 0;
-  splitterToneRecipeState.recipes = {};
-  splitterToneRecipeState.measurementCache = {};
+  splitterToneRecipeState.windows = [];
+  splitterToneRecipeState.refineCache = {};
+  splitterToneRecipeState.analysed = false;
+  splitterToneRecipeState.analysing = false;
+  splitterToneRecipeState.currentIdx = -1;
   const tr = document.getElementById('splitter-tone-recipe');
   if (tr) tr.hidden = true;
+  const btn = document.getElementById('tr-analyze-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.remove('is-done');
+    btn.innerHTML = '<i class="ph-duotone ph-waveform sz-sm"></i> Analyze song';
+  }
   splitterSetStatus('No song loaded', 'idle');
   splitterUpdateStatusUI();
 }
