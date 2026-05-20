@@ -4325,31 +4325,66 @@ Hard rules:
 5. If a gear genuinely can't carry the stem, set applicable=false and skip the blocks array (use []).
 6. Numbers in params should be in the gear's native units. NUX MG-30 amp params 0-10. Roland reverb send 0-127. MODX cutoff 0-127.`;
 
-// Minimal state: just whether the local proxy is reachable, cached for
-// the session so we don't re-probe on every click.
+// Minimal state: probe result + the base URL that succeeded. Two cases:
+//   - Same-origin (user opened http://localhost:4747 directly): base = ''
+//   - Cross-origin (user on https://fymuse.pages.dev reaching their
+//     laptop's server.py): base = 'http://localhost:4747'
+// The probe tries same-origin first, then falls back to the localhost
+// URL so the deployed Pages site automatically picks up a server.py
+// running on the user's machine — no UI configuration needed.
+const AI_LOCAL_FALLBACK_BASE = 'http://localhost:4747';
 const aiState = {
   probed: false,
+  localBase: '',     // resolved base URL (empty = same-origin)
   localHealth: null, // {ok: bool, version?, error?}
 };
 
-async function aiProbeLocalProxy() {
+async function aiTryProbe(base) {
+  const url = (base || '') + '/api/recipe-health';
   try {
-    const res = await fetch('/api/recipe-health', { method: 'GET' });
+    const res = await fetch(url, { method: 'GET' });
     const data = await res.json().catch(() => null);
     if (res.ok && data && data.ok) {
-      aiState.localHealth = { ok: true, version: data.claude_cli_version || 'unknown' };
-    } else {
-      aiState.localHealth = {
-        ok: false,
-        error: (data && data.error) || ('health probe returned HTTP ' + res.status),
-      };
+      return { ok: true, base, version: data.claude_cli_version || 'unknown' };
     }
+    return { ok: false, base, status: res.status, error: (data && data.error) || ('HTTP ' + res.status) };
   } catch (err) {
-    aiState.localHealth = {
-      ok: false,
-      error: 'no /api/recipe-health response — open via http://localhost:4747 with `python3 server.py` running. (' + (err.message || err) + ')',
-    };
+    return { ok: false, base, error: (err && err.message) || String(err) };
   }
+}
+
+async function aiProbeLocalProxy() {
+  // 1) Try same-origin first (the user opened FYmuse via http://localhost:4747)
+  const same = await aiTryProbe('');
+  if (same.ok) {
+    aiState.localBase = '';
+    aiState.localHealth = { ok: true, version: same.version, base: 'same-origin' };
+    aiState.probed = true;
+    return aiState.localHealth;
+  }
+  // 2) Fall back to http://localhost:4747 — covers the case where the
+  // user is on the deployed Pages site and has server.py running locally.
+  // Skip the fallback if we're already on http://localhost:4747 (would
+  // double-fail) or if same-origin already IS localhost (loopback retry
+  // tells us nothing new).
+  const onLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(location.origin);
+  if (!onLocalhost) {
+    const cross = await aiTryProbe(AI_LOCAL_FALLBACK_BASE);
+    if (cross.ok) {
+      aiState.localBase = AI_LOCAL_FALLBACK_BASE;
+      aiState.localHealth = { ok: true, version: cross.version, base: AI_LOCAL_FALLBACK_BASE };
+      aiState.probed = true;
+      return aiState.localHealth;
+    }
+  }
+  // Neither worked
+  aiState.localBase = '';
+  aiState.localHealth = {
+    ok: false,
+    error: onLocalhost
+      ? 'no /api/recipe-health response — is `python3 server.py` running? (' + (same.error || ('HTTP ' + same.status)) + ')'
+      : 'no local proxy reachable — start `python3 server.py` on your laptop (Refine works from both http://localhost:4747 and https://fymuse.pages.dev). Safari users: HTTPS→localhost is blocked, switch to Chrome/Firefox/Edge.',
+  };
   aiState.probed = true;
   return aiState.localHealth;
 }
@@ -4502,9 +4537,10 @@ async function aiCallClaudeOnce(messages) {
       return '=== ' + tag + ' ===\n' + m.content;
     }).join('\n\n');
   }
+  const url = (aiState.localBase || '') + '/api/recipe';
   let res;
   try {
-    res = await fetch('/api/recipe', {
+    res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -4514,7 +4550,11 @@ async function aiCallClaudeOnce(messages) {
       }),
     });
   } catch (err) {
-    return { ok: false, error: 'Local proxy unreachable: ' + (err.message || err) + '. Open via http://localhost:4747 with server.py running.' };
+    const onLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(location.origin);
+    const hint = onLocalhost
+      ? ' Is `python3 server.py` still running?'
+      : ' Make sure `python3 server.py` is running on your laptop. (Safari blocks HTTPS→localhost — use Chrome/Firefox/Edge.)';
+    return { ok: false, error: 'Local proxy unreachable: ' + (err.message || err) + '.' + hint };
   }
   let data = null;
   try { data = await res.json(); } catch {}
