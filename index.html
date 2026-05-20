@@ -666,42 +666,63 @@
   .tr-status-label i { font-size: 14px; }
   .tr-status.busy .tr-status-label i { animation: spin 1.4s linear infinite; }
   .tr-status-pct { font-weight: 700; }
-  .tr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
-  .tr-placeholder { grid-column: 1 / -1; padding: 24px; color: var(--muted); text-align: center; font-size: 12.5px; }
+  /* Tone Recipe content: full-width vertical stack of gear-first sections */
+  .tr-sections { display: flex; flex-direction: column; gap: 14px; }
+  .tr-placeholder { padding: 28px; color: var(--muted); text-align: center; font-size: 13px; background: var(--panel); border: 1px dashed var(--border); border-radius: 8px; }
 
-  /* Stem cards inside the Tone Recipe grid */
-  .tr-stem-card { padding: 12px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; gap: 10px; }
-  .tr-stem-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
-  .tr-stem-card-name { font-size: 13px; font-weight: 700; color: var(--text); display: inline-flex; align-items: center; gap: 6px; }
-  .tr-stem-card-name i { color: var(--accent-2); }
-  .tr-stem-conf { padding: 1px 7px; border-radius: 3px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-  .tr-stem-conf.high { background: rgba(80,200,120,0.15); color: #6dd58c; }
-  .tr-stem-conf.medium { background: var(--accent-soft); color: var(--accent); }
-  .tr-stem-conf.low { background: rgba(255,90,90,0.15); color: #ff8b8b; }
-  .tr-stem-summary { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
-  .tr-stem-recipes { display: flex; flex-direction: column; gap: 10px; }
-  .tr-gear-tile { padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; }
-  .tr-gear-tile.not-applicable { opacity: 0.55; }
-  .tr-gear-tile-head { font-size: 11.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-  .tr-gear-tile-head i { color: var(--accent-2); font-size: 13px; }
-  .tr-na-reason { font-style: italic; color: var(--muted); font-size: 11px; }
-  .tr-block { padding: 5px 0; border-top: 1px dashed var(--border); }
-  .tr-block:first-of-type { border-top: none; padding-top: 0; }
-  .tr-block-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
-  .tr-block-name { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.3px; color: var(--muted); }
-  .tr-block-setting { font-size: 12px; color: var(--accent); font-weight: 600; text-align: right; }
-  .tr-block-params { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-2); }
-  .tr-block-param-key { color: var(--muted); margin-right: 2px; }
-  .tr-block-why { color: var(--muted); font-size: 10.5px; margin-top: 4px; line-height: 1.45; font-family: var(--font-sans); font-style: italic; }
+  /* One section per gear piece (NUX → MODX → Roland), full width, collapsible */
+  .tr-gear-section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .tr-gear-section-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; background: var(--panel-2); border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; transition: background 0.12s; }
+  .tr-gear-section-header:hover { background: var(--accent-soft); }
+  .tr-gear-section.is-collapsed .tr-gear-section-header { border-bottom-color: transparent; }
+  .tr-gear-section-title { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: var(--text); }
+  .tr-gear-section-title i { color: var(--accent-2); font-size: 18px; }
+  .tr-gear-section-title small { color: var(--muted); font-size: 11.5px; font-weight: 400; margin-left: 4px; }
+  .tr-gear-section-meta { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+  .tr-gear-section-conf { padding: 1px 7px; border-radius: 3px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .tr-gear-section-conf.high { background: rgba(80,200,120,0.15); color: #6dd58c; }
+  .tr-gear-section-conf.medium { background: var(--accent-soft); color: var(--accent); }
+  .tr-gear-section-conf.low { background: rgba(255,90,90,0.15); color: #ff8b8b; }
+  .tr-gear-caret { font-size: 13px; color: var(--muted); transition: transform 0.18s; }
+  .tr-gear-section.is-collapsed .tr-gear-caret { transform: rotate(-90deg); }
+  .tr-gear-section-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+  .tr-gear-section.is-collapsed .tr-gear-section-body { display: none; }
 
-  .tr-meas-expand { padding: 6px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--font-mono); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+  /* Gear section content: summary + recipe blocks + (optional) measurements */
+  .tr-gear-summary { color: var(--text-2); font-size: 12.5px; line-height: 1.55; }
+  .tr-gear-na { padding: 12px 14px; background: var(--panel-2); border-left: 3px solid var(--muted); color: var(--muted); font-style: italic; font-size: 12px; border-radius: 0 4px 4px 0; }
+  .tr-block { padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; }
+  .tr-block.is-preset { border-color: var(--accent-2); background: rgba(120,180,255,0.07); }
+  .tr-block-head { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+  .tr-block-name { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+  .tr-block-setting { font-size: 13.5px; color: var(--accent); font-weight: 700; text-align: right; }
+  .tr-block.is-preset .tr-block-setting { font-size: 16px; color: var(--accent-2); }
+  .tr-block-params { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); }
+  .tr-block-param-key { color: var(--muted); margin-right: 3px; }
+  .tr-block-why { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.55; font-family: var(--font-sans); font-style: italic; }
+
+  /* Refine diff highlights — applied to blocks/settings/params that Claude changed */
+  .tr-block.is-changed { border-color: var(--accent-2); background: rgba(120,180,255,0.10); }
+  .tr-block.is-added   { border-color: rgba(80,200,120,0.55); background: rgba(80,200,120,0.06); }
+  .tr-diff-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; background: var(--accent-2); color: #0a0a10; border-radius: 3px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .tr-diff-badge.added { background: rgba(80,200,120,0.85); color: #0a1a10; }
+  .tr-was { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 2px; display: block; text-align: right; }
+  .tr-was-label { color: var(--accent-2); font-weight: 600; }
+  .tr-was del { text-decoration: line-through; opacity: 0.75; }
+  .tr-block-params .tr-param-changed { color: var(--accent-2); font-weight: 700; }
+
+  /* Refined-by-Claude header pill + context note */
+  .tr-refined-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; background: rgba(120,180,255,0.18); color: var(--accent-2); border-radius: 3px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .tr-refined-note { padding: 10px 14px; background: rgba(120,180,255,0.07); border-left: 3px solid var(--accent-2); color: var(--text-2); font-size: 12px; line-height: 1.55; border-radius: 0 4px 4px 0; }
+  .tr-refined-note strong { color: var(--accent-2); }
+
+  /* Measurements expandable inside gear section */
+  .tr-meas-expand { padding: 7px 12px; background: var(--panel-2); border: 1px dashed var(--border); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--font-mono); cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; align-self: flex-start; }
   .tr-meas-expand:hover { color: var(--accent); border-color: var(--accent); }
   .tr-meas-expand .tr-meas-caret { transition: transform 0.15s; }
-  .tr-stem-card.is-expanded .tr-meas-caret { transform: rotate(90deg); }
-  .tr-meas-body { display: none; padding: 8px 0 4px; }
-  .tr-stem-card.is-expanded .tr-meas-body { display: block; }
-  .tr-refined-badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; background: rgba(120,180,255,0.15); color: var(--accent-2); border-radius: 3px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-  .tr-refined-note { padding: 8px 10px; background: rgba(120,180,255,0.07); border-left: 2px solid var(--accent-2); color: var(--text-2); font-size: 11.5px; line-height: 1.5; border-radius: 0 4px 4px 0; margin-top: 4px; }
+  .tr-gear-section.is-meas-expanded .tr-meas-caret { transform: rotate(90deg); }
+  .tr-meas-body { display: none; padding: 4px 0 0; }
+  .tr-gear-section.is-meas-expanded .tr-meas-body { display: block; }
 
   /* Chord chart — sits above the stem mixer. Shows the chord underlying
      the song right now (big), plus the full progression as a clickable
@@ -7522,8 +7543,8 @@ function buildSplitterViewSkeleton(root) {
           <div class="tr-timeline-cursor" id="tr-timeline-cursor"></div>
         </div>
       </div>
-      <div class="tr-grid" id="tr-grid">
-        <div class="tr-placeholder">Click <strong>Analyze song</strong> to build recipes across the full song. Cards then update live as the playhead moves.</div>
+      <div class="tr-sections" id="tr-grid">
+        <div class="tr-placeholder">Click <strong>Analyze song</strong> to build recipes across the full song. Sections then update live as the playhead moves.</div>
       </div>
     </div>
 
@@ -7643,7 +7664,19 @@ const splitterToneRecipeState = {
   windows: [],                // [{startSec, endSec, perStem: {stemId: {measurements, recipeKey}}}]
   currentIdx: -1,             // index of the window the playhead is currently in
   refineCache: {},            // {`${stemId}:${windowIdx}` → {recipe, contextNote}} — only populated when user toggles Refine
+  collapsedGears: new Set(),  // gear names the user has collapsed; survives window changes
+  measExpandedGears: new Set(),// gear names with measurement detail expanded
 };
+
+// Gear sections (in display order). Each entry maps a gear → the stem
+// that drives its recipe. The renderer picks the right gear_recipes[]
+// entry from that stem's rules-engine output and stitches everything
+// into the gear-first layout.
+const TONE_GEAR_SECTIONS = [
+  { gear: 'NUX MG-30',                 icon: 'ph-guitar',     stemId: 'other', sub: 'guitar — load preset + tweak'  },
+  { gear: 'Yamaha MODX 6',             icon: 'ph-piano-keys', stemId: 'other', sub: 'keys / synth Performance'      },
+  { gear: 'Roland electronic drums',   icon: 'ph-drum',       stemId: 'drums', sub: 'kit + tuning + ambience'       },
+];
 
 function splitterSetupToneRecipeControls(root) {
   const analyzeBtn = root.querySelector('#tr-analyze-btn');
@@ -7703,16 +7736,17 @@ async function splitterRefineCurrentWindow() {
       if (r && r.ok) {
         splitterToneRecipeState.refineCache[def.id + ':' + idx] = { recipe: r.recipe, contextNote: r.contextNote };
         anySuccess = true;
-        // Only re-render if we're STILL on this window — user may have scrubbed
-        if (splitterToneRecipeState.currentIdx === idx) {
-          splitterRenderToneRecipeCard(def.id, def, r.recipe, slot.measurements, true, r.contextNote);
-        }
       } else if (r && r.error && !firstError) {
         firstError = r.error;
       }
     } catch (err) {
       if (!firstError) firstError = (err && err.message) || String(err);
     }
+  }
+  // Re-render the whole window — the gear-first renderer reads the new
+  // refineCache entries and applies diff highlighting automatically.
+  if (anySuccess && splitterToneRecipeState.currentIdx === idx) {
+    splitterRenderToneRecipeForWindow(idx);
   }
   if (btn) {
     btn.disabled = false;
@@ -7832,12 +7866,11 @@ async function splitterAnalyseSongWindowed(opts) {
 
   const grid = document.getElementById('tr-grid');
   if (grid) {
-    grid.innerHTML = stems.map(s =>
-      '<div class="tr-stem-card" id="tr-card-' + s.id + '">' +
-        '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + s.icon + '"></i> ' + s.name + '</span></div>' +
-        '<div class="tr-stem-summary">Analysing first window…</div>' +
-      '</div>'
-    ).join('');
+    // Build the gear-first skeleton sections (NUX → MODX → Roland). Each
+    // section has a stable ID so subsequent renderToneRecipeForWindow
+    // calls can swap content without rebuilding the DOM.
+    grid.innerHTML = TONE_GEAR_SECTIONS.map(g => splitterBuildGearSectionShell(g, true)).join('');
+    splitterWireGearSectionToggles();
   }
   const btn = document.getElementById('tr-analyze-btn');
   if (btn) {
@@ -7934,15 +7967,49 @@ function splitterUpdateToneRecipeForPlayhead() {
 // Render the cards for a specific window index. Pulls measurements from
 // the window, runs the rules engine, optionally chains AI refinement
 // (uses per-window cache).
+// Build an empty gear-section shell (used during analysis + on first paint).
+function splitterBuildGearSectionShell(g, isAnalysing) {
+  const sectionId = 'tr-section-' + splitterToneRecipeGearKey(g.gear);
+  const collapsed = splitterToneRecipeState.collapsedGears.has(g.gear) ? ' is-collapsed' : '';
+  const placeholder = isAnalysing ? 'Analysing first window…' : 'Pending…';
+  return (
+    '<div class="tr-gear-section' + collapsed + '" id="' + sectionId + '" data-gear="' + g.gear + '">' +
+      '<div class="tr-gear-section-header" data-gear="' + g.gear + '">' +
+        '<span class="tr-gear-section-title"><i class="ph-duotone ' + g.icon + '"></i> ' + g.gear + ' <small>· ' + g.sub + '</small></span>' +
+        '<span class="tr-gear-section-meta"><i class="ph-duotone ph-caret-down tr-gear-caret"></i></span>' +
+      '</div>' +
+      '<div class="tr-gear-section-body" id="' + sectionId + '-body">' +
+        '<div class="tr-gear-summary">' + placeholder + '</div>' +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function splitterToneRecipeGearKey(gearName) {
+  return gearName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function splitterWireGearSectionToggles() {
+  document.querySelectorAll('.tr-gear-section-header').forEach(hdr => {
+    hdr.onclick = () => {
+      const gear = hdr.dataset.gear;
+      if (!gear) return;
+      if (splitterToneRecipeState.collapsedGears.has(gear)) {
+        splitterToneRecipeState.collapsedGears.delete(gear);
+      } else {
+        splitterToneRecipeState.collapsedGears.add(gear);
+      }
+      const section = hdr.closest('.tr-gear-section');
+      if (section) section.classList.toggle('is-collapsed');
+    };
+  });
+}
+
 function splitterRenderToneRecipeForWindow(idx, opts) {
   opts = opts || {};
   const wins = splitterToneRecipeState.windows;
   if (idx < 0 || idx >= wins.length) return;
   const w = wins[idx];
-  const stems = splitterStems().filter(s =>
-    !TONE_EXCLUDED_STEMS.has(s.id) &&
-    splitterState.stems[s.id] && splitterState.stems[s.id].buffer
-  );
 
   // Update the "Now playing" pill in the header
   const nowEl  = document.getElementById('tr-now');
@@ -7959,44 +8026,43 @@ function splitterRenderToneRecipeForWindow(idx, opts) {
     key:      splitterFormatDetectedKey ? splitterFormatDetectedKey() : null,
   };
 
-  for (const def of stems) {
-    const slot = w.perStem[def.id];
+  // Make sure the gear-section shells exist (idempotent — first analysis
+  // pass already builds them, but on cache reload we land here directly).
+  const grid = document.getElementById('tr-grid');
+  if (grid && !grid.querySelector('.tr-gear-section')) {
+    grid.innerHTML = TONE_GEAR_SECTIONS.map(g => splitterBuildGearSectionShell(g, false)).join('');
+    splitterWireGearSectionToggles();
+  }
+
+  // For each gear, render the section by reading from its mapped stem.
+  for (const g of TONE_GEAR_SECTIONS) {
+    const stemId = g.stemId;
+    const slot = w.perStem[stemId];
+    const def = splitterStems().find(s => s.id === stemId);
     if (!slot || !slot.measurements) {
-      // Hasn't been analysed yet (mid-progress)
-      const card = document.getElementById('tr-card-' + def.id);
-      if (card) {
-        card.innerHTML =
-          '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + def.icon + '"></i> ' + def.name + '</span></div>' +
-          '<div class="tr-stem-summary">Pending…</div>';
-      }
+      splitterRenderGearSection(g, def, null, null, null, null);
       continue;
     }
     if (slot.measurements.error) {
-      const card = document.getElementById('tr-card-' + def.id);
-      if (card) {
-        card.innerHTML =
-          '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + def.icon + '"></i> ' + def.name + '</span></div>' +
-          '<div class="tr-stem-summary">Analysis error: ' + slot.measurements.error + '</div>';
-      }
+      splitterRenderGearSection(g, def, null, slot.measurements, null, null);
       continue;
     }
     const baseRecipe = rulesGenerateRecipe(
       Object.assign({}, slot.measurements, { startSec: w.startSec, endSec: w.endSec }),
-      def.id,
+      stemId,
       songContext
     );
     let recipe = baseRecipe;
     let refined = false;
     let refineNote = '';
-    const cacheKey = def.id + ':' + idx;
-    // Refine is now imperative (click the Refine button) — but if THIS
-    // window was previously refined, keep showing the refined version
-    // instead of falling back to the rules baseline.
+    const cacheKey = stemId + ':' + idx;
     if (splitterToneRecipeState.refineCache[cacheKey]) {
       const c = splitterToneRecipeState.refineCache[cacheKey];
       recipe = c.recipe; refined = true; refineNote = c.contextNote || '';
     }
-    splitterRenderToneRecipeCard(def.id, def, recipe, slot.measurements, refined, refineNote);
+    // For diff highlighting: pass the rules baseline alongside the refined
+    // recipe so the renderer can mark changes.
+    splitterRenderGearSection(g, def, recipe, slot.measurements, refined ? baseRecipe : null, refineNote);
   }
 
   // Update the Refine button to reflect whether THIS window already has
@@ -8140,83 +8206,139 @@ function splitterRenderToneTimelineCursor(timeSec) {
   cur.style.left = (frac * 100).toFixed(3) + '%';
 }
 
-// Per-card renderer. Builds the HTML inside #tr-card-<stemId>.
-function splitterRenderToneRecipeCard(stemId, def, recipe, measurements, refined, refineNote) {
-  const card = document.getElementById('tr-card-' + stemId);
-  if (!card) return;
-  if (refined) card.classList.add('is-refined');
+// Per-section renderer. Each gear gets its own full-width collapsible
+// section; this function fills in (or replaces) the BODY of that section
+// based on the gear's recipe inside the stem's full rules output.
+//
+// `baselineRecipeForDiff` is non-null when we're rendering a Claude-
+// refined recipe — passing the rules baseline alongside lets the renderer
+// mark which blocks/settings/params changed vs the baseline.
+function splitterRenderGearSection(gearDef, stemDef, fullRecipe, measurements, baselineRecipeForDiff, refineNote) {
+  const sectionId = 'tr-section-' + splitterToneRecipeGearKey(gearDef.gear);
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  const body = document.getElementById(sectionId + '-body');
+  if (!body) return;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  if (measurements && measurements.error) {
-    card.innerHTML =
-      '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + def.icon + '"></i> ' + def.name + '</span></div>' +
-      '<div class="tr-stem-summary">Analysis failed: ' + esc(measurements.error) + '</div>';
-    return;
-  }
-  if (!recipe) {
-    card.innerHTML =
-      '<div class="tr-stem-card-head"><span class="tr-stem-card-name"><i class="ph-duotone ' + def.icon + '"></i> ' + def.name + '</span></div>' +
-      '<div class="tr-stem-summary">No recipe yet.</div>';
-    return;
-  }
-  const confClass = ['high', 'medium', 'low'].includes(recipe.confidence) ? recipe.confidence : 'medium';
-  const refinedBadge = refined ? '<span class="tr-refined-badge"><i class="ph-duotone ph-sparkle"></i> refined</span>' : '';
-  const refinedNoteHtml = (refined && refineNote) ? '<div class="tr-refined-note">' + esc(refineNote) + '</div>' : '';
 
-  // Gear tiles
-  const fmtParam = (k, v) => {
+  // Error / pending states
+  if (measurements && measurements.error) {
+    body.innerHTML = '<div class="tr-gear-na">Analysis failed: ' + esc(measurements.error) + '</div>';
+    splitterUpdateGearSectionHeader(gearDef, null, false);
+    return;
+  }
+  if (!fullRecipe) {
+    body.innerHTML = '<div class="tr-gear-summary">Pending…</div>';
+    splitterUpdateGearSectionHeader(gearDef, null, false);
+    return;
+  }
+
+  // Find this gear's entry within fullRecipe.gear_recipes[]
+  const myEntry = (fullRecipe.gear_recipes || []).find(g => g.gear === gearDef.gear);
+  if (!myEntry) {
+    body.innerHTML = '<div class="tr-gear-na">No recipe entry for this gear.</div>';
+    splitterUpdateGearSectionHeader(gearDef, null, false);
+    return;
+  }
+  if (!myEntry.applicable) {
+    body.innerHTML = '<div class="tr-gear-na">' + esc(myEntry.reason_if_not || 'Not applicable for this stem.') + '</div>';
+    splitterUpdateGearSectionHeader(gearDef, null, false);
+    return;
+  }
+
+  // Diff: find the matching baseline entry (only when refined)
+  const baseEntry = baselineRecipeForDiff
+    ? (baselineRecipeForDiff.gear_recipes || []).find(g => g.gear === gearDef.gear)
+    : null;
+  const refined = !!baselineRecipeForDiff;
+  const refinedBadge = refined ? '<span class="tr-refined-badge"><i class="ph-duotone ph-sparkle"></i> refined</span>' : '';
+  const refinedNote = (refined && refineNote) ? '<div class="tr-refined-note"><strong>Claude\'s reasoning:</strong> ' + esc(refineNote) + '</div>' : '';
+
+  // Format a single param. If diff-mode and param changed, highlight it.
+  const fmtParam = (k, v, baseParams) => {
     if (v == null || v === '') return '';
     const val = (typeof v === 'number') ? (Number.isInteger(v) ? v.toString() : v.toFixed(2)) : esc(v);
-    return '<span><span class="tr-block-param-key">' + esc(k) + ':</span>' + val + '</span>';
+    const changed = baseParams && (baseParams[k] !== undefined) && baseParams[k] !== v;
+    const cls = changed ? ' tr-param-changed' : '';
+    return '<span class="' + cls.trim() + '"><span class="tr-block-param-key">' + esc(k) + ':</span>' + val + '</span>';
   };
-  const tileIcon = (gear) => {
-    const g = (gear || '').toLowerCase();
-    if (g.includes('nux'))    return 'ph-guitar';
-    if (g.includes('roland')) return 'ph-drum';
-    if (g.includes('modx') || g.includes('yamaha')) return 'ph-piano-keys';
-    return 'ph-sparkle';
-  };
-  const tiles = (recipe.gear_recipes || []).map(g => {
-    if (!g.applicable) {
-      return '<div class="tr-gear-tile not-applicable">' +
-        '<div class="tr-gear-tile-head"><i class="ph-duotone ' + tileIcon(g.gear) + '"></i> ' + esc(g.gear) + '</div>' +
-        '<div class="tr-na-reason">' + esc(g.reason_if_not || '') + '</div>' +
-      '</div>';
-    }
-    const blocks = (g.blocks || []).map(b => {
-      const params = (b.params && typeof b.params === 'object')
-        ? Object.keys(b.params).map(k => fmtParam(k, b.params[k])).filter(Boolean).join('')
-        : '';
-      return '<div class="tr-block">' +
-        '<div class="tr-block-head">' +
-          '<div class="tr-block-name">' + esc(b.block) + '</div>' +
-          '<div class="tr-block-setting">' + esc(b.setting) + '</div>' +
-        '</div>' +
-        (params ? '<div class="tr-block-params">' + params + '</div>' : '') +
-        (b.why ? '<div class="tr-block-why">' + esc(b.why) + '</div>' : '') +
-      '</div>';
-    }).join('');
-    return '<div class="tr-gear-tile">' +
-      '<div class="tr-gear-tile-head"><i class="ph-duotone ' + tileIcon(g.gear) + '"></i> ' + esc(g.gear) + '</div>' +
-      blocks +
+
+  // Block rendering, with diff highlights
+  const blocks = (myEntry.blocks || []).map(b => {
+    const isPreset = /preset|performance/i.test(b.block) && b.block.indexOf('load this') >= 0;
+    const presetClass = isPreset ? ' is-preset' : '';
+    // Find the matching baseline block by name (case-insensitive prefix match
+    // so "Amp" matches "Amp (fine-tune)" if Claude relabelled it)
+    const baseBlock = baseEntry && baseEntry.blocks
+      ? baseEntry.blocks.find(bb => bb.block === b.block) ||
+        baseEntry.blocks.find(bb => bb.block.toLowerCase().split(' ')[0] === b.block.toLowerCase().split(' ')[0])
+      : null;
+    const settingChanged = baseBlock && baseBlock.setting !== b.setting;
+    const isAdded = refined && !baseBlock;
+    const blockCls = isAdded ? ' is-added' : (settingChanged ? ' is-changed' : '');
+    const settingBadge = isAdded
+      ? '<span class="tr-diff-badge added"><i class="ph-duotone ph-plus"></i> added</span>'
+      : (settingChanged ? '<span class="tr-diff-badge"><i class="ph-duotone ph-pencil-simple"></i> changed</span>' : '');
+    const wasLine = settingChanged
+      ? '<div class="tr-was"><span class="tr-was-label">was:</span> <del>' + esc(baseBlock.setting) + '</del></div>'
+      : '';
+    const params = (b.params && typeof b.params === 'object')
+      ? Object.keys(b.params).map(k => fmtParam(k, b.params[k], baseBlock ? baseBlock.params : null)).filter(Boolean).join('')
+      : '';
+    return '<div class="tr-block' + presetClass + blockCls + '">' +
+      '<div class="tr-block-head">' +
+        '<div class="tr-block-name">' + esc(b.block) + ' ' + settingBadge + '</div>' +
+        '<div class="tr-block-setting">' + esc(b.setting) + '</div>' +
+      '</div>' +
+      wasLine +
+      (params ? '<div class="tr-block-params">' + params + '</div>' : '') +
+      (b.why ? '<div class="tr-block-why">' + esc(b.why) + '</div>' : '') +
     '</div>';
   }).join('');
 
   // Measurement sub-section (collapsed by default)
   const measHtml = measurements ? splitterToneRecipeMeasurementsSnippet(measurements) : '';
+  const meaExpanded = splitterToneRecipeState.measExpandedGears.has(gearDef.gear);
+  if (meaExpanded) section.classList.add('is-meas-expanded'); else section.classList.remove('is-meas-expanded');
 
-  card.innerHTML =
-    '<div class="tr-stem-card-head">' +
-      '<span class="tr-stem-card-name"><i class="ph-duotone ' + def.icon + '"></i> ' + def.name + ' ' + refinedBadge + '</span>' +
-      '<span class="tr-stem-conf ' + confClass + '">' + confClass + '</span>' +
-    '</div>' +
-    '<div class="tr-stem-summary">' + esc(recipe.summary || '') + '</div>' +
-    refinedNoteHtml +
-    '<div class="tr-stem-recipes">' + tiles + '</div>' +
-    '<div class="tr-meas-expand" data-stem="' + stemId + '"><span class="tr-meas-caret">▸</span> Measurements</div>' +
-    '<div class="tr-meas-body">' + measHtml + '</div>';
+  body.innerHTML =
+    '<div class="tr-gear-summary">' + esc(fullRecipe.summary || '') + '</div>' +
+    refinedNote +
+    blocks +
+    (measHtml ? (
+      '<div class="tr-meas-expand" data-gear="' + esc(gearDef.gear) + '"><span class="tr-meas-caret">▸</span> Measurements</div>' +
+      '<div class="tr-meas-body">' + measHtml + '</div>'
+    ) : '');
 
-  const exp = card.querySelector('.tr-meas-expand');
-  if (exp) exp.onclick = () => card.classList.toggle('is-expanded');
+  // Wire the measurements expander
+  const exp = body.querySelector('.tr-meas-expand');
+  if (exp) exp.onclick = (e) => {
+    e.stopPropagation();
+    if (splitterToneRecipeState.measExpandedGears.has(gearDef.gear)) {
+      splitterToneRecipeState.measExpandedGears.delete(gearDef.gear);
+      section.classList.remove('is-meas-expanded');
+    } else {
+      splitterToneRecipeState.measExpandedGears.add(gearDef.gear);
+      section.classList.add('is-meas-expanded');
+    }
+  };
+
+  // Update the section header (confidence pill + refined badge)
+  splitterUpdateGearSectionHeader(gearDef, fullRecipe, refined);
+}
+
+function splitterUpdateGearSectionHeader(gearDef, fullRecipe, refined) {
+  const sectionId = 'tr-section-' + splitterToneRecipeGearKey(gearDef.gear);
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  const meta = section.querySelector('.tr-gear-section-meta');
+  if (!meta) return;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const confidence = (fullRecipe && fullRecipe.confidence) || null;
+  const confClass = ['high', 'medium', 'low'].includes(confidence) ? confidence : '';
+  const confPill = confidence ? '<span class="tr-gear-section-conf ' + confClass + '">' + confidence + '</span>' : '';
+  const refinedBadge = refined ? '<span class="tr-refined-badge"><i class="ph-duotone ph-sparkle"></i> refined</span>' : '';
+  meta.innerHTML = refinedBadge + confPill + '<i class="ph-duotone ph-caret-down tr-gear-caret"></i>';
 }
 
 // Compact measurement snippet that renders inside the expandable section
