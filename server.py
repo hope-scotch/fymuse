@@ -232,6 +232,16 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
         if system_prompt.strip():
             cmd += ["--append-system-prompt", system_prompt]
 
+        # Strip API-key-style auth from the subprocess environment so the
+        # CLI uses the user's Claude.ai SUBSCRIPTION (OAuth) auth instead.
+        # When ANTHROPIC_API_KEY is set the CLI prefers it — and if that
+        # key has no credit balance you get "Credit balance is too low"
+        # instead of the subscription quota you actually want to use.
+        # Same for the older ANTHROPIC_AUTH_TOKEN variant.
+        cli_env = os.environ.copy()
+        for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+            cli_env.pop(k, None)
+
         try:
             r = subprocess.run(
                 cmd,
@@ -239,6 +249,7 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
                 # Pass /dev/null on stdin or the CLI waits 3 s for piped input
                 stdin=subprocess.DEVNULL,
                 timeout=RECIPE_TIMEOUT_SEC,
+                env=cli_env,
             )
         except subprocess.TimeoutExpired:
             return self._send_json(504, {"ok": False, "error": f"claude CLI timed out after {RECIPE_TIMEOUT_SEC} s"})
