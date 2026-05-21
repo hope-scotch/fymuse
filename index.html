@@ -5200,9 +5200,14 @@ function rulesPickNuxFactoryPreset(m, stemId, songContext) {
   for (const p of NUX_MG30_PRESETS) {
     if (p.tone === 'bass') continue;
     if (p.tone === 'acoustic' && stemId !== 'other') continue;
-    const dCen   = Math.abs(p.centroidHz - cen) / 800;
-    const dTilt  = Math.abs(p.tilt - tilt) / 2.5;
-    const dGain  = Math.abs(p.gain - targetGain) / 3;
+    // Cap each delta at 1.0 so a single extreme-outlier measurement
+    // doesn't dominate the scoring. E.g. piano with tilt=-10.8 dB/oct
+    // is way outside every preset's tilt range; without the cap, the
+    // picker degenerates into "least awful tilt wins" regardless of
+    // the other axes.
+    const dCen   = Math.min(1.0, Math.abs(p.centroidHz - cen) / 800);
+    const dTilt  = Math.min(1.0, Math.abs(p.tilt - tilt) / 2.5);
+    const dGain  = Math.min(1.0, Math.abs(p.gain - targetGain) / 3);
     const bankPenalty = (p.tone === 'ambient') ? 0.30 * ambientMatch : 0;
     // BPM-tone match: 0 if preset's tone is "expected primary" at this BPM,
     // 0.5 if "related", 1.0 if unrelated.
@@ -5476,27 +5481,36 @@ function rulesPickModxKeysPerf(m, songContext) {
   const rt60 = m.reverb ? m.reverb.rt60 : 0;
   const crest = m.dynamics ? m.dynamics.crestDb : 10;
   const bpm = (songContext && songContext.bpm) || null;
-  // Real factory Performance names pulled from the MODX Data List PDF
-  // (see MODX_PERFORMANCES map above). Thresholds are calibrated for the
-  // demucs "other" stem (vocals/drums/bass already removed) which sits
-  // ~500-1500 Hz lower than isolated instrument recordings; we halve the
-  // isolated-instrument boundaries so the categories actually distinguish.
-  // BPM gates: slow BPM strongly favours piano/pad categories regardless
-  // of spectral measurements; fast BPM favours synth lead/comp.
+  // Picker priority: CREST FACTOR FIRST. Piano / acoustic-EP / clavi all
+  // have a sharp attack-decay envelope (high crest factor); synths and
+  // pads are continuously sustained (low crest). Centroid in demucs's
+  // "other" stem is too convergent across genres to lead with — using it
+  // as primary used to misclassify cathedral piano as warm pad. BPM is
+  // now a tiebreaker, not a hard gate.
   let category, family, label;
-  if      (bpm && bpm < 75)             { category = 'Piano / Vintage';           family = 'AWM2'; label = 'CP-style vintage piano (ballad tempo)'; }
-  else if (bpm && bpm < 75 && rt60 > 1) { category = 'Pad/Choir / Warm';          family = 'AWM2'; label = 'lush warm pad (slow tempo)'; }
-  else if (cen <  600 && crest > 12)    { category = 'Piano / Acoustic';          family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
-  else if (cen <  900 && crest < 10)    { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style electric piano, compressed for sustain'; }
-  else if (cen <  900 && crest > 14)    { category = 'Piano / Vintage';           family = 'AWM2'; label = 'CP-style vintage electric grand'; }
-  else if (cen < 1300 && rt60 > 1.5)    { category = 'Pad/Choir / Warm';          family = 'AWM2'; label = 'lush warm pad'; }
-  else if (cen < 1300 && rt60 > 0.8)    { category = 'Pad/Choir / Analog';        family = 'AWM2'; label = 'analog-style synth pad'; }
-  else if (bpm && bpm > 130 && crest < 8) { category = 'Syn Lead / Dance';        family = 'AWM2'; label = 'dance-tempo synth lead'; }
-  else if (cen < 1700 && crest > 10)    { category = 'Organ / Tone Wheel';        family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
-  else if (cen < 1700 && crest < 8)     { category = 'Syn Comp / Hook';           family = 'AWM2'; label = 'mid-register synth comp / hook'; }
-  else if (cen < 2300 && crest < 8)     { category = 'Syn Lead / Analog';         family = 'AWM2'; label = 'bright saw-based lead synth'; }
-  else if (cen < 3000)                  { category = 'Syn Lead / Digital';        family = 'FM-X'; label = 'FM digital lead'; }
-  else                                  { category = 'Chromatic Perc / Bell';     family = 'FM-X'; label = 'high-register FM bell'; }
+  // High crest (≥ 13 dB) — strong acoustic-instrument signature
+  if (crest >= 13) {
+    if      (rt60 > 2.5)    { category = 'Piano / Vintage';   family = 'AWM2'; label = 'CP-style vintage piano with long reverb tail'; }
+    else if (cen < 1500)    { category = 'Piano / Acoustic';  family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
+    else                    { category = 'Piano / Modern';    family = 'AWM2'; label = 'bright modern piano'; }
+  }
+  // Medium crest (10-13) — dynamic acoustic-ish (EP, organ, clavi)
+  else if (crest >= 10) {
+    if      (cen < 1100)    { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style EP with sustain'; }
+    else if (cen < 1500 && rt60 > 1.5) { category = 'Pad/Choir / Warm'; family = 'AWM2'; label = 'lush warm pad'; }
+    else if (cen < 1500)    { category = 'Keyboard / Clavi';   family = 'AWM2'; label = 'clavi / dynamic-keyboard tone'; }
+    else                    { category = 'Organ / Tone Wheel'; family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
+  }
+  // Low crest (< 10) — compressed / sustained synth content
+  else {
+    if      (rt60 > 2.5)                  { category = 'Pad/Choir / Warm';     family = 'AWM2'; label = 'lush warm pad with long tail'; }
+    else if (rt60 > 1.0 && cen < 1500)    { category = 'Pad/Choir / Analog';   family = 'AWM2'; label = 'analog-style synth pad'; }
+    else if (bpm && bpm > 130 && crest < 8) { category = 'Syn Lead / Dance';   family = 'AWM2'; label = 'dance-tempo synth lead'; }
+    else if (cen < 1700)                  { category = 'Syn Comp / Hook';     family = 'AWM2'; label = 'mid-register synth comp / hook'; }
+    else if (cen < 2300)                  { category = 'Syn Lead / Analog';   family = 'AWM2'; label = 'bright saw-based lead synth'; }
+    else if (cen < 3000)                  { category = 'Syn Lead / Digital';  family = 'FM-X'; label = 'FM digital lead'; }
+    else                                  { category = 'Chromatic Perc / Bell'; family = 'FM-X'; label = 'high-register FM bell'; }
+  }
   const picks = MODX_PERFORMANCES[category] || [];
   // Within the chosen category, pick a specific preset using secondary
   // measurements (RT60 + crest + BPM) so different songs in the same
