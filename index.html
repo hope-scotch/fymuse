@@ -1231,6 +1231,90 @@
   .listener-chroma-bar-label { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-family: var(--font-mono); font-size: 9.5px; color: var(--muted); }
   .listener-chroma-wrap { padding-bottom: 24px; }
 
+  /* === Ear Training — full main view (mirrors Listener / Splitter) === */
+  body.view-eartraining #info-sidebar { display: none; }
+  body.view-eartraining main > #graph-panel { flex: 1 1 100%; }
+
+  .et-view { display: flex; flex-direction: column; gap: 18px; max-width: 980px; }
+  .et-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+  .et-header-left { flex: 1 1 auto; min-width: 0; }
+  .et-title { font-size: 20px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 10px; }
+  .et-title small { font-weight: 400; color: var(--muted); font-size: 13px; letter-spacing: 0; }
+  .et-sub { font-size: 13px; color: var(--text-2); margin-top: 6px; }
+  .et-header-right { display: flex; gap: 12px; align-items: center; }
+  .et-mode-toggle { display: flex; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 3px; }
+  .et-mode-btn { padding: 7px 14px; background: transparent; border: none; color: var(--muted); border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; font-family: var(--font-sans); transition: all 0.15s; display: inline-flex; align-items: center; gap: 4px; }
+  .et-mode-btn:hover:not(.et-mode-disabled) { color: var(--text); }
+  .et-mode-btn.active { background: var(--accent); color: #1a1a1a; }
+  .et-mode-disabled { opacity: 0.6; cursor: not-allowed; }
+  .et-soon { font-size: 9px; background: var(--accent-2); color: #0a0a10; padding: 1px 5px; border-radius: 3px; margin-left: 2px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .et-status { display: flex; gap: 24px; align-items: center; padding: 14px 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; flex-wrap: wrap; }
+  .et-status-meta { display: flex; gap: 24px; }
+  .et-progress, .et-score { display: flex; flex-direction: column; gap: 2px; }
+  .et-progress-label, .et-score-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
+  .et-progress-count, .et-score-val { font-size: 17px; font-weight: 700; color: var(--text); font-family: var(--font-mono); }
+  .et-controls { display: flex; gap: 8px; margin-left: auto; }
+
+  .et-btn { padding: 9px 16px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 600; font-family: var(--font-sans); display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+  .et-btn:hover { border-color: var(--accent-2); color: var(--accent-2); background: var(--accent-2-soft); }
+  .et-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .et-btn-primary { background: var(--accent); border-color: var(--accent); color: #1a1a1a; }
+  .et-btn-primary:hover { background: var(--accent); border-color: var(--accent); color: #1a1a1a; opacity: 0.88; }
+
+  .et-idle { padding: 36px 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; text-align: center; }
+  .et-idle-icon { font-size: 38px; color: var(--accent); margin-bottom: 12px; }
+  .et-idle h3 { margin: 0 0 8px; font-size: 18px; font-weight: 700; color: var(--text); }
+  .et-idle p { margin: 0 0 20px; color: var(--text-2); font-size: 13.5px; line-height: 1.55; max-width: 540px; margin-left: auto; margin-right: auto; }
+
+  .et-steps { display: flex; flex-direction: column; gap: 12px; }
+  .et-step { padding: 16px 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; transition: all 0.2s; }
+  .et-step.is-future { opacity: 0.45; }
+  .et-step.is-done { background: var(--panel-2); border-color: rgba(34, 197, 94, 0.35); }
+  .et-step.is-active { border-color: var(--accent); background: var(--panel); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .et-step-head { display: flex; align-items: center; gap: 12px; }
+  .et-step-number { width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; font-family: var(--font-mono); flex-shrink: 0; }
+  .et-step.is-active .et-step-number { background: var(--accent); color: #1a1a1a; }
+  .et-step.is-done .et-step-number { background: #22c55e; color: #0a0a10; }
+  .et-step-title { flex: 1; font-size: 15px; font-weight: 600; color: var(--text); }
+  .et-step.is-future .et-step-title { color: var(--muted); }
+  .et-hint-btn { padding: 6px 11px; background: transparent; border: 1px solid var(--border); color: var(--text-2); border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; font-family: var(--font-sans); display: inline-flex; align-items: center; gap: 5px; transition: all 0.15s; }
+  .et-hint-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .et-step-prompt { margin: 10px 0 14px; color: var(--text-2); font-size: 13.5px; }
+  .et-step-content { margin-top: 6px; }
+  .et-step-answer { color: var(--text-2); font-size: 13px; }
+  .et-step-answer strong { color: var(--text); }
+  .et-step-locked { color: var(--muted); font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+  .et-step-feedback { margin-top: 10px; padding: 8px 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 6px; font-size: 12.5px; }
+  .et-step-meta { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: var(--font-mono); }
+
+  .et-chromatic { display: grid; grid-template-columns: repeat(12, minmax(48px, 1fr)); gap: 6px; align-items: stretch; }
+  .et-key { padding: 14px 4px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: var(--font-mono); transition: all 0.12s; line-height: 1.15; }
+  .et-key:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); transform: translateY(-1px); }
+  .et-key-sharp { background: var(--panel-3); color: var(--text-2); font-size: 11.5px; padding-top: 12px; padding-bottom: 12px; }
+  .et-key-sharp .et-alt { color: var(--muted); font-size: 9.5px; margin-left: 2px; }
+  .et-key-natural .et-alt { display: none; }
+
+  .et-button-bank { display: flex; flex-wrap: wrap; gap: 8px; }
+  .et-bank-btn { padding: 11px 18px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 7px; cursor: pointer; font-size: 13.5px; font-weight: 600; font-family: var(--font-sans); transition: all 0.15s; }
+  .et-bank-btn:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); transform: translateY(-1px); }
+
+  .et-final-reveal { padding: 14px 18px; background: linear-gradient(180deg, rgba(34,197,94,0.08), rgba(34,197,94,0.02)); border: 1px solid rgba(34, 197, 94, 0.35); border-radius: 10px; display: flex; align-items: center; gap: 14px; }
+  .et-final-icon { font-size: 22px; color: #22c55e; }
+  .et-final-text { font-size: 14px; color: var(--text); }
+  .et-final-text strong { font-family: var(--font-mono); color: var(--accent); }
+
+  .et-results { padding: 24px 28px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+  .et-results-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 12px; }
+  .et-results-title { font-size: 18px; font-weight: 700; color: var(--text); }
+  .et-results-score { font-size: 22px; font-weight: 700; color: var(--accent); font-family: var(--font-mono); }
+  .et-results-pct { color: var(--text-2); font-size: 14px; margin-left: 8px; }
+  .et-results-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
+  .et-result-row { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 14px; padding: 10px 14px; background: var(--panel-2); border-radius: 7px; }
+  .et-result-num { color: var(--muted); font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+  .et-result-chord { color: var(--text); font-weight: 600; font-size: 14px; font-family: var(--font-mono); }
+  .et-result-score { color: var(--accent); font-family: var(--font-mono); font-weight: 700; font-size: 13.5px; }
+
 </style>
 </head>
 <body>
@@ -1245,6 +1329,7 @@
         <button id="header-customchord-btn" class="header-action-btn" title="Build a custom chord (e.g. Cm7add9add11)"><i class="ph-duotone ph-pencil-line"></i> Custom Chord</button>
         <button id="header-listener-btn" class="header-action-btn" title="Listen to audio · detect chord · suggest next"><i class="ph-duotone ph-microphone"></i> Listener</button>
         <button id="header-splitter-btn" class="header-action-btn" title="Upload a song · split into stems · per-stem chord detection"><i class="ph-duotone ph-stack"></i> Splitter</button>
+        <button id="header-eartraining-btn" class="header-action-btn" title="Ear Training · identify chords by ear, step by step"><i class="ph-duotone ph-headphones"></i> Ear Training</button>
         <button id="header-songwriter-btn" class="header-action-btn" title="Open Songwriter shutter (Shift+S)"><i class="ph-duotone ph-note-pencil"></i> Songwriter</button>
         <button id="header-sidebar-btn" class="header-action-btn active" title="Toggle reference sidebar (templates, chord detail, substitutions)"><i class="ph-duotone ph-sidebar-simple"></i> Sidebar</button>
       </div>
@@ -2404,6 +2489,19 @@ const GENRES = {
     name: 'Splitter',
     iconHtml: '<i class="ph-duotone ph-stack sz-sm"></i>',
     isSplitter: true,
+    bpm: 100,
+    moods: [],
+    chords: [],
+    transitions: [],
+    progressions: [],
+    substitutions: [],
+    categories: [],
+  },
+
+  eartraining: {
+    name: 'Ear Training',
+    iconHtml: '<i class="ph-duotone ph-headphones sz-sm"></i>',
+    isEarTraining: true,
     bpm: 100,
     moods: [],
     chords: [],
@@ -4764,46 +4862,46 @@ const NUX_COMPS = {
 // context breaks the tie).
 const NUX_MG30_PRESETS = [
   // Bank 01 — Clean / Ambient
-  { slot: '01A', name: 'Twinverb',       tone: 'clean',     gain: 1, centroidHz: 2400, tilt:  1.0, amp: 'Twin Rvb',   notes: 'warm clear Fender clean with room verb' },
-  { slot: '01B', name: 'JC-120 Clean',   tone: 'clean',     gain: 1, centroidHz: 2800, tilt:  2.0, amp: 'Jazz Clean', notes: 'Roland JC-120 chorus + room — sparkly modern clean' },
-  { slot: '01C', name: 'AC30',           tone: 'clean',     gain: 2, centroidHz: 3100, tilt:  3.0, amp: 'Class A 30', notes: 'Vox AC30 vintage chime + tape delay' },
-  { slot: '01D', name: 'Acoustic Sim',   tone: 'acoustic',  gain: 0, centroidHz: 2200, tilt:  1.5, amp: 'Optima Air', notes: 'electric → acoustic emulation' },
+  { slot: '01A', name: 'Twinverb',       tone: 'clean',     gain: 1, centroidHz: 1560, tilt:  1.0, amp: 'Twin Rvb',   notes: 'warm clear Fender clean with room verb' },
+  { slot: '01B', name: 'JC-120 Clean',   tone: 'clean',     gain: 1, centroidHz: 1820, tilt:  2.0, amp: 'Jazz Clean', notes: 'Roland JC-120 chorus + room — sparkly modern clean' },
+  { slot: '01C', name: 'AC30',           tone: 'clean',     gain: 2, centroidHz: 2015, tilt:  3.0, amp: 'Class A 30', notes: 'Vox AC30 vintage chime + tape delay' },
+  { slot: '01D', name: 'Acoustic Sim',   tone: 'acoustic',  gain: 0, centroidHz: 1430, tilt:  1.5, amp: 'Optima Air', notes: 'electric → acoustic emulation' },
   // Bank 02 — Crunch / Blues
-  { slot: '02A', name: 'Plexi',          tone: 'crunch',    gain: 4, centroidHz: 2000, tilt:  0.5, amp: 'Plexi 45',   notes: 'classic 70s rock rhythm crunch' },
-  { slot: '02B', name: 'Tweed',          tone: 'mid-gain',  gain: 5, centroidHz: 1800, tilt: -0.5, amp: 'Tweedy',     notes: 'tweed blues with TS in front' },
-  { slot: '02C', name: 'Deluxe',         tone: 'mid-gain',  gain: 4, centroidHz: 2100, tilt:  0.0, amp: 'Deluxe Rvb', notes: 'thick dynamic Fender Deluxe lead tone' },
-  { slot: '02D', name: 'Morning Drive',  tone: 'overdrive', gain: 3, centroidHz: 2300, tilt:  0.5, amp: 'Twin Rvb',   notes: 'transparent overdrive (Morning Glory pedal)' },
+  { slot: '02A', name: 'Plexi',          tone: 'crunch',    gain: 4, centroidHz: 1300, tilt:  0.5, amp: 'Plexi 45',   notes: 'classic 70s rock rhythm crunch' },
+  { slot: '02B', name: 'Tweed',          tone: 'mid-gain',  gain: 5, centroidHz: 1170, tilt: -0.5, amp: 'Tweedy',     notes: 'tweed blues with TS in front' },
+  { slot: '02C', name: 'Deluxe',         tone: 'mid-gain',  gain: 4, centroidHz: 1365, tilt:  0.0, amp: 'Deluxe Rvb', notes: 'thick dynamic Fender Deluxe lead tone' },
+  { slot: '02D', name: 'Morning Drive',  tone: 'overdrive', gain: 3, centroidHz: 1495, tilt:  0.5, amp: 'Twin Rvb',   notes: 'transparent overdrive (Morning Glory pedal)' },
   // Bank 03 — Overdrive / Hard Rock
-  { slot: '03A', name: 'JCM800',         tone: 'hard-rock', gain: 6, centroidHz: 1900, tilt:  0.0, amp: 'Brit 800',   notes: '80s hard rock / metal rhythm — the workhorse' },
-  { slot: '03B', name: 'Soldano',        tone: 'hi-gain',   gain: 7, centroidHz: 2000, tilt:  0.5, amp: 'Slo 100',    notes: 'Soldano SLO-100 singing lead with delay' },
-  { slot: '03C', name: 'Friedman',       tone: 'hi-gain',   gain: 7, centroidHz: 2200, tilt:  0.5, amp: 'Fireman HBE',notes: 'aggressive Friedman punch' },
-  { slot: '03D', name: 'Heavy Crunch',   tone: 'hard-rock', gain: 6, centroidHz: 1700, tilt: -1.0, amp: 'Brit 800',   notes: 'tight defined rhythm crunch' },
+  { slot: '03A', name: 'JCM800',         tone: 'hard-rock', gain: 6, centroidHz: 1235, tilt:  0.0, amp: 'Brit 800',   notes: '80s hard rock / metal rhythm — the workhorse' },
+  { slot: '03B', name: 'Soldano',        tone: 'hi-gain',   gain: 7, centroidHz: 1300, tilt:  0.5, amp: 'Slo 100',    notes: 'Soldano SLO-100 singing lead with delay' },
+  { slot: '03C', name: 'Friedman',       tone: 'hi-gain',   gain: 7, centroidHz: 1430, tilt:  0.5, amp: 'Fireman HBE',notes: 'aggressive Friedman punch' },
+  { slot: '03D', name: 'Heavy Crunch',   tone: 'hard-rock', gain: 6, centroidHz: 1105, tilt: -1.0, amp: 'Brit 800',   notes: 'tight defined rhythm crunch' },
   // Bank 04 — Metal / High-Gain
-  { slot: '04A', name: 'Dual Rectifier', tone: 'metal',     gain: 8, centroidHz: 1500, tilt: -2.0, amp: 'Dual Rect',  notes: 'scooped modern metal' },
-  { slot: '04B', name: 'Fireball',       tone: 'metal',     gain: 8, centroidHz: 2400, tilt:  1.5, amp: 'Fireman HBE',notes: 'ENGL Fireball — cutting extreme metal lead' },
-  { slot: '04C', name: 'Diezel',         tone: 'metal',     gain: 8, centroidHz: 1800, tilt: -1.0, amp: 'Die VH4',    notes: 'Diezel VH4 — tight ultra-high gain' },
-  { slot: '04D', name: '8-String Djent', tone: 'metal',     gain: 9, centroidHz: 1600, tilt: -1.5, amp: 'Die VH4',    notes: 'aggressive articulate modern metal / djent' },
+  { slot: '04A', name: 'Dual Rectifier', tone: 'metal',     gain: 8, centroidHz: 975, tilt: -2.0, amp: 'Dual Rect',  notes: 'scooped modern metal' },
+  { slot: '04B', name: 'Fireball',       tone: 'metal',     gain: 8, centroidHz: 1560, tilt:  1.5, amp: 'Fireman HBE',notes: 'ENGL Fireball — cutting extreme metal lead' },
+  { slot: '04C', name: 'Diezel',         tone: 'metal',     gain: 8, centroidHz: 1170, tilt: -1.0, amp: 'Die VH4',    notes: 'Diezel VH4 — tight ultra-high gain' },
+  { slot: '04D', name: '8-String Djent', tone: 'metal',     gain: 9, centroidHz: 1040, tilt: -1.5, amp: 'Die VH4',    notes: 'aggressive articulate modern metal / djent' },
   // Bank 05 — Pop / Funk / Modulation
-  { slot: '05A', name: 'Funk Clean',     tone: 'clean',     gain: 1, centroidHz: 3200, tilt:  2.5, amp: 'Twin Rvb',   notes: 'Strat-style funk with auto-wah' },
-  { slot: '05B', name: 'Phaser 90',      tone: 'clean',     gain: 2, centroidHz: 2700, tilt:  1.5, amp: 'Deluxe Rvb', notes: 'phase-shifting pop ballad' },
-  { slot: '05C', name: 'Flanger',        tone: 'clean',     gain: 3, centroidHz: 2600, tilt:  1.0, amp: 'Brit 800',   notes: '80s sweeping rhythm' },
-  { slot: '05D', name: 'Detune',         tone: 'clean',     gain: 1, centroidHz: 2900, tilt:  1.5, amp: 'Twin Rvb',   notes: 'spacious stereo chorus' },
+  { slot: '05A', name: 'Funk Clean',     tone: 'clean',     gain: 1, centroidHz: 2080, tilt:  2.5, amp: 'Twin Rvb',   notes: 'Strat-style funk with auto-wah' },
+  { slot: '05B', name: 'Phaser 90',      tone: 'clean',     gain: 2, centroidHz: 1755, tilt:  1.5, amp: 'Deluxe Rvb', notes: 'phase-shifting pop ballad' },
+  { slot: '05C', name: 'Flanger',        tone: 'clean',     gain: 3, centroidHz: 1690, tilt:  1.0, amp: 'Brit 800',   notes: '80s sweeping rhythm' },
+  { slot: '05D', name: 'Detune',         tone: 'clean',     gain: 1, centroidHz: 1885, tilt:  1.5, amp: 'Twin Rvb',   notes: 'spacious stereo chorus' },
   // Bank 06 — Lead / Solo
-  { slot: '06A', name: 'Mark IIC+',      tone: 'lead',      gain: 7, centroidHz: 2200, tilt:  0.5, amp: 'Cali Crunch',notes: 'Mesa Mark IIC+ singing progressive lead' },
-  { slot: '06B', name: 'Solo Delay',     tone: 'lead',      gain: 6, centroidHz: 2300, tilt:  0.5, amp: 'Brit 800',   notes: 'analog echo lead' },
-  { slot: '06C', name: 'Shimmer Verb',   tone: 'lead',      gain: 5, centroidHz: 2500, tilt:  1.0, amp: 'Plexi 45',   notes: 'ambient cathedral-like leads' },
-  { slot: '06D', name: 'Octave Lead',    tone: 'lead',      gain: 6, centroidHz: 2400, tilt:  0.5, amp: 'Brit 800',   notes: 'adds upper/lower octave to solos' },
+  { slot: '06A', name: 'Mark IIC+',      tone: 'lead',      gain: 7, centroidHz: 1430, tilt:  0.5, amp: 'Cali Crunch',notes: 'Mesa Mark IIC+ singing progressive lead' },
+  { slot: '06B', name: 'Solo Delay',     tone: 'lead',      gain: 6, centroidHz: 1495, tilt:  0.5, amp: 'Brit 800',   notes: 'analog echo lead' },
+  { slot: '06C', name: 'Shimmer Verb',   tone: 'lead',      gain: 5, centroidHz: 1625, tilt:  1.0, amp: 'Plexi 45',   notes: 'ambient cathedral-like leads' },
+  { slot: '06D', name: 'Octave Lead',    tone: 'lead',      gain: 6, centroidHz: 1560, tilt:  0.5, amp: 'Brit 800',   notes: 'adds upper/lower octave to solos' },
   // Bank 07 — Ambient / Experimental
-  { slot: '07A', name: 'Reverse Delay',  tone: 'ambient',   gain: 3, centroidHz: 2600, tilt:  1.0, amp: 'Class A 30', notes: 'psychedelic reverse echo' },
-  { slot: '07B', name: 'Tremolo',        tone: 'ambient',   gain: 2, centroidHz: 2400, tilt:  0.5, amp: 'Deluxe Rvb', notes: 'pulsating vintage tremolo' },
-  { slot: '07C', name: 'Rotary',         tone: 'ambient',   gain: 3, centroidHz: 2200, tilt:  0.5, amp: 'Class A 30', notes: 'Leslie speaker simulation' },
-  { slot: '07D', name: 'Ambient Wash',   tone: 'ambient',   gain: 2, centroidHz: 2800, tilt:  1.5, amp: 'Twin Rvb',   notes: 'deep infinite reverb pads' },
+  { slot: '07A', name: 'Reverse Delay',  tone: 'ambient',   gain: 3, centroidHz: 1690, tilt:  1.0, amp: 'Class A 30', notes: 'psychedelic reverse echo' },
+  { slot: '07B', name: 'Tremolo',        tone: 'ambient',   gain: 2, centroidHz: 1560, tilt:  0.5, amp: 'Deluxe Rvb', notes: 'pulsating vintage tremolo' },
+  { slot: '07C', name: 'Rotary',         tone: 'ambient',   gain: 3, centroidHz: 1430, tilt:  0.5, amp: 'Class A 30', notes: 'Leslie speaker simulation' },
+  { slot: '07D', name: 'Ambient Wash',   tone: 'ambient',   gain: 2, centroidHz: 1820, tilt:  1.5, amp: 'Twin Rvb',   notes: 'deep infinite reverb pads' },
   // Bank 08 — Bass / Special  (bass-leaning; we exclude bass stem so these
   // rarely get picked, but kept for completeness)
-  { slot: '08A', name: 'Clean Bass',     tone: 'bass',      gain: 1, centroidHz:  500, tilt: -3.0, amp: 'Bassguy',    notes: 'transparent bass DI' },
-  { slot: '08B', name: 'Drive Bass',     tone: 'bass',      gain: 5, centroidHz:  700, tilt: -1.5, amp: 'Bassguy',    notes: 'SVT-based dirty bass' },
-  { slot: '08C', name: 'Synth Bass',     tone: 'bass',      gain: 3, centroidHz:  900, tilt: -1.0, amp: 'Mld',        notes: 'sub-harmonic / octave synth bass' },
-  { slot: '08D', name: 'Lo-Fi/Utility',  tone: 'special',   gain: 2, centroidHz: 1500, tilt: -2.5, amp: 'Jazz Clean', notes: 'radio / telephone effect' },
+  { slot: '08A', name: 'Clean Bass',     tone: 'bass',      gain: 1, centroidHz: 325, tilt: -3.0, amp: 'Bassguy',    notes: 'transparent bass DI' },
+  { slot: '08B', name: 'Drive Bass',     tone: 'bass',      gain: 5, centroidHz: 455, tilt: -1.5, amp: 'Bassguy',    notes: 'SVT-based dirty bass' },
+  { slot: '08C', name: 'Synth Bass',     tone: 'bass',      gain: 3, centroidHz: 585, tilt: -1.0, amp: 'Mld',        notes: 'sub-harmonic / octave synth bass' },
+  { slot: '08D', name: 'Lo-Fi/Utility',  tone: 'special',   gain: 2, centroidHz: 975, tilt: -2.5, amp: 'Jazz Clean', notes: 'radio / telephone effect' },
 ];
 
 // ---- Yamaha MODX Performance bank (from official Data List PDF) ----------
@@ -5299,14 +5397,17 @@ function rulesRecipeModx(m, stemId) {
     // 'other' — assume keys/synth content
     blocks.push(rulesPickModxKeysPerf(m));
   }
+  // FX blocks below the Performance are labelled "(fine-tune)" to mirror
+  // the NUX layout — they're optional tweaks ON TOP of the loaded Performance,
+  // not a parallel chain.
   const comp = rulesPickCompressorBlock(m, 'Yamaha MODX 6');
-  if (comp) blocks.push({ ...comp, block: 'Insertion FX · Compressor' });
+  if (comp) blocks.push({ ...comp, block: 'Insertion FX · Compressor (fine-tune)' });
   const eq = rulesPickEQBlock(m, 'Yamaha MODX 6');
-  if (eq) blocks.push({ ...eq, block: 'Insertion FX · EQ' });
+  if (eq) blocks.push({ ...eq, block: 'Insertion FX · EQ (fine-tune)' });
   const mod = rulesPickModulationBlock(m, 'Yamaha MODX 6');
-  if (mod) blocks.push({ ...mod, block: 'System FX · Chorus' });
+  if (mod) blocks.push({ ...mod, block: 'System FX · Chorus (fine-tune)' });
   const rvb = rulesPickReverbBlock(m, 'Yamaha MODX 6');
-  if (rvb) blocks.push({ ...rvb, block: 'System FX · Reverb' });
+  if (rvb) blocks.push({ ...rvb, block: 'System FX · Reverb (fine-tune)' });
 
   return { gear: 'Yamaha MODX 6', applicable: true, reason_if_not: '', blocks };
 }
@@ -5333,27 +5434,33 @@ function rulesPickModxBassPerf(m) {
 }
 
 function rulesPickModxKeysPerf(m) {
-  const cen = m.spectrum ? m.spectrum.centroidHz : 2000;
+  const cen = m.spectrum ? m.spectrum.centroidHz : 1300;
   const rt60 = m.reverb ? m.reverb.rt60 : 0;
-  const crest = m.dynamics ? m.dynamics.crestDb : 12;
+  const crest = m.dynamics ? m.dynamics.crestDb : 10;
   // Real factory Performance names pulled from the MODX Data List PDF
-  // (see MODX_PERFORMANCES map above). The picker chooses a category +
-  // a representative name from that category; the user can swap to any
-  // sibling preset in the same bank if our specific choice doesn't fit.
+  // (see MODX_PERFORMANCES map above). Thresholds are calibrated for the
+  // demucs "other" stem (vocals/drums/bass already removed) which sits
+  // ~500-1500 Hz lower than isolated instrument recordings; we halve the
+  // isolated-instrument boundaries so the categories actually distinguish.
   let category, family, label;
-  if      (cen < 1200 && crest > 12)  { category = 'Piano / Acoustic';     family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
-  else if (cen < 1500 && crest < 10)  { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style electric piano, compressed for sustain'; }
-  else if (cen < 1500 && crest > 14)  { category = 'Piano / Vintage';     family = 'AWM2'; label = 'CP-style vintage electric grand'; }
-  else if (cen < 2000 && rt60 > 1.5)  { category = 'Pad/Choir / Warm';    family = 'AWM2'; label = 'lush warm pad'; }
-  else if (cen < 2000 && rt60 > 0.8)  { category = 'Pad/Choir / Analog';  family = 'AWM2'; label = 'analog-style synth pad'; }
-  else if (cen < 2500 && crest > 10)  { category = 'Organ / Tone Wheel';  family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
-  else if (cen < 2500 && crest < 8)   { category = 'Syn Comp / Hook';     family = 'AWM2'; label = 'mid-register synth comp / hook'; }
-  else if (cen < 3500 && crest < 8)   { category = 'Syn Lead / Analog';   family = 'AWM2'; label = 'bright saw-based lead synth'; }
-  else if (cen < 4500)                { category = 'Syn Lead / Digital';  family = 'FM-X'; label = 'FM digital lead'; }
-  else                                { category = 'Chromatic Perc / Bell'; family = 'FM-X'; label = 'high-register FM bell'; }
+  if      (cen <  600 && crest > 12)  { category = 'Piano / Acoustic';          family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
+  else if (cen <  900 && crest < 10)  { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style electric piano, compressed for sustain'; }
+  else if (cen <  900 && crest > 14)  { category = 'Piano / Vintage';           family = 'AWM2'; label = 'CP-style vintage electric grand'; }
+  else if (cen < 1300 && rt60 > 1.5)  { category = 'Pad/Choir / Warm';          family = 'AWM2'; label = 'lush warm pad'; }
+  else if (cen < 1300 && rt60 > 0.8)  { category = 'Pad/Choir / Analog';        family = 'AWM2'; label = 'analog-style synth pad'; }
+  else if (cen < 1700 && crest > 10)  { category = 'Organ / Tone Wheel';        family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
+  else if (cen < 1700 && crest < 8)   { category = 'Syn Comp / Hook';           family = 'AWM2'; label = 'mid-register synth comp / hook'; }
+  else if (cen < 2300 && crest < 8)   { category = 'Syn Lead / Analog';         family = 'AWM2'; label = 'bright saw-based lead synth'; }
+  else if (cen < 3000)                { category = 'Syn Lead / Digital';        family = 'FM-X'; label = 'FM digital lead'; }
+  else                                { category = 'Chromatic Perc / Bell';     family = 'FM-X'; label = 'high-register FM bell'; }
   const picks = MODX_PERFORMANCES[category] || [];
-  const perf = picks[0] || '(no preset in category)';
-  const alts = picks.slice(1).join(', ');
+  // Within the chosen category, pick a specific preset using a secondary
+  // measurement so different windows in the same category get different
+  // names rather than always picking picks[0]. RT60 is a good secondary
+  // axis (different reverb characters within a category).
+  const idx = picks.length ? Math.floor(((rt60 || 0) * 3 + (crest || 0) * 0.3)) % picks.length : 0;
+  const perf = picks[idx] || '(no preset in category)';
+  const alts = picks.filter((_, i) => i !== idx).join(', ');
   return {
     block: 'Performance (load this)',
     setting: perf,
@@ -5593,6 +5700,24 @@ function setupHeaderButtons() {
       renderAll();
     };
   }
+  // Ear Training: full main view (mirrors Listener / Splitter)
+  const eartrainingBtn = document.getElementById('header-eartraining-btn');
+  if (eartrainingBtn) {
+    eartrainingBtn.onclick = () => {
+      state.genreKey = 'eartraining';
+      state.genre = GENRES.eartraining;
+      state.selectedMoods = new Set();
+      state.selectedChord = null;
+      state.voicingIndex = 0;
+      builderState.bpm = state.genre.bpm;
+      const tempoEl = document.getElementById('builder-tempo');
+      const tempoVal = document.getElementById('builder-tempo-val');
+      if (tempoEl) tempoEl.value = state.genre.bpm;
+      if (tempoVal) tempoVal.textContent = state.genre.bpm;
+      closeAllSidePanels();
+      renderAll();
+    };
+  }
   // Reference sidebar toggle
   const sidebarBtn = document.getElementById('header-sidebar-btn');
   const sidebar = document.getElementById('info-sidebar');
@@ -5674,6 +5799,8 @@ function syncHeaderButtonStates() {
   if (listenerBtn) listenerBtn.classList.toggle('active', state.genreKey === 'listener');
   const splitterBtn = document.getElementById('header-splitter-btn');
   if (splitterBtn) splitterBtn.classList.toggle('active', state.genreKey === 'splitter');
+  const eartrainingBtn = document.getElementById('header-eartraining-btn');
+  if (eartrainingBtn) eartrainingBtn.classList.toggle('active', state.genreKey === 'eartraining');
 }
 
 // === Songwriter ===
@@ -5919,6 +6046,7 @@ function renderAll() {
   // Toggle body classes so CSS can hide info-sidebar etc. while in main views
   document.body.classList.toggle('view-listener', !!(state.genre && state.genre.isListener));
   document.body.classList.toggle('view-splitter', !!(state.genre && state.genre.isSplitter));
+  document.body.classList.toggle('view-eartraining', !!(state.genre && state.genre.isEarTraining));
   renderGenrePicker();
   renderKeyPicker();
   renderInstrumentPicker();
@@ -5930,6 +6058,9 @@ function renderAll() {
   } else if (state.genre.isSplitter) {
     showSplitterView();
     renderSplitter();
+  } else if (state.genre.isEarTraining) {
+    showEarTrainingView();
+    renderEarTraining();
   } else if (state.genre.isPlayground) {
     showPlaygroundView();
     renderPlayground();
@@ -5946,7 +6077,7 @@ function renderAll() {
 
 // View toggle: hide all graph-panel children except the active view child (playground / listener / graph).
 const ALWAYS_VISIBLE_CHILDREN = new Set();
-const SUBVIEW_CHILDREN = new Set(['playground-view', 'listener-view', 'splitter-view']);
+const SUBVIEW_CHILDREN = new Set(['playground-view', 'listener-view', 'splitter-view', 'ear-training-view']);
 function showPlaygroundView() {
   const panel = document.getElementById('graph-panel');
   let pv = document.getElementById('playground-view');
@@ -13497,6 +13628,538 @@ function setupListener() {
 
 renderAll();
 setupDrawer();
+//==================================================================
+// EAR TRAINING — phase 1: fixed key (C major), diatonic chord family,
+// 4-step identification (bass → root → quality → 7th type), inversions
+// allowed, immediate retry on wrong, audio hints, 10-chord sessions.
+//==================================================================
+const ET_CHROMATIC = [
+  { name: 'C',  sharp: false },
+  { name: 'C#', alt: 'Db', sharp: true  },
+  { name: 'D',  sharp: false },
+  { name: 'D#', alt: 'Eb', sharp: true  },
+  { name: 'E',  sharp: false },
+  { name: 'F',  sharp: false },
+  { name: 'F#', alt: 'Gb', sharp: true  },
+  { name: 'G',  sharp: false },
+  { name: 'G#', alt: 'Ab', sharp: true  },
+  { name: 'A',  sharp: false },
+  { name: 'A#', alt: 'Bb', sharp: true  },
+  { name: 'B',  sharp: false },
+];
+
+// Diatonic-to-C-major chord pool. Triads + their 7ths. Inversion picked per test.
+const ET_POOL_LEVEL_1 = [
+  { root: 'C', quality: '' },     { root: 'D', quality: 'm' },     { root: 'E', quality: 'm' },
+  { root: 'F', quality: '' },     { root: 'G', quality: '' },      { root: 'A', quality: 'm' },
+  { root: 'B', quality: 'dim' },
+  { root: 'C', quality: 'maj7' }, { root: 'D', quality: 'm7' },    { root: 'E', quality: 'm7' },
+  { root: 'F', quality: 'maj7' }, { root: 'G', quality: '7' },     { root: 'A', quality: 'm7' },
+  { root: 'B', quality: 'm7b5' },
+];
+
+const ET_QUALITY_OPTIONS = [
+  { id: 'maj', label: 'Major' },
+  { id: 'min', label: 'Minor' },
+  { id: 'dim', label: 'Diminished' },
+  { id: 'aug', label: 'Augmented' },
+  { id: 'sus', label: 'Sus' },
+];
+
+const ET_SEVENTH_OPTIONS = [
+  { id: 'none',  label: 'No 7th' },
+  { id: 'maj7',  label: 'maj7' },
+  { id: '7',     label: 'dom7' },
+  { id: 'm7',    label: 'm7' },
+  { id: 'mmaj7', label: 'm(maj7)' },
+  { id: 'dim7',  label: 'dim7' },
+  { id: 'm7b5',  label: 'm7♭5' },
+];
+
+// Map a raw CHORD_TYPES quality (e.g., 'm7', 'maj7', '') to a step-3 category id.
+function etQualityCategory(q) {
+  if (['m','m7','m9','mmaj7'].includes(q)) return 'min';
+  if (['dim','dim7','m7b5'].includes(q)) return 'dim';
+  if (['aug','aug7'].includes(q)) return 'aug';
+  if (q && q.indexOf('sus') >= 0) return 'sus';
+  return 'maj';
+}
+
+// Map raw quality to step-4 seventh-type id.
+function etSeventhCategory(q) {
+  if (q === 'maj7' || q === 'maj9') return 'maj7';
+  if (q === '7' || q === '9' || q === '13' || q === '7sus4' || q === '7alt') return '7';
+  if (q === 'm7' || q === 'm9') return 'm7';
+  if (q === 'm7b5') return 'm7b5';
+  if (q === 'dim7') return 'dim7';
+  if (q === 'mmaj7') return 'mmaj7';
+  return 'none';
+}
+
+// Build a playable voicing: bass at oct 2, upper structure as close-position root-position at oct 4.
+function etBuildVoicing(chord, inversionIdx) {
+  const bassPitch = chord.notes[inversionIdx % chord.notes.length];
+  const rootMidi = noteToMidi(chord.root, 4);
+  const upperMidi = chord.type.intervals.map(iv => rootMidi + iv);
+  const bassMidi = noteToMidi(bassPitch, 2);
+  return {
+    bassNote: bassPitch,
+    chordRoot: chord.root,
+    bassMidi,
+    upperMidi,
+    upperNotes: upperMidi.map(midiToNoteName),
+    bassMidiName: midiToNoteName(bassMidi),
+    slashLabel: inversionIdx === 0 ? chord.name : (chord.name + '/' + bassPitch),
+  };
+}
+
+const etState = {
+  sessionLength: 10,
+  currentIdx: 0,            // 0..sessionLength-1 during play
+  results: [],              // per-chord {chord, voicing, score, missed}
+  step: 0,                  // 0=bass, 1=root, 2=quality, 3=seventh
+  currentChord: null,
+  currentVoicing: null,
+  attempts: 0,              // wrong attempts on current step
+  hintsUsed: 0,             // hints on current step
+  scoreCurrent: 0,          // pts earned on the chord in progress
+  scoreTotal: 0,            // session total
+  answers: {},              // user's accepted answers, keyed by step
+  mode: 'click',
+  phase: 'idle',            // 'idle' | 'playing' | 'between' | 'done'
+  feedback: null,           // transient feedback message for current step
+};
+
+function etPickChord() {
+  const pool = ET_POOL_LEVEL_1;
+  const item = pool[Math.floor(Math.random() * pool.length)];
+  const chord = buildChord(item.root, item.quality);
+  // Inversion weights: root 55%, 1st 25%, 2nd 14%, 3rd 6% (only if 7th).
+  const inversions = chord.notes.length;
+  const r = Math.random();
+  let invIdx;
+  if (r < 0.55) invIdx = 0;
+  else if (r < 0.80) invIdx = 1;
+  else if (r < 0.94) invIdx = 2;
+  else invIdx = inversions > 3 ? 3 : 0;
+  if (invIdx >= inversions) invIdx = 0;
+  return { chord, voicing: etBuildVoicing(chord, invIdx), invIdx };
+}
+
+async function etPlayCadence() {
+  if (!instrumentInstance) await setInstrument(currentInstrument);
+  const t0 = Tone.now() + 0.05;
+  const cadence = [
+    { notes: ['C2','C4','E4','G4'], at: 0.00 },
+    { notes: ['F2','C4','F4','A4'], at: 0.42 },
+    { notes: ['G2','B3','D4','G4'], at: 0.84 },
+    { notes: ['C2','C4','E4','G4'], at: 1.26 },
+  ];
+  cadence.forEach(c => instrumentInstance.triggerAttackRelease(c.notes, '4n', t0 + c.at));
+  return new Promise(r => setTimeout(r, 1900));
+}
+
+async function etPlayChord(voicing, duration='2n') {
+  if (!voicing) return;
+  if (!instrumentInstance) await setInstrument(currentInstrument);
+  const notes = [midiToNoteName(voicing.bassMidi), ...voicing.upperNotes];
+  instrumentInstance.triggerAttackRelease(notes, duration);
+}
+
+async function etPlaySingleNote(noteName, duration='2n') {
+  if (!instrumentInstance) await setInstrument(currentInstrument);
+  instrumentInstance.triggerAttackRelease(noteName, duration);
+}
+
+// Per-step audio hint: play the isolated tone that the current step is asking for.
+async function etPlayHint() {
+  if (!etState.currentVoicing) return;
+  const v = etState.currentVoicing;
+  const c = etState.currentChord;
+  if (!instrumentInstance) await setInstrument(currentInstrument);
+  switch (etState.step) {
+    case 0: // bass: play just the bass note
+      instrumentInstance.triggerAttackRelease(midiToNoteName(v.bassMidi), '2n');
+      break;
+    case 1: // root: play the root in mid octave
+      instrumentInstance.triggerAttackRelease(c.root + '4', '2n');
+      break;
+    case 2: { // quality: play root + 3rd dyad
+      const rootMidi = noteToMidi(c.root, 4);
+      const thirdInterval = c.type.intervals[1];
+      instrumentInstance.triggerAttackRelease(
+        [midiToNoteName(rootMidi), midiToNoteName(rootMidi + thirdInterval)], '2n');
+      break;
+    }
+    case 3: { // 7th: play root + 7th dyad (or root + octave if no 7th)
+      const rootMidi = noteToMidi(c.root, 4);
+      const has7th = c.type.intervals.length >= 4;
+      const top = has7th ? c.type.intervals[3] : 12;
+      instrumentInstance.triggerAttackRelease(
+        [midiToNoteName(rootMidi), midiToNoteName(rootMidi + top)], '2n');
+      break;
+    }
+  }
+  if (etState.hintsUsed === 0) etState.scoreCurrent = Math.max(0, etState.scoreCurrent - 2);
+  etState.hintsUsed++;
+  renderEarTraining();
+}
+
+function etGetCorrectAnswer(step) {
+  const v = etState.currentVoicing;
+  const c = etState.currentChord;
+  switch (step) {
+    case 0: return v.bassNote;
+    case 1: return c.root;
+    case 2: return etQualityCategory(c.quality);
+    case 3: return etSeventhCategory(c.quality);
+  }
+  return null;
+}
+
+function etTotalSteps() { return 4; }
+
+// Awarded points on success: 5 base, -3 for each retry, -2 if hint used (one-time).
+function etScoreStep() {
+  const base = 5;
+  const penalty = (etState.attempts * 3) + (etState.hintsUsed > 0 ? 2 : 0);
+  return Math.max(0, base - penalty);
+}
+
+async function etNextChord() {
+  if (etState.currentIdx >= etState.sessionLength) {
+    etState.phase = 'done';
+    renderEarTraining();
+    return;
+  }
+  const pick = etPickChord();
+  etState.currentChord = pick.chord;
+  etState.currentVoicing = pick.voicing;
+  etState.step = 0;
+  etState.attempts = 0;
+  etState.hintsUsed = 0;
+  etState.scoreCurrent = 0;
+  etState.answers = {};
+  etState.feedback = null;
+  etState.phase = 'playing';
+  renderEarTraining();
+  try {
+    await etPlayCadence();
+    await new Promise(r => setTimeout(r, 220));
+    await etPlayChord(pick.voicing);
+  } catch (e) { console.warn('ET audio failed', e); }
+}
+
+function etStartSession() {
+  etState.currentIdx = 0;
+  etState.results = [];
+  etState.scoreTotal = 0;
+  etState.phase = 'playing';
+  etNextChord();
+}
+
+function etSubmitAnswer(value) {
+  if (etState.phase !== 'playing') return;
+  const correct = etGetCorrectAnswer(etState.step);
+  // For notes (steps 0 & 1), accept enharmonic equivalents.
+  let normalized = value;
+  if ((etState.step === 0 || etState.step === 1) && typeof noteIndex === 'function') {
+    if (noteIndex(value) === noteIndex(correct)) normalized = correct;
+  }
+  const ok = normalized === correct;
+  if (ok) {
+    etState.answers[etState.step] = normalized;
+    etState.scoreCurrent += etScoreStep();
+    etState.attempts = 0;
+    etState.hintsUsed = 0;
+    etState.feedback = null;
+    etState.step++;
+    if (etState.step >= etTotalSteps()) {
+      // Chord complete — bank it, advance.
+      etState.scoreTotal += etState.scoreCurrent;
+      etState.results.push({
+        chord: etState.currentChord,
+        voicing: etState.currentVoicing,
+        answers: Object.assign({}, etState.answers),
+        score: etState.scoreCurrent,
+      });
+      etState.currentIdx++;
+      etState.phase = 'between';
+      renderEarTraining();
+      setTimeout(() => etNextChord(), 1600);
+      return;
+    }
+  } else {
+    etState.attempts++;
+    etState.feedback = 'Not quite — try again.';
+  }
+  renderEarTraining();
+}
+
+//==================================================================
+// EAR TRAINING — view rendering
+//==================================================================
+function showEarTrainingView() {
+  const panel = document.getElementById('graph-panel');
+  let ev = document.getElementById('ear-training-view');
+  if (!ev) {
+    ev = document.createElement('div');
+    ev.id = 'ear-training-view';
+    panel.insertBefore(ev, panel.firstChild);
+  }
+  Array.from(panel.children).forEach(child => {
+    if (ALWAYS_VISIBLE_CHILDREN.has(child.id)) { child.style.display = ''; return; }
+    child.style.display = child.id === 'ear-training-view' ? 'block' : 'none';
+  });
+}
+
+function renderEarTraining() {
+  const view = document.getElementById('ear-training-view');
+  if (!view) return;
+
+  if (etState.phase === 'idle') {
+    view.innerHTML = etRenderIdle();
+    const start = view.querySelector('#et-start-btn');
+    if (start) start.onclick = () => etStartSession();
+    return;
+  }
+  if (etState.phase === 'done') {
+    view.innerHTML = etRenderShell(etRenderResults());
+    etWireShellHandlers(view);
+    const restart = view.querySelector('#et-restart-btn');
+    if (restart) restart.onclick = () => etStartSession();
+    return;
+  }
+  // playing / between
+  view.innerHTML = etRenderShell(etRenderSession());
+  etWireShellHandlers(view);
+  etWireStepHandlers(view);
+}
+
+function etRenderShell(bodyHtml) {
+  const scoreNow = etState.scoreTotal + (etState.phase === 'playing' ? etState.scoreCurrent : 0);
+  const counterIdx = Math.min(etState.currentIdx + (etState.phase === 'playing' ? 1 : 0), etState.sessionLength);
+  return `
+    <div class="et-view">
+      <div class="et-header">
+        <div class="et-header-left">
+          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· Phase 1 — diatonic C major</small></div>
+          <div class="et-sub">Listen to the chord. Identify the bass, then the root, then the quality and 7th. Inversions allowed.</div>
+        </div>
+        <div class="et-header-right">
+          <div class="et-mode-toggle" id="et-mode-toggle">
+            <button class="et-mode-btn ${etState.mode==='click'?'active':''}" data-mode="click">Click</button>
+            <button class="et-mode-btn et-mode-disabled" data-mode="sing" title="Coming soon — sing the bass and root into the mic">Sing<span class="et-soon">soon</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="et-status">
+        <div class="et-status-meta">
+          <div class="et-progress">
+            <span class="et-progress-label">Chord</span>
+            <span class="et-progress-count">${counterIdx} / ${etState.sessionLength}</span>
+          </div>
+          <div class="et-score">
+            <span class="et-score-label">Score</span>
+            <span class="et-score-val">${scoreNow}</span>
+          </div>
+        </div>
+        <div class="et-controls">
+          <button class="et-btn" id="et-replay-cadence-btn" title="Re-anchor your ear to C major"><i class="ph-duotone ph-music-notes"></i> Cadence</button>
+          <button class="et-btn et-btn-primary" id="et-replay-btn"><i class="ph-duotone ph-play"></i> Replay chord</button>
+        </div>
+      </div>
+      <div class="et-body" id="et-body">${bodyHtml}</div>
+    </div>
+  `;
+}
+
+function etRenderIdle() {
+  return `
+    <div class="et-view">
+      <div class="et-header">
+        <div class="et-header-left">
+          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· Phase 1 — diatonic C major</small></div>
+          <div class="et-sub">A 10-chord session. Each test plays a I–IV–V–I cadence to anchor your ear in C major, then plays one diatonic chord (triad or 7th, any inversion). You identify it in four steps — bass, root, quality, 7th type — with audio hints available at every step.</div>
+        </div>
+      </div>
+      <div class="et-idle">
+        <div class="et-idle-icon"><i class="ph-duotone ph-ear"></i></div>
+        <h3>Ready to listen?</h3>
+        <p>You'll hear a quick cadence in C, then the test chord. Use the chromatic strip and quality buttons to identify it step by step. Wrong answers don't count against you fatally — they cost points, then you can retry.</p>
+        <button class="et-btn et-btn-primary" id="et-start-btn"><i class="ph-duotone ph-play"></i> Start session</button>
+      </div>
+    </div>
+  `;
+}
+
+function etRenderSession() {
+  if (etState.phase === 'between') {
+    const last = etState.results[etState.results.length - 1];
+    return `
+      <div class="et-final-reveal">
+        <div class="et-final-icon"><i class="ph-duotone ph-check-circle"></i></div>
+        <div class="et-final-text">
+          Chord ${etState.currentIdx} was <strong>${last.voicing.slashLabel}</strong>
+          · ${last.score} / 20 pts
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="et-steps">
+      ${etRenderStep(0)}
+      ${etRenderStep(1)}
+      ${etRenderStep(2)}
+      ${etRenderStep(3)}
+    </div>
+  `;
+}
+
+function etRenderStep(step) {
+  const isPast = step < etState.step;
+  const isActive = step === etState.step && etState.phase === 'playing';
+  const isFuture = step > etState.step;
+
+  const titles = ['Bass note', 'Root', 'Quality', '7th type'];
+  const prompts = [
+    "What's the lowest note you hear? (The bass.)",
+    "What's the root of the chord on top?",
+    "What kind of triad is it? (major / minor / etc.)",
+    "Does the chord include a 7th — and which kind?",
+  ];
+
+  let stateClass = '';
+  if (isPast) stateClass = 'is-done';
+  else if (isActive) stateClass = 'is-active';
+  else stateClass = 'is-future';
+
+  let content = '';
+  if (isActive) {
+    if (step === 0 || step === 1)      content = etRenderChromaticStrip();
+    else if (step === 2)               content = etRenderButtonBank(ET_QUALITY_OPTIONS);
+    else if (step === 3)               content = etRenderButtonBank(ET_SEVENTH_OPTIONS);
+  } else if (isPast) {
+    const answer = etState.answers[step];
+    content = `<div class="et-step-answer">Answered: <strong>${etFormatAnswer(step, answer)}</strong></div>`;
+  } else {
+    content = `<div class="et-step-locked"><i class="ph-duotone ph-lock-simple"></i> Locked</div>`;
+  }
+
+  const hintHtml = isActive
+    ? `<button class="et-hint-btn" data-action="hint"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintsUsed>0?' ('+etState.hintsUsed+')':''}</button>`
+    : '';
+  const feedbackHtml = isActive && etState.feedback
+    ? `<div class="et-step-feedback">${etState.feedback}</div>`
+    : '';
+  const promptHtml = isActive
+    ? `<div class="et-step-prompt">${prompts[step]}</div>`
+    : '';
+  const metaHtml = isActive && etState.attempts > 0
+    ? `<div class="et-step-meta">Attempts: ${etState.attempts}${etState.hintsUsed>0?' · Hint used':''}</div>`
+    : '';
+
+  return `
+    <div class="et-step ${stateClass}" data-step="${step}">
+      <div class="et-step-head">
+        <div class="et-step-number">${step + 1}</div>
+        <div class="et-step-title">${titles[step]}</div>
+        ${hintHtml}
+      </div>
+      ${promptHtml}
+      <div class="et-step-content">${content}</div>
+      ${feedbackHtml}
+      ${metaHtml}
+    </div>
+  `;
+}
+
+function etRenderChromaticStrip() {
+  return `
+    <div class="et-chromatic">
+      ${ET_CHROMATIC.map(n => {
+        const cls = n.sharp ? 'et-key et-key-sharp' : 'et-key et-key-natural';
+        const label = n.alt
+          ? `${n.name}<span class="et-alt">/${n.alt}</span>`
+          : n.name;
+        return `<button class="${cls}" data-note="${n.name}">${label}</button>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function etRenderButtonBank(options) {
+  return `
+    <div class="et-button-bank">
+      ${options.map(o => `<button class="et-bank-btn" data-id="${o.id}">${o.label}</button>`).join('')}
+    </div>
+  `;
+}
+
+function etFormatAnswer(step, value) {
+  if (step === 0 || step === 1) return value;
+  if (step === 2) {
+    const opt = ET_QUALITY_OPTIONS.find(o => o.id === value);
+    return opt ? opt.label : value;
+  }
+  if (step === 3) {
+    const opt = ET_SEVENTH_OPTIONS.find(o => o.id === value);
+    return opt ? opt.label : value;
+  }
+  return value;
+}
+
+function etRenderResults() {
+  const total = etState.scoreTotal;
+  const max = etState.sessionLength * 20;
+  const pct = max > 0 ? Math.round((total / max) * 100) : 0;
+  return `
+    <div class="et-results">
+      <div class="et-results-head">
+        <div class="et-results-title">Session complete</div>
+        <div class="et-results-score">${total} / ${max}<span class="et-results-pct">${pct}%</span></div>
+      </div>
+      <div class="et-results-list">
+        ${etState.results.map((r, i) => `
+          <div class="et-result-row">
+            <div class="et-result-num">${i + 1}</div>
+            <div class="et-result-chord">${r.voicing.slashLabel}</div>
+            <div class="et-result-score">${r.score} / 20</div>
+          </div>
+        `).join('')}
+      </div>
+      <button class="et-btn et-btn-primary" id="et-restart-btn"><i class="ph-duotone ph-arrow-clockwise"></i> Start a new session</button>
+    </div>
+  `;
+}
+
+function etWireShellHandlers(view) {
+  const replay = view.querySelector('#et-replay-btn');
+  if (replay) replay.onclick = () => etPlayChord(etState.currentVoicing);
+  const cad = view.querySelector('#et-replay-cadence-btn');
+  if (cad) cad.onclick = () => etPlayCadence();
+  view.querySelectorAll('.et-mode-btn').forEach(btn => {
+    btn.onclick = () => {
+      if (btn.classList.contains('et-mode-disabled')) return;
+      view.querySelectorAll('.et-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      etState.mode = btn.dataset.mode;
+    };
+  });
+}
+
+function etWireStepHandlers(view) {
+  view.querySelectorAll('[data-action="hint"]').forEach(btn => {
+    btn.onclick = () => etPlayHint();
+  });
+  view.querySelectorAll('.et-key').forEach(btn => {
+    btn.onclick = () => etSubmitAnswer(btn.dataset.note);
+  });
+  view.querySelectorAll('.et-bank-btn').forEach(btn => {
+    btn.onclick = () => etSubmitAnswer(btn.dataset.id);
+  });
+}
+
 setupMelodyMode();
 setupSongwriter();
 setupMetronome();
