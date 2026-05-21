@@ -5438,20 +5438,22 @@ function rulesPickModxKeysPerf(m) {
   const rt60 = m.reverb ? m.reverb.rt60 : 0;
   const crest = m.dynamics ? m.dynamics.crestDb : 10;
   // Real factory Performance names pulled from the MODX Data List PDF
-  // (see MODX_PERFORMANCES map above). Thresholds are calibrated for the
-  // demucs "other" stem (vocals/drums/bass already removed) which sits
-  // ~500-1500 Hz lower than isolated instrument recordings; we halve the
-  // isolated-instrument boundaries so the categories actually distinguish.
+  // (see MODX_PERFORMANCES map above). Thresholds match the centroid
+  // ranges we actually see on demucs's "other" stem — a cathedral piano
+  // lands ~700-900 Hz, so Piano/Acoustic must catch cen<1200, not <600.
+  // The NUX preset map still uses the ×0.65 recalibration because those
+  // values were authored against isolated guitar; the MODX boundaries
+  // below were already authored for the "other"-stem context.
   let category, family, label;
-  if      (cen <  600 && crest > 12)  { category = 'Piano / Acoustic';          family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
-  else if (cen <  900 && crest < 10)  { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style electric piano, compressed for sustain'; }
-  else if (cen <  900 && crest > 14)  { category = 'Piano / Vintage';           family = 'AWM2'; label = 'CP-style vintage electric grand'; }
-  else if (cen < 1300 && rt60 > 1.5)  { category = 'Pad/Choir / Warm';          family = 'AWM2'; label = 'lush warm pad'; }
-  else if (cen < 1300 && rt60 > 0.8)  { category = 'Pad/Choir / Analog';        family = 'AWM2'; label = 'analog-style synth pad'; }
-  else if (cen < 1700 && crest > 10)  { category = 'Organ / Tone Wheel';        family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
-  else if (cen < 1700 && crest < 8)   { category = 'Syn Comp / Hook';           family = 'AWM2'; label = 'mid-register synth comp / hook'; }
-  else if (cen < 2300 && crest < 8)   { category = 'Syn Lead / Analog';         family = 'AWM2'; label = 'bright saw-based lead synth'; }
-  else if (cen < 3000)                { category = 'Syn Lead / Digital';        family = 'FM-X'; label = 'FM digital lead'; }
+  if      (cen < 1200 && crest > 12)  { category = 'Piano / Acoustic';          family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
+  else if (cen < 1500 && crest < 10)  { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style electric piano, compressed for sustain'; }
+  else if (cen < 1500 && crest > 14)  { category = 'Piano / Vintage';           family = 'AWM2'; label = 'CP-style vintage electric grand'; }
+  else if (cen < 2000 && rt60 > 1.5)  { category = 'Pad/Choir / Warm';          family = 'AWM2'; label = 'lush warm pad'; }
+  else if (cen < 2000 && rt60 > 0.8)  { category = 'Pad/Choir / Analog';        family = 'AWM2'; label = 'analog-style synth pad'; }
+  else if (cen < 2500 && crest > 10)  { category = 'Organ / Tone Wheel';        family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
+  else if (cen < 2500 && crest < 8)   { category = 'Syn Comp / Hook';           family = 'AWM2'; label = 'mid-register synth comp / hook'; }
+  else if (cen < 3500 && crest < 8)   { category = 'Syn Lead / Analog';         family = 'AWM2'; label = 'bright saw-based lead synth'; }
+  else if (cen < 4500)                { category = 'Syn Lead / Digital';        family = 'FM-X'; label = 'FM digital lead'; }
   else                                { category = 'Chromatic Perc / Bell';     family = 'FM-X'; label = 'high-register FM bell'; }
   const picks = MODX_PERFORMANCES[category] || [];
   // Within the chosen category, pick a specific preset using a secondary
