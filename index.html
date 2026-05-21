@@ -690,7 +690,6 @@
 
   /* Gear section content: summary + recipe blocks + (optional) measurements */
   .tr-gear-summary { color: var(--text-2); font-size: 12.5px; line-height: 1.55; }
-  .tr-fingerprint { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); padding: 6px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; letter-spacing: 0.3px; }
   .tr-gear-na { padding: 12px 14px; background: var(--panel-2); border-left: 3px solid var(--muted); color: var(--muted); font-style: italic; font-size: 12px; border-radius: 0 4px 4px 0; }
   .tr-block { padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; }
   .tr-block.is-preset { border-color: var(--accent-2); background: rgba(120,180,255,0.07); }
@@ -4947,11 +4946,10 @@ const MODX_PERFORMANCES = {
 // gear_recipes[]} schema the renderer + AI path already use.
 function rulesGenerateRecipe(measurements, stemId, songContext) {
   const m = measurements || {};
-  const ctx = songContext || {};
   const gearRecipes = [
-    rulesRecipeNux(m, stemId, ctx),
-    rulesRecipeRoland(m, stemId, ctx),
-    rulesRecipeModx(m, stemId, ctx),
+    rulesRecipeNux(m, stemId),
+    rulesRecipeRoland(m, stemId),
+    rulesRecipeModx(m, stemId),
   ];
   return {
     stem: stemId,
@@ -5125,12 +5123,12 @@ function rulesPickEQBlock(m, gearName) {
 // X" — one button-press on the device. Block-level details (Amp / Drive /
 // Cab / Mod / Reverb) follow as a fine-tuning section in case the user
 // wants to nudge the preset or build their own from scratch.
-function rulesRecipeNux(m, stemId, songContext) {
+function rulesRecipeNux(m, stemId) {
   const reason = rulesStemNotApplicableReason('NUX MG-30', stemId);
   if (reason) return { gear: 'NUX MG-30', applicable: false, reason_if_not: reason, blocks: [] };
 
   // Pick the best factory preset by tonal-fingerprint distance.
-  const preset = rulesPickNuxFactoryPreset(m, stemId, songContext);
+  const preset = rulesPickNuxFactoryPreset(m, stemId);
   const blocks = [];
   if (preset) blocks.push(preset);
 
@@ -5154,81 +5152,40 @@ function rulesRecipeNux(m, stemId, songContext) {
   return { gear: 'NUX MG-30', applicable: true, reason_if_not: '', blocks };
 }
 
-// BPM → expected tone families. Different songs at different tempos
-// should pick different presets even if their "other"-stem spectra
-// converge to similar centroids/tilts.
-function rulesBpmExpectedTones(bpm) {
-  if (!bpm)             return { primary: ['mid-gain', 'crunch', 'hard-rock'], related: ['clean', 'lead'] };
-  if (bpm < 75)         return { primary: ['ambient', 'clean'],                 related: ['acoustic', 'lead']     };
-  if (bpm < 100)        return { primary: ['clean', 'mid-gain', 'acoustic'],    related: ['crunch', 'ambient']    };
-  if (bpm < 130)        return { primary: ['mid-gain', 'crunch', 'overdrive'],  related: ['clean', 'hard-rock']   };
-  if (bpm < 160)        return { primary: ['hard-rock', 'hi-gain', 'lead'],     related: ['crunch', 'metal']      };
-  return                       { primary: ['metal', 'hi-gain'],                 related: ['hard-rock', 'lead']    };
-}
-
 // Score each factory preset against the measured tonal fingerprint and
 // return the best match. Lower score = better match.
-function rulesPickNuxFactoryPreset(m, stemId, songContext) {
+function rulesPickNuxFactoryPreset(m, stemId) {
   if (stemId === 'bass') return null; // bass excluded from this device per user config
   const cen = m.spectrum ? m.spectrum.centroidHz : 1800;
   const tilt = m.spectrum ? m.spectrum.tiltDbPerOct : 0;
   const crest = m.dynamics ? m.dynamics.crestDb : 12;
   const rt60 = m.reverb ? m.reverb.rt60 : 0.6;
-  const bpm = (songContext && songContext.bpm) || null;
   // Saturation level: crest < 6 → very compressed/distorted (gain 7-9);
   // 6-8 → hi-gain (gain 6-8); 8-11 → mid-gain (gain 3-6); >11 → clean (gain 0-3).
-  let targetGain = crest > 14 ? 1 : crest > 11 ? 2 : crest > 9 ? 4 : crest > 6.5 ? 6 : crest > 4 ? 8 : 9;
-  // BPM nudge on implied gain — demucs's "other" stem flattens crest factor
-  // across genres (drums + bass are gone, so transients are softer than the
-  // original mix). Fast tempos almost always mean more saturation in the
-  // original guitar, even if the residual stem doesn't show it. Slow tempos
-  // imply cleaner content.
-  if (bpm) {
-    if (bpm > 155)        targetGain = Math.min(9, targetGain + 2);
-    else if (bpm > 125)   targetGain = Math.min(9, targetGain + 1);
-    else if (bpm < 80)    targetGain = Math.max(0, targetGain - 1);
-  }
+  const targetGain = crest > 14 ? 1 : crest > 11 ? 2 : crest > 9 ? 4 : crest > 6.5 ? 6 : crest > 4 ? 8 : 9;
   // Ambient bank (07) presets expect long reverb tails. Penalise them when
   // the song's reverb is short, otherwise they win clean-gain ties unfairly.
-  const ambientMatch = rt60 > 1.8 ? 0 : (1.8 - rt60) / 1.8;
-  // BPM-driven tone preference. Crucial: different songs at different tempos
-  // measure to similar "other"-stem centroids but should pick very different
-  // presets. Without BPM bias every pop/rock song would converge on the same
-  // ~1400 Hz centroid match.
-  const expected = rulesBpmExpectedTones(bpm);
+  const ambientMatch = rt60 > 1.8 ? 0 : (1.8 - rt60) / 1.8;  // 0..1, higher = less ambient
   let best = null, bestScore = Infinity;
   for (const p of NUX_MG30_PRESETS) {
-    if (p.tone === 'bass') continue;
-    if (p.tone === 'acoustic' && stemId !== 'other') continue;
-    // Cap each delta at 1.0 so a single extreme-outlier measurement
-    // doesn't dominate the scoring. E.g. piano with tilt=-10.8 dB/oct
-    // is way outside every preset's tilt range; without the cap, the
-    // picker degenerates into "least awful tilt wins" regardless of
-    // the other axes.
-    const dCen   = Math.min(1.0, Math.abs(p.centroidHz - cen) / 800);
-    const dTilt  = Math.min(1.0, Math.abs(p.tilt - tilt) / 2.5);
-    const dGain  = Math.min(1.0, Math.abs(p.gain - targetGain) / 3);
+    if (p.tone === 'bass') continue; // skip bass presets for non-bass stems
+    if (p.tone === 'acoustic' && stemId !== 'other') continue; // acoustic preset only for 'other'
+    const dCen   = Math.abs(p.centroidHz - cen) / 800;          // ~normalised
+    const dTilt  = Math.abs(p.tilt - tilt) / 2.5;
+    const dGain  = Math.abs(p.gain - targetGain) / 3;
+    // Bank-character penalty: ambient bank (07) only when measured RT60 is long
     const bankPenalty = (p.tone === 'ambient') ? 0.30 * ambientMatch : 0;
-    // BPM-tone match: 0 if preset's tone is "expected primary" at this BPM,
-    // 0.5 if "related", 1.0 if unrelated.
-    const bpmMatch = expected.primary.indexOf(p.tone) >= 0 ? 0
-                   : expected.related.indexOf(p.tone) >= 0 ? 0.5
-                   : 1.0;
-    // Score weights: centroid converges across genres in demucs-other-stem
-    // (gets only 0.10), tilt + gain are reliable spectral discriminators,
-    // BPM is the strongest cross-song signal (0.30).
-    const score = dCen * 0.10 + dTilt * 0.25 + dGain * 0.30 + bpmMatch * 0.30 + bankPenalty;
+    const score  = dCen * 0.40 + dTilt * 0.25 + dGain * 0.25 + bankPenalty;
     if (score < bestScore) { bestScore = score; best = p; }
   }
   if (!best) return null;
   const conf = bestScore < 0.35 ? 'strong' : bestScore < 0.65 ? 'reasonable' : 'best-fit-but-loose';
-  const bpmStr = bpm ? bpm + ' BPM' : 'BPM unknown';
   return {
     block: 'Preset (load this)',
     setting: best.slot + ' · ' + best.name,
     params: { bank: best.slot.slice(0, 2), slot: best.slot.slice(2), match: conf },
-    why: best.notes + ' — measured: cen ' + cen.toFixed(0) + ' Hz, tilt ' + tilt.toFixed(1) + ' dB/oct, crest ' + crest.toFixed(1) + ' dB, ' + bpmStr +
-         ' (preset target: ' + best.centroidHz + ' Hz, ' + best.tilt.toFixed(1) + ' dB/oct, gain ' + best.gain + ', tone: ' + best.tone + ').',
+    why: best.notes + ' — measured centroid ' + cen.toFixed(0) + ' Hz, tilt ' + tilt.toFixed(1) + ' dB/oct, crest ' + crest.toFixed(1) + ' dB ' +
+         '(preset target: ' + best.centroidHz + ' Hz, ' + best.tilt.toFixed(1) + ' dB/oct, gain ' + best.gain + ').',
   };
 }
 
@@ -5354,7 +5311,7 @@ function rulesPickGuitarCab(m) {
 }
 
 // ---- Roland kit generator ------------------------------------------------
-function rulesRecipeRoland(m, stemId, songContext) {
+function rulesRecipeRoland(m, stemId) {
   const reason = rulesStemNotApplicableReason('Roland electronic drums', stemId);
   if (reason) return { gear: 'Roland electronic drums', applicable: false, reason_if_not: reason, blocks: [] };
 
@@ -5424,7 +5381,7 @@ function rulesPickDrumLowEnd(m) {
 }
 
 // ---- MODX 6 generator ----------------------------------------------------
-function rulesRecipeModx(m, stemId, songContext) {
+function rulesRecipeModx(m, stemId) {
   const reason = rulesStemNotApplicableReason('Yamaha MODX 6', stemId);
   if (reason) return { gear: 'Yamaha MODX 6', applicable: false, reason_if_not: reason, blocks: [] };
 
@@ -5438,7 +5395,7 @@ function rulesRecipeModx(m, stemId, songContext) {
     blocks.push(rulesPickModxVocalFX(m));
   } else {
     // 'other' — assume keys/synth content
-    blocks.push(rulesPickModxKeysPerf(m, songContext));
+    blocks.push(rulesPickModxKeysPerf(m));
   }
   // FX blocks below the Performance are labelled "(fine-tune)" to mirror
   // the NUX layout — they're optional tweaks ON TOP of the loaded Performance,
@@ -5476,48 +5433,32 @@ function rulesPickModxBassPerf(m) {
   };
 }
 
-function rulesPickModxKeysPerf(m, songContext) {
+function rulesPickModxKeysPerf(m) {
   const cen = m.spectrum ? m.spectrum.centroidHz : 1300;
   const rt60 = m.reverb ? m.reverb.rt60 : 0;
   const crest = m.dynamics ? m.dynamics.crestDb : 10;
-  const bpm = (songContext && songContext.bpm) || null;
-  // Picker priority: CREST FACTOR FIRST. Piano / acoustic-EP / clavi all
-  // have a sharp attack-decay envelope (high crest factor); synths and
-  // pads are continuously sustained (low crest). Centroid in demucs's
-  // "other" stem is too convergent across genres to lead with — using it
-  // as primary used to misclassify cathedral piano as warm pad. BPM is
-  // now a tiebreaker, not a hard gate.
+  // Real factory Performance names pulled from the MODX Data List PDF
+  // (see MODX_PERFORMANCES map above). Thresholds are calibrated for the
+  // demucs "other" stem (vocals/drums/bass already removed) which sits
+  // ~500-1500 Hz lower than isolated instrument recordings; we halve the
+  // isolated-instrument boundaries so the categories actually distinguish.
   let category, family, label;
-  // High crest (≥ 13 dB) — strong acoustic-instrument signature
-  if (crest >= 13) {
-    if      (rt60 > 2.5)    { category = 'Piano / Vintage';   family = 'AWM2'; label = 'CP-style vintage piano with long reverb tail'; }
-    else if (cen < 1500)    { category = 'Piano / Acoustic';  family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
-    else                    { category = 'Piano / Modern';    family = 'AWM2'; label = 'bright modern piano'; }
-  }
-  // Medium crest (10-13) — dynamic acoustic-ish (EP, organ, clavi)
-  else if (crest >= 10) {
-    if      (cen < 1100)    { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style EP with sustain'; }
-    else if (cen < 1500 && rt60 > 1.5) { category = 'Pad/Choir / Warm'; family = 'AWM2'; label = 'lush warm pad'; }
-    else if (cen < 1500)    { category = 'Keyboard / Clavi';   family = 'AWM2'; label = 'clavi / dynamic-keyboard tone'; }
-    else                    { category = 'Organ / Tone Wheel'; family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
-  }
-  // Low crest (< 10) — compressed / sustained synth content
-  else {
-    if      (rt60 > 2.5)                  { category = 'Pad/Choir / Warm';     family = 'AWM2'; label = 'lush warm pad with long tail'; }
-    else if (rt60 > 1.0 && cen < 1500)    { category = 'Pad/Choir / Analog';   family = 'AWM2'; label = 'analog-style synth pad'; }
-    else if (bpm && bpm > 130 && crest < 8) { category = 'Syn Lead / Dance';   family = 'AWM2'; label = 'dance-tempo synth lead'; }
-    else if (cen < 1700)                  { category = 'Syn Comp / Hook';     family = 'AWM2'; label = 'mid-register synth comp / hook'; }
-    else if (cen < 2300)                  { category = 'Syn Lead / Analog';   family = 'AWM2'; label = 'bright saw-based lead synth'; }
-    else if (cen < 3000)                  { category = 'Syn Lead / Digital';  family = 'FM-X'; label = 'FM digital lead'; }
-    else                                  { category = 'Chromatic Perc / Bell'; family = 'FM-X'; label = 'high-register FM bell'; }
-  }
+  if      (cen <  600 && crest > 12)  { category = 'Piano / Acoustic';          family = 'AWM2'; label = 'acoustic grand piano (CFX-family)'; }
+  else if (cen <  900 && crest < 10)  { category = 'Keyboard / Electric Piano'; family = 'AWM2'; label = 'Rhodes-style electric piano, compressed for sustain'; }
+  else if (cen <  900 && crest > 14)  { category = 'Piano / Vintage';           family = 'AWM2'; label = 'CP-style vintage electric grand'; }
+  else if (cen < 1300 && rt60 > 1.5)  { category = 'Pad/Choir / Warm';          family = 'AWM2'; label = 'lush warm pad'; }
+  else if (cen < 1300 && rt60 > 0.8)  { category = 'Pad/Choir / Analog';        family = 'AWM2'; label = 'analog-style synth pad'; }
+  else if (cen < 1700 && crest > 10)  { category = 'Organ / Tone Wheel';        family = 'AWM2'; label = 'Hammond B3 tonewheel'; }
+  else if (cen < 1700 && crest < 8)   { category = 'Syn Comp / Hook';           family = 'AWM2'; label = 'mid-register synth comp / hook'; }
+  else if (cen < 2300 && crest < 8)   { category = 'Syn Lead / Analog';         family = 'AWM2'; label = 'bright saw-based lead synth'; }
+  else if (cen < 3000)                { category = 'Syn Lead / Digital';        family = 'FM-X'; label = 'FM digital lead'; }
+  else                                { category = 'Chromatic Perc / Bell';     family = 'FM-X'; label = 'high-register FM bell'; }
   const picks = MODX_PERFORMANCES[category] || [];
-  // Within the chosen category, pick a specific preset using secondary
-  // measurements (RT60 + crest + BPM) so different songs in the same
-  // category get different names rather than always picking picks[0].
-  const idx = picks.length
-    ? Math.floor(((rt60 || 0) * 3 + (crest || 0) * 0.3 + (bpm || 100) * 0.05)) % picks.length
-    : 0;
+  // Within the chosen category, pick a specific preset using a secondary
+  // measurement so different windows in the same category get different
+  // names rather than always picking picks[0]. RT60 is a good secondary
+  // axis (different reverb characters within a category).
+  const idx = picks.length ? Math.floor(((rt60 || 0) * 3 + (crest || 0) * 0.3)) % picks.length : 0;
   const perf = picks[idx] || '(no preset in category)';
   const alts = picks.filter((_, i) => i !== idx).join(', ');
   return {
@@ -8491,30 +8432,7 @@ function splitterRenderGearSection(gearDef, stemDef, fullRecipe, measurements, b
   const meaExpanded = splitterToneRecipeState.measExpandedGears.has(gearDef.gear);
   if (meaExpanded) section.classList.add('is-meas-expanded'); else section.classList.remove('is-meas-expanded');
 
-  // Build a one-line fingerprint of the measurements + BPM. Visible at the
-  // top of the section so the user can see at a glance what drove the
-  // preset pick — and whether their songs are actually measuring
-  // differently or genuinely converging.
-  const fpParts = [];
-  if (measurements && measurements.spectrum) {
-    fpParts.push('cen ' + measurements.spectrum.centroidHz.toFixed(0) + ' Hz');
-    fpParts.push('tilt ' + measurements.spectrum.tiltDbPerOct.toFixed(1) + ' dB/oct');
-  }
-  if (measurements && measurements.dynamics) {
-    fpParts.push('crest ' + measurements.dynamics.crestDb.toFixed(1) + ' dB');
-  }
-  if (measurements && measurements.reverb && measurements.reverb.rt60) {
-    fpParts.push('RT60 ' + measurements.reverb.rt60.toFixed(2) + ' s');
-  }
-  if (splitterState && splitterState.detectedTempo) {
-    fpParts.push(splitterState.detectedTempo + ' BPM');
-  }
-  const fingerprintHtml = fpParts.length
-    ? '<div class="tr-fingerprint">' + fpParts.map(esc).join('  ·  ') + '</div>'
-    : '';
-
   body.innerHTML =
-    fingerprintHtml +
     '<div class="tr-gear-summary">' + esc(fullRecipe.summary || '') + '</div>' +
     refinedNote +
     blocks +
