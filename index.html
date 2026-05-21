@@ -8168,12 +8168,72 @@ function splitterWireGearSectionToggles() {
   });
 }
 
-// Smooth scalar measurements (centroid, tilt, crest, rt60) across a small
-// neighborhood of windows. The picker uses hard if/else thresholds, so a
-// 5% wobble in a single window can flip the category even when the
-// underlying sound is unchanged. A 3-window median (±1) damps the noise
-// without lagging real tone changes — adjacent windows overlap 50% so
-// they share 2s of audio anyway.
+// Category heatmap stabilizer. The picker uses hard if/else thresholds,
+// so a 5% wobble across a window boundary used to flip the category even
+// when the underlying sound was unchanged. Smoothing the input scalars
+// doesn't fully help (category boundaries are non-linear), so we instead
+// run the rules engine on a ±N window neighbourhood, tally votes per
+// block-name, and substitute the winning-category block into the current
+// window's recipe. If the current window's own pick already matches the
+// winner we keep it (most specific to the slice). Otherwise we pull the
+// same-category block from whichever neighbour did vote for it.
+const TR_STABILIZE_RADIUS = 3;  // ±3 windows = 7-window vote ≈ 14s context
+
+function splitterStabilizeRecipeWithHeatmap(currentRecipe, allWindows, stemId, idx, songContext) {
+  if (!currentRecipe || !Array.isArray(currentRecipe.blocks) || !currentRecipe.blocks.length) return currentRecipe;
+  const lo = Math.max(0, idx - TR_STABILIZE_RADIUS);
+  const hi = Math.min(allWindows.length - 1, idx + TR_STABILIZE_RADIUS);
+
+  // Generate sibling recipes for every neighbour (cheap — picker is pure
+  // if/else over a few scalars).
+  const sibling = [];
+  for (let i = lo; i <= hi; i++) {
+    const ns = allWindows[i] && allWindows[i].perStem && allWindows[i].perStem[stemId];
+    if (!ns || !ns.measurements || ns.measurements.error) continue;
+    const r = (i === idx)
+      ? currentRecipe
+      : rulesGenerateRecipe(
+          Object.assign({}, ns.measurements, { startSec: allWindows[i].startSec, endSec: allWindows[i].endSec }),
+          stemId,
+          songContext
+        );
+    if (r && Array.isArray(r.blocks)) sibling.push({ idx: i, recipe: r });
+  }
+  if (sibling.length <= 1) return currentRecipe;
+
+  // Per block-name, vote on category. Track a representative block per
+  // category, preferring the current-window version when present.
+  const stabilizedBlocks = currentRecipe.blocks.map(curBlock => {
+    if (!curBlock || !curBlock.params || !curBlock.params.category) return curBlock;
+    const blockName = curBlock.block;
+    const votes = new Map();
+    const sampleByCat = new Map();
+    for (const s of sibling) {
+      const match = s.recipe.blocks.find(b => b && b.block === blockName);
+      if (!match || !match.params || !match.params.category) continue;
+      const cat = match.params.category;
+      votes.set(cat, (votes.get(cat) || 0) + 1);
+      // Prefer the current-window version of each category as the sample.
+      if (s.idx === idx || !sampleByCat.has(cat)) sampleByCat.set(cat, match);
+    }
+    if (!votes.size) return curBlock;
+    let winnerCat = null, winnerVotes = -1;
+    for (const [cat, count] of votes) {
+      // Tie-break: prefer the current pick to avoid bouncing between two
+      // equally-voted neighbours.
+      if (count > winnerVotes || (count === winnerVotes && cat === curBlock.params.category)) {
+        winnerCat = cat;
+        winnerVotes = count;
+      }
+    }
+    return sampleByCat.get(winnerCat) || curBlock;
+  });
+
+  return Object.assign({}, currentRecipe, { blocks: stabilizedBlocks });
+}
+
+// Legacy input-smoothing path — superseded by the heatmap stabilizer
+// above. Left in place in case we want to A/B it later.
 function splitterSmoothMeasurementsForPicker(meas, allWindows, stemId, idx) {
   if (!meas || meas.error) return meas;
   const RADIUS = 1;
@@ -8254,16 +8314,17 @@ function splitterRenderToneRecipeForWindow(idx, opts) {
       splitterRenderGearSection(g, def, null, slot.measurements, null, null);
       continue;
     }
-    // Use a 3-window median of the picker-driving scalars (centroid, tilt,
-    // crest, rt60) so the category doesn't flip on every minor wobble. The
-    // raw per-window measurements still flow through for AI refinement so
-    // Claude sees what's actually happening in this slice.
-    const pickerMeas = splitterSmoothMeasurementsForPicker(slot.measurements, wins, stemId, idx);
-    const baseRecipe = rulesGenerateRecipe(
-      Object.assign({}, pickerMeas, { startSec: w.startSec, endSec: w.endSec }),
+    // Run the picker on raw per-window measurements first, then stabilize
+    // the chosen CATEGORY against a ±3-window heatmap so categories only
+    // change when the tone genuinely changes (not when a scalar wobbles
+    // across a threshold). Raw per-window measurements still flow to the
+    // AI refinement path so Claude sees the actual slice.
+    const rawRecipe = rulesGenerateRecipe(
+      Object.assign({}, slot.measurements, { startSec: w.startSec, endSec: w.endSec }),
       stemId,
       songContext
     );
+    const baseRecipe = splitterStabilizeRecipeWithHeatmap(rawRecipe, wins, stemId, idx, songContext);
     let recipe = baseRecipe;
     let refined = false;
     let refineNote = '';
@@ -13730,25 +13791,26 @@ const ET_CHROMATIC = [
   { name: 'B',  sharp: false },
 ];
 
-// Fixed-root chord pool. Root always C. Pick a quality, optionally invert.
-// Inversion uses chord.notes (root-position pitch classes) — bass = notes[invIdx].
+// Fixed-root chord pool. Root always C. 9 qualities — label is the actual chord symbol.
 const ET_QUALITIES = [
-  { id: 'maj',  label: 'Major',     quality: '',     symbol: '',     intervals: '1 · 3 · 5',
+  { id: 'maj',   label: 'C',     quality: '',     symbol: '',      intervals: '1 · 3 · 5',
     blurb: 'Bright, stable, "happy". Major 3rd + perfect 5th.' },
-  { id: 'min',  label: 'Minor',     quality: 'm',    symbol: 'm',    intervals: '1 · ♭3 · 5',
+  { id: 'min',   label: 'Cm',    quality: 'm',    symbol: 'm',     intervals: '1 · ♭3 · 5',
     blurb: 'Darker, melancholic. Minor 3rd + perfect 5th.' },
-  { id: 'maj7', label: 'Major 7',   quality: 'maj7', symbol: 'maj7', intervals: '1 · 3 · 5 · 7',
+  { id: 'maj7',  label: 'Cmaj7', quality: 'maj7', symbol: 'maj7',  intervals: '1 · 3 · 5 · 7',
     blurb: 'Dreamy, jazzy. Major triad with a major 7th on top — bright but unresolved.' },
-  { id: 'm7',   label: 'Minor 7',   quality: 'm7',   symbol: 'm7',   intervals: '1 · ♭3 · 5 · ♭7',
+  { id: 'm7',    label: 'Cm7',   quality: 'm7',   symbol: 'm7',    intervals: '1 · ♭3 · 5 · ♭7',
     blurb: 'Smooth, mellow. Minor triad with a minor 7th — neo-soul / Rhodes territory.' },
-  { id: '7',    label: 'Dom 7',     quality: '7',    symbol: '7',    intervals: '1 · 3 · 5 · ♭7',
+  { id: '7',     label: 'C7',    quality: '7',    symbol: '7',     intervals: '1 · 3 · 5 · ♭7',
     blurb: 'Tense, wants to resolve. Major triad with a minor 7th — the blues / V chord sound.' },
-  { id: 'dim',  label: 'Diminished',quality: 'dim',  symbol: '°',    intervals: '1 · ♭3 · ♭5',
+  { id: 'sus2',  label: 'Csus2', quality: 'sus2', symbol: 'sus2',  intervals: '1 · 2 · 5',
+    blurb: 'Open and airy. The 3rd is replaced by a 2nd, creating an unresolved, modal feel.' },
+  { id: 'sus4',  label: 'Csus4', quality: 'sus4', symbol: 'sus4',  intervals: '1 · 4 · 5',
+    blurb: 'No 3rd — neither major nor minor. The 4th replaces the 3rd. Wants to resolve down to the major triad.' },
+  { id: 'dim',   label: 'Cdim',  quality: 'dim',  symbol: '°',     intervals: '1 · ♭3 · ♭5',
     blurb: 'Spooky, unstable. Stack of minor 3rds — wants to resolve somewhere.' },
-  { id: 'aug',  label: 'Augmented', quality: 'aug',  symbol: '+',    intervals: '1 · 3 · ♯5',
+  { id: 'aug',   label: 'Caug',  quality: 'aug',  symbol: '+',     intervals: '1 · 3 · ♯5',
     blurb: 'Mysterious, suspended. Major 3rd + augmented 5th — feels weightless.' },
-  { id: 'sus',  label: 'Sus',       quality: 'sus4', symbol: 'sus4', intervals: '1 · 4 · 5',
-    blurb: 'No 3rd — neither major nor minor. The 4th replaces the 3rd, giving an open, unresolved feel.' },
 ];
 
 // All quality entries in the pool are root=C.
@@ -13795,23 +13857,25 @@ function etBuildVoicing(chord, inversionIdx) {
 
 const etState = {
   sessionLength: 10,
-  currentIdx: 0,            // 0..sessionLength-1 during play
+  currentIdx: 0,                // 0..sessionLength-1 during play
   results: [],
-  step: 0,                  // 0=bass, 1=quality, 2=review
   currentChord: null,
   currentVoicing: null,
-  attempts: 0,
-  hintsUsed: 0,
-  hintShown: false,         // textual hint visible?
-  scoreCurrent: 0,
+  // User's revisable selections during build phase
+  userQuality: null,            // quality id (e.g., 'maj7') or null
+  userBass: null,               // note name (e.g., 'B') or null
+  // After Confirm, we lock these in and evaluate
+  confirmed: false,
+  confirmResult: null,          // { qualityRight, bassRight, totalPts }
+  // Per-step hint tracking
+  hintsUsedStep1: false,
+  hintsUsedStep2: false,
+  hintShown1: false,            // textual hint visible under step 1
+  hintShown2: false,
   scoreTotal: 0,
-  answers: {},
-  lastWrongPick: null,      // for diagnostic feedback
   mode: 'click',
-  phase: 'idle',            // 'idle' | 'playing' | 'between' | 'done'
-  feedback: null,
+  phase: 'idle',                // 'idle' | 'playing' | 'done'
   cadenceOn: true,
-  arpeggioMode: false,      // affects replay button behavior? (kept off; arpeggio is a separate button)
 };
 
 function etPickChord() {
@@ -13850,6 +13914,52 @@ async function etPlayChord(voicing, duration='2n') {
   instrumentInstance.triggerAttackRelease(notes, duration);
 }
 
+// Build a voicing from the user's current selection (quality + bass).
+// If bass is a chord tone, treat as inversion. Otherwise, voice the chord in root position
+// with the chosen bass below it (non-chord-tone slash bass).
+function etBuildUserVoicing() {
+  if (!etState.userQuality) return null;
+  const qd = etQualityById(etState.userQuality);
+  if (!qd) return null;
+  const chord = buildChord('C', qd.quality);
+  const bassNote = etState.userBass || 'C';
+  // Find inversion if bass is a chord tone (by pitch class, accept enharmonics)
+  let invIdx = -1;
+  const bassIdx = noteIndex(bassNote);
+  for (let i = 0; i < chord.notes.length; i++) {
+    if (noteIndex(chord.notes[i]) === bassIdx) { invIdx = i; break; }
+  }
+  if (invIdx >= 0) return etBuildVoicing(chord, invIdx);
+  // Non-chord-tone bass — voice root position on top, custom bass below.
+  const useFlats = ['m','m7','dim','7'].includes(chord.quality);
+  const upperMidi = chord.type.intervals.map(iv => noteToMidi('C', 4) + iv);
+  const FLAT_FOR_SHARP = { 'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb' };
+  const upperNotes = upperMidi.map(m => {
+    const raw = midiToNoteName(m);
+    const baseN = raw.replace(/[0-9]/g, '');
+    const oct = raw.match(/\d+/)[0];
+    if (useFlats && FLAT_FOR_SHARP[baseN]) return FLAT_FOR_SHARP[baseN] + oct;
+    return raw;
+  });
+  const bassMidi = noteToMidi(bassNote, 2);
+  return {
+    bassNote,
+    chordRoot: 'C',
+    bassMidi,
+    upperMidi,
+    upperNotes,
+    bassMidiName: midiToNoteName(bassMidi),
+    slashLabel: 'C' + (qd.symbol || '') + (etState.userBass ? '/' + bassNote : ''),
+    inversionIdx: -1,
+  };
+}
+
+async function etPlayUserChord() {
+  const v = etBuildUserVoicing();
+  if (!v) return;
+  await etPlayChord(v);
+}
+
 async function etPlayArpeggio(voicing, noteDuration='8n', gap=0.22) {
   if (!voicing) return;
   if (!instrumentInstance) await setInstrument(currentInstrument);
@@ -13876,44 +13986,55 @@ async function etPlaySingleNote(noteName, duration='2n') {
   instrumentInstance.triggerAttackRelease(noteName, duration);
 }
 
-// Per-step audio hint: play the isolated tone that the current step is asking for.
-async function etPlayHint() {
-  if (!etState.currentVoicing) return;
+// Hint for step 1 (quality): play the upper structure (chord without bass) so the color is unmasked.
+async function etPlayHintQuality() {
   const v = etState.currentVoicing;
-  const c = etState.currentChord;
+  if (!v) return;
   if (!instrumentInstance) await setInstrument(currentInstrument);
-  switch (etState.step) {
-    case 0: // bass: play just the bass note
-      instrumentInstance.triggerAttackRelease(midiToNoteName(v.bassMidi), '2n');
-      break;
-    case 1: { // quality: play the upper structure alone (chord without the bass), so the listener can focus on the color
-      instrumentInstance.triggerAttackRelease(v.upperNotes, '2n');
-      break;
-    }
-  }
-  if (etState.hintsUsed === 0) etState.scoreCurrent = Math.max(0, etState.scoreCurrent - 2);
-  etState.hintsUsed++;
-  etState.hintShown = true;
+  instrumentInstance.triggerAttackRelease(v.upperNotes, '2n');
+  etState.hintsUsedStep1 = true;
+  etState.hintShown1 = true;
   renderEarTraining();
 }
 
-function etGetCorrectAnswer(step) {
+// Hint for step 2 (bass): play just the bass note in isolation.
+async function etPlayHintBass() {
   const v = etState.currentVoicing;
-  const c = etState.currentChord;
-  switch (step) {
-    case 0: return v.bassNote;
-    case 1: return etQualityCategory(c.quality);
-  }
-  return null;
+  if (!v) return;
+  if (!instrumentInstance) await setInstrument(currentInstrument);
+  instrumentInstance.triggerAttackRelease(midiToNoteName(v.bassMidi), '2n');
+  etState.hintsUsedStep2 = true;
+  etState.hintShown2 = true;
+  renderEarTraining();
 }
 
-function etTotalSteps() { return 3; } // bass, quality, review
+function etSelectQuality(qid) {
+  if (etState.confirmed) return;
+  etState.userQuality = qid;
+  renderEarTraining();
+}
 
-// Awarded points on success: 5 base, -3 for each retry, -2 if hint used (one-time).
-function etScoreStep() {
-  const base = 5;
-  const penalty = (etState.attempts * 3) + (etState.hintsUsed > 0 ? 2 : 0);
-  return Math.max(0, base - penalty);
+function etSelectBass(note) {
+  if (etState.confirmed) return;
+  etState.userBass = note;
+  renderEarTraining();
+}
+
+// Evaluate user's answer on Confirm. Award points, lock answer, reveal description.
+function etConfirm() {
+  if (etState.confirmed) return;
+  if (!etState.userQuality || !etState.userBass) return;
+  const c = etState.currentChord;
+  const v = etState.currentVoicing;
+  const correctQuality = etQualityCategory(c.quality);
+  const qualityRight = etState.userQuality === correctQuality;
+  const bassRight = noteIndex(etState.userBass) === noteIndex(v.bassNote);
+  let pts = 0;
+  if (qualityRight) pts += etState.hintsUsedStep1 ? 3 : 5;
+  if (bassRight) pts += etState.hintsUsedStep2 ? 3 : 5;
+  etState.confirmResult = { qualityRight, bassRight, totalPts: pts };
+  etState.confirmed = true;
+  renderEarTraining();
 }
 
 async function etNextChord() {
@@ -13925,17 +14046,21 @@ async function etNextChord() {
   const pick = etPickChord();
   etState.currentChord = pick.chord;
   etState.currentVoicing = pick.voicing;
-  etState.step = 0;
-  etState.attempts = 0;
-  etState.hintsUsed = 0;
-  etState.scoreCurrent = 0;
-  etState.answers = {};
-  etState.feedback = null;
+  etState.userQuality = null;
+  etState.userBass = null;
+  etState.confirmed = false;
+  etState.confirmResult = null;
+  etState.hintsUsedStep1 = false;
+  etState.hintsUsedStep2 = false;
+  etState.hintShown1 = false;
+  etState.hintShown2 = false;
   etState.phase = 'playing';
   renderEarTraining();
   try {
-    await etPlayCadence();
-    await new Promise(r => setTimeout(r, 220));
+    if (etState.cadenceOn) {
+      await etPlayCadence();
+      await new Promise(r => setTimeout(r, 220));
+    }
     await etPlayChord(pick.voicing);
   } catch (e) { console.warn('ET audio failed', e); }
 }
@@ -13948,63 +14073,26 @@ function etStartSession() {
   etNextChord();
 }
 
-function etSubmitAnswer(value) {
-  if (etState.phase !== 'playing') return;
-  if (etState.step >= 2) return; // review step has no submit — just a Next button
-  const correct = etGetCorrectAnswer(etState.step);
-  // For bass step (step 0), accept enharmonic equivalents.
-  let normalized = value;
-  if (etState.step === 0 && typeof noteIndex === 'function') {
-    if (noteIndex(value) === noteIndex(correct)) normalized = correct;
+// Diagnostic explanation comparing user's quality vs. actual.
+function etQualityDiff(pickedId, correctId) {
+  const pickedQ = etQualityById(pickedId);
+  const correctQ = etQualityById(correctId);
+  if (!pickedQ || !correctQ) return '';
+  const pickedIvs = (CHORD_TYPES[pickedQ.quality] || CHORD_TYPES['']).intervals;
+  const correctIvs = (CHORD_TYPES[correctQ.quality] || CHORD_TYPES['']).intervals;
+  let diff = '';
+  if (pickedIvs[1] !== correctIvs[1]) {
+    diff = pickedQ.id.startsWith('sus') || correctQ.id.startsWith('sus')
+      ? 'one chord has a 3rd, the other has a sus interval (2nd or 4th) in its place'
+      : (correctIvs[1] === 4 ? 'the 3rd above C is major (E) — bright' : 'the 3rd above C is minor (E♭) — dark');
+  } else if (pickedIvs[2] !== correctIvs[2]) {
+    diff = correctIvs[2] === 7 ? 'the 5th is perfect (G)' : (correctIvs[2] === 6 ? 'the 5th is flat (G♭) — diminished' : 'the 5th is sharp (G♯) — augmented');
+  } else if ((pickedIvs[3] || -1) !== (correctIvs[3] || -1)) {
+    if (correctIvs[3] === undefined) diff = 'the actual chord is just a triad — no 7th';
+    else if (pickedIvs[3] === undefined) diff = 'the actual chord has a 7th — listen for the top note';
+    else diff = correctIvs[3] === 11 ? 'the 7th is major (B — half-step below C)' : 'the 7th is minor (B♭ — whole-step below C)';
   }
-  const ok = normalized === correct;
-  if (ok) {
-    etState.answers[etState.step] = normalized;
-    etState.scoreCurrent += etScoreStep();
-    etState.attempts = 0;
-    etState.hintsUsed = 0;
-    etState.hintShown = false;
-    etState.feedback = null;
-    etState.lastWrongPick = null;
-    etState.step++;
-    renderEarTraining();
-  } else {
-    etState.attempts++;
-    etState.lastWrongPick = value;
-    etState.feedback = etDiagnoseWrong(etState.step, value, correct);
-    renderEarTraining();
-  }
-}
-
-// Generate diagnostic feedback when the user picks wrong.
-function etDiagnoseWrong(step, picked, correct) {
-  if (step === 0) {
-    // Bass — just nudge.
-    return `That's <strong>${picked}</strong>. Listen again for the lowest pitched note — it's a single sustained tone underneath the rest of the chord.`;
-  }
-  if (step === 1) {
-    const pickedQ = etQualityById(picked);
-    const correctQ = etQualityById(correct);
-    if (!pickedQ || !correctQ) return 'Not quite — try again.';
-    // Compute the key difference by comparing interval signatures.
-    const pickedIvs = (CHORD_TYPES[pickedQ.quality] || CHORD_TYPES['']).intervals;
-    const correctIvs = (CHORD_TYPES[correctQ.quality] || CHORD_TYPES['']).intervals;
-    let diff = '';
-    if (pickedIvs[1] !== correctIvs[1]) {
-      // 3rd / 4th differs
-      diff = pickedQ.id === 'sus' || correctQ.id === 'sus'
-        ? 'one chord has a 3rd, the other has a 4th in its place'
-        : (correctIvs[1] === 4 ? 'the 3rd is major (bright)' : 'the 3rd is minor (dark)');
-    } else if (pickedIvs[2] !== correctIvs[2]) {
-      diff = correctIvs[2] === 7 ? 'the 5th is perfect' : (correctIvs[2] === 6 ? 'the 5th is flat (diminished)' : 'the 5th is sharp (augmented)');
-    } else if ((pickedIvs[3] || -1) !== (correctIvs[3] || -1)) {
-      if (!correctIvs[3]) diff = 'the actual chord is just a triad — no 7th';
-      else if (!pickedIvs[3]) diff = 'the actual chord has a 7th — listen for the top note';
-      else diff = correctIvs[3] === 11 ? 'the 7th is major (a half-step below the root)' : 'the 7th is minor (a whole-step below the root)';
-    }
-    return `You picked <strong>${pickedQ.label}</strong> — ${pickedQ.blurb} The chord you heard is actually different: ${diff || 'listen closely to the chord color'}.`;
-  }
-  return 'Not quite — try again.';
+  return diff;
 }
 
 //==================================================================
@@ -14303,14 +14391,18 @@ function etFormatAnswer(step, value) {
   return value;
 }
 
-// Called from the review step's "Next chord" button — banks the result, advances.
+// Called when the user clicks Next after Confirm — banks the result, advances.
 function etAdvanceToNext() {
-  etState.scoreTotal += etState.scoreCurrent;
+  if (!etState.confirmed) return;
+  etState.scoreTotal += etState.confirmResult.totalPts;
   etState.results.push({
     chord: etState.currentChord,
     voicing: etState.currentVoicing,
-    answers: Object.assign({}, etState.answers),
-    score: etState.scoreCurrent,
+    userQuality: etState.userQuality,
+    userBass: etState.userBass,
+    qualityRight: etState.confirmResult.qualityRight,
+    bassRight: etState.confirmResult.bassRight,
+    score: etState.confirmResult.totalPts,
   });
   etState.currentIdx++;
   etNextChord();
