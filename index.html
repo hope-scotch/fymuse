@@ -1274,6 +1274,9 @@
   .et-idle-icon { font-size: 38px; color: var(--accent); margin-bottom: 12px; }
   .et-idle h3 { margin: 0 0 8px; font-size: 18px; font-weight: 700; color: var(--text); }
   .et-idle p { margin: 0 0 20px; color: var(--text-2); font-size: 13.5px; line-height: 1.55; max-width: 540px; margin-left: auto; margin-right: auto; }
+  .et-idle-level { display: flex; gap: 10px; align-items: center; justify-content: center; margin: 0 auto 14px; max-width: 540px; }
+  .et-idle-level-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
+  .et-idle-level .et-sound-picker { min-width: 340px; padding: 7px 11px; font-size: 12.5px; }
 
   .et-steps { display: flex; flex-direction: column; gap: 12px; }
   .et-step { padding: 16px 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; transition: all 0.2s; }
@@ -20556,6 +20559,28 @@ function etPickRoot(quality) {
   return (useFlats ? ET_ROOTS_FLAT : ET_ROOTS_SHARP)[idx];
 }
 
+// Difficulty levels — control quality pool, root behavior, and inversion frequency.
+const ET_LEVELS = [
+  { id: 1, label: 'Beginner',     desc: 'Fixed root C · 5 common qualities (maj, min, maj7, m7, dom7) · mostly root position',
+    fixedRoot: 'C',
+    qualities: ['maj','min','maj7','m7','7'],
+    maxInversion: 1,    // root pos + occasional 1st inv
+    invWeights: [0.75, 0.25] },
+  { id: 2, label: 'Intermediate', desc: 'Fixed root C · all 9 qualities · all inversions',
+    fixedRoot: 'C',
+    qualities: ['maj','min','maj7','m7','7','sus2','sus4','dim','aug'],
+    maxInversion: 3,
+    invWeights: [0.55, 0.25, 0.14, 0.06] },
+  { id: 3, label: 'Advanced',     desc: 'Any root · all 9 qualities · all inversions',
+    fixedRoot: null,
+    qualities: ['maj','min','maj7','m7','7','sus2','sus4','dim','aug'],
+    maxInversion: 3,
+    invWeights: [0.50, 0.28, 0.16, 0.06] },
+];
+function etCurrentLevel() {
+  return ET_LEVELS.find(l => l.id === etState.level) || ET_LEVELS[0];
+}
+
 // Map a raw CHORD_TYPES quality to a UI quality id.
 function etQualityCategory(q) {
   const found = ET_QUALITIES.find(qd => qd.quality === q);
@@ -20620,20 +20645,26 @@ const etState = {
   mode: 'click',
   phase: 'idle',                // 'idle' | 'playing' | 'done'
   cadenceOn: true,
+  level: 1,                     // 1=Beginner, 2=Intermediate, 3=Advanced
 };
 
 function etPickChord() {
-  const qd = ET_QUALITIES[Math.floor(Math.random() * ET_QUALITIES.length)];
-  const root = etPickRoot(qd.quality);
+  const lvl = etCurrentLevel();
+  const availableQualities = ET_QUALITIES.filter(q => lvl.qualities.includes(q.id));
+  const qd = availableQualities[Math.floor(Math.random() * availableQualities.length)];
+  const root = lvl.fixedRoot || etPickRoot(qd.quality);
   const chord = buildChord(root, qd.quality);
   const inversions = chord.notes.length;
-  // Inversion weights: root 50%, 1st 28%, 2nd 16%, 3rd 6% (only if 7th).
-  const r = Math.random();
-  let invIdx;
-  if (r < 0.50) invIdx = 0;
-  else if (r < 0.78) invIdx = 1;
-  else if (r < 0.94) invIdx = 2;
-  else invIdx = inversions > 3 ? 3 : 0;
+  // Inversion: pick by cumulative weights, clamped to available inversions of this chord.
+  const maxInv = Math.min(lvl.maxInversion, inversions - 1);
+  const weights = lvl.invWeights.slice(0, maxInv + 1);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * sum;
+  let invIdx = 0;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r <= 0) { invIdx = i; break; }
+  }
   if (invIdx >= inversions) invIdx = 0;
   return { chord, voicing: etBuildVoicing(chord, invIdx), invIdx };
 }
@@ -20894,6 +20925,8 @@ function renderEarTraining() {
     view.innerHTML = etRenderIdle();
     const start = view.querySelector('#et-start-btn');
     if (start) start.onclick = () => etStartSession();
+    const idleLevel = view.querySelector('#et-idle-level-picker');
+    if (idleLevel) idleLevel.onchange = (e) => { etState.level = parseInt(e.target.value, 10); renderEarTraining(); };
     return;
   }
   if (etState.phase === 'done') {
@@ -20912,12 +20945,13 @@ function renderEarTraining() {
 function etRenderShell(bodyHtml) {
   const scoreNow = etState.scoreTotal + (etState.confirmed ? etState.confirmResult.totalPts : 0);
   const counterIdx = Math.min(etState.currentIdx + (etState.phase === 'playing' ? 1 : 0), etState.sessionLength);
+  const lvl = etCurrentLevel();
   return `
     <div class="et-view">
       <div class="et-header">
         <div class="et-header-left">
-          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· Phase 2 — variable root, 9 qualities</small></div>
-          <div class="et-sub">Cadence anchors your ear in the chord's root. Pick the root, then the quality, then the bass (for inversions). Compare your guess to the actual chord, then confirm.</div>
+          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· ${lvl.label}</small></div>
+          <div class="et-sub">${lvl.desc}</div>
         </div>
         <div class="et-header-right">
           <div class="et-mode-toggle" id="et-mode-toggle">
@@ -20940,6 +20974,12 @@ function etRenderShell(bodyHtml) {
             <span class="et-sound-label">Sound</span>
             <select class="et-sound-picker" id="et-sound-picker" title="Pick the instrument used for playback"></select>
           </div>
+          <div class="et-sound">
+            <span class="et-sound-label">Level</span>
+            <select class="et-sound-picker" id="et-level-picker" title="Pick the difficulty">
+              ${ET_LEVELS.map(l => `<option value="${l.id}" ${l.id===etState.level?'selected':''}>${l.id}. ${l.label}</option>`).join('')}
+            </select>
+          </div>
         </div>
         <div class="et-controls">
           <button class="et-btn" id="et-replay-cadence-btn" title="Re-anchor your ear to the chord's root"><i class="ph-duotone ph-music-notes"></i> Cadence</button>
@@ -20953,18 +20993,25 @@ function etRenderShell(bodyHtml) {
 }
 
 function etRenderIdle() {
+  const lvl = etCurrentLevel();
   return `
     <div class="et-view">
       <div class="et-header">
         <div class="et-header-left">
-          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· Phase 2 — variable root</small></div>
-          <div class="et-sub">A 10-chord session. Each test plays a I–IV–V–I cadence to anchor your ear in the chord's root, then plays one chord (9 quality categories, any root, any inversion). You identify it in four steps — root, quality, bass — then confirm with audio hints available throughout.</div>
+          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training</div>
+          <div class="et-sub">A 10-chord session. Each test plays a I–IV–V–I cadence to anchor your ear, then plays one chord. You identify the root, the quality, and the bass note — then audition your guess against the actual chord before confirming. 5 pts per dimension, 15 max per chord.</div>
         </div>
       </div>
       <div class="et-idle">
         <div class="et-idle-icon"><i class="ph-duotone ph-ear"></i></div>
         <h3>Ready to listen?</h3>
-        <p>You'll hear a quick cadence (which sets your ear in the chord's home key), then the test chord. Identify the root, the quality, and the bass note — then audition your guess against the actual chord before confirming. 5 pts per dimension, 15 max per chord.</p>
+        <div class="et-idle-level">
+          <label class="et-idle-level-label" for="et-idle-level-picker">Difficulty</label>
+          <select class="et-sound-picker" id="et-idle-level-picker">
+            ${ET_LEVELS.map(l => `<option value="${l.id}" ${l.id===etState.level?'selected':''}>${l.id}. ${l.label} — ${l.desc}</option>`).join('')}
+          </select>
+        </div>
+        <p>${lvl.desc}</p>
         <button class="et-btn et-btn-primary" id="et-start-btn"><i class="ph-duotone ph-play"></i> Start session</button>
       </div>
     </div>
@@ -21298,6 +21345,14 @@ function etWireShellHandlers(view) {
       // Sync the global header picker so they stay in lockstep.
       const hp = document.getElementById('instrument-picker');
       if (hp) hp.value = e.target.value;
+    };
+  }
+  // Level picker — affects the next chord pick (mid-session changes are fine).
+  const level = view.querySelector('#et-level-picker');
+  if (level) {
+    level.onchange = (e) => {
+      etState.level = parseInt(e.target.value, 10);
+      renderEarTraining();
     };
   }
   view.querySelectorAll('.et-mode-btn').forEach(btn => {
