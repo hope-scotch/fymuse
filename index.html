@@ -50,21 +50,26 @@
     background: linear-gradient(180deg, #14141d 0%, #0b0b12 100%);
   }
   .header-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
-  .header-row.top h1 { flex: 0 0 auto; font-size: 18px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 12px; }
-  .brand-link { display: flex; align-items: center; line-height: 1; text-decoration: none; flex-shrink: 0; }
+  /* Top row never wraps — the toolbar stays pinned on the top row, and the logo
+     container flexes to fill whatever space is left (shrinking when needed). */
+  .header-row.top { flex-wrap: nowrap; }
+  .header-row.top h1 { flex: 1 1 0; min-width: 0; font-size: 18px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 12px; overflow: hidden; }
+  .brand-link { display: flex; align-items: center; line-height: 1; text-decoration: none; min-width: 0; max-width: 100%; }
   .brand-logo {
     display: block;
     height: 48px;
     width: auto;
     max-width: 100%;
     object-fit: contain;
+    object-position: left center;
     user-select: none;
     -webkit-user-drag: none;
   }
   .header-row.middle { gap: 12px; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.04); }
   .header-row.middle .control-group { flex: 0 0 auto; min-width: 0; }
   .header-row.middle .pill-group { flex: 1; min-width: 0; }
-  .controls-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  /* Right-side cluster (toolbar + Key/Sound selectors) — pinned, never shrinks. */
+  .controls-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; flex-shrink: 0; justify-content: flex-end; }
   .transport-group { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 5px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; }
   .transport-group .control-group label { color: var(--text-2); font-size: 10.5px; }
   .transport-group input[type=range] { width: 92px; accent-color: var(--accent); cursor: pointer; }
@@ -20483,10 +20488,21 @@ function setupListener() {
 renderAll();
 setupDrawer();
 //==================================================================
-// EAR TRAINING — phase 1: fixed root (C), 8 quality categories,
-// inversions allowed (slash chords). 3-step flow: bass → quality →
-// review. Each completed step lets you replay what you've built so far.
-// Audio hints + textual sonic descriptions at every step.
+// EAR TRAINING — chord identification drill.
+// Phase 1 (fixed root C) → Phase 2 (variable root) — current.
+// Flow: Root → Quality → Over (bass) → Confirm. Selections are
+// revisable until Confirm. Cadence anchors the ear in the chord's
+// root before each test. Audio hints + textual cues at every step.
+//
+// === Future scope ===
+//   - Sing mode: reuse the existing Listener mic pipeline to accept
+//     sung pitches for Root and Bass steps. Quality stays click-only.
+//   - Level 2: add 9ths, 11ths, 13ths, alterations as a 4th-dimension
+//     "extensions" step unlocked after streaks on level 1.
+//   - Persistence / spaced repetition: save per-quality and per-root
+//     accuracy across sessions, weight picks toward weak spots.
+//   - Real-music voicings: swap close-position close-root structures
+//     for idiomatic voicings (drop-2, shell, rootless) as a toggle.
 //==================================================================
 const ET_CHROMATIC = [
   { name: 'C',  sharp: false },
@@ -20503,30 +20519,39 @@ const ET_CHROMATIC = [
   { name: 'B',  sharp: false },
 ];
 
-// Fixed-root chord pool. Root always C. 9 qualities — label is the actual chord symbol.
+// 9 qualities. Label is the generic name; symbol is the chord-symbol suffix.
 const ET_QUALITIES = [
-  { id: 'maj',   label: 'C',     quality: '',     symbol: '',      intervals: '1 · 3 · 5',
+  { id: 'maj',   label: 'Major',     quality: '',     symbol: '',      intervals: '1 · 3 · 5',
     blurb: 'Bright, stable, "happy". Major 3rd + perfect 5th.' },
-  { id: 'min',   label: 'Cm',    quality: 'm',    symbol: 'm',     intervals: '1 · ♭3 · 5',
+  { id: 'min',   label: 'Minor',     quality: 'm',    symbol: 'm',     intervals: '1 · ♭3 · 5',
     blurb: 'Darker, melancholic. Minor 3rd + perfect 5th.' },
-  { id: 'maj7',  label: 'Cmaj7', quality: 'maj7', symbol: 'maj7',  intervals: '1 · 3 · 5 · 7',
+  { id: 'maj7',  label: 'Major 7',   quality: 'maj7', symbol: 'maj7',  intervals: '1 · 3 · 5 · 7',
     blurb: 'Dreamy, jazzy. Major triad with a major 7th on top — bright but unresolved.' },
-  { id: 'm7',    label: 'Cm7',   quality: 'm7',   symbol: 'm7',    intervals: '1 · ♭3 · 5 · ♭7',
+  { id: 'm7',    label: 'Minor 7',   quality: 'm7',   symbol: 'm7',    intervals: '1 · ♭3 · 5 · ♭7',
     blurb: 'Smooth, mellow. Minor triad with a minor 7th — neo-soul / Rhodes territory.' },
-  { id: '7',     label: 'C7',    quality: '7',    symbol: '7',     intervals: '1 · 3 · 5 · ♭7',
+  { id: '7',     label: 'Dom 7',     quality: '7',    symbol: '7',     intervals: '1 · 3 · 5 · ♭7',
     blurb: 'Tense, wants to resolve. Major triad with a minor 7th — the blues / V chord sound.' },
-  { id: 'sus2',  label: 'Csus2', quality: 'sus2', symbol: 'sus2',  intervals: '1 · 2 · 5',
+  { id: 'sus2',  label: 'Sus 2',     quality: 'sus2', symbol: 'sus2',  intervals: '1 · 2 · 5',
     blurb: 'Open and airy. The 3rd is replaced by a 2nd, creating an unresolved, modal feel.' },
-  { id: 'sus4',  label: 'Csus4', quality: 'sus4', symbol: 'sus4',  intervals: '1 · 4 · 5',
+  { id: 'sus4',  label: 'Sus 4',     quality: 'sus4', symbol: 'sus4',  intervals: '1 · 4 · 5',
     blurb: 'No 3rd — neither major nor minor. The 4th replaces the 3rd. Wants to resolve down to the major triad.' },
-  { id: 'dim',   label: 'Cdim',  quality: 'dim',  symbol: '°',     intervals: '1 · ♭3 · ♭5',
+  { id: 'dim',   label: 'Diminished',quality: 'dim',  symbol: '°',     intervals: '1 · ♭3 · ♭5',
     blurb: 'Spooky, unstable. Stack of minor 3rds — wants to resolve somewhere.' },
-  { id: 'aug',   label: 'Caug',  quality: 'aug',  symbol: '+',     intervals: '1 · 3 · ♯5',
+  { id: 'aug',   label: 'Augmented', quality: 'aug',  symbol: '+',     intervals: '1 · 3 · ♯5',
     blurb: 'Mysterious, suspended. Major 3rd + augmented 5th — feels weightless.' },
 ];
 
-// All quality entries in the pool are root=C.
-const ET_POOL = ET_QUALITIES.map(q => ({ root: 'C', quality: q.quality, qid: q.id }));
+// Roots — chromatic, with separate sharp/flat spellings depending on the chord's quality.
+const ET_ROOTS_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const ET_ROOTS_FLAT  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+// Qualities that read more naturally with flat roots (their chord notes contain b3 / b5 / b7).
+const ET_FLAT_PREF_QUALITIES = new Set(['m','m7','dim','dim7','m7b5','7']);
+
+function etPickRoot(quality) {
+  const idx = Math.floor(Math.random() * 12);
+  const useFlats = ET_FLAT_PREF_QUALITIES.has(quality);
+  return (useFlats ? ET_ROOTS_FLAT : ET_ROOTS_SHARP)[idx];
+}
 
 // Map a raw CHORD_TYPES quality to a UI quality id.
 function etQualityCategory(q) {
@@ -20536,23 +20561,24 @@ function etQualityCategory(q) {
 function etQualityById(id) { return ET_QUALITIES.find(q => q.id === id); }
 
 // Build a playable voicing: bass at oct 2, upper structure as close-position root-position at oct 4.
-// Respell accidentals as flats for minor / diminished / dom7 chords so labels read Eb not D#.
+// Re-spell the chord notes so labels read with conventional accidentals — flats for minor / dim /
+// dom7 / flat-root keys; sharps elsewhere.
 function etBuildVoicing(chord, inversionIdx) {
-  const useFlats = ['m','m7','dim','7','m7b5','dim7','mmaj7'].includes(chord.quality);
+  const useFlats = ET_FLAT_PREF_QUALITIES.has(chord.quality) || chord.root.includes('b');
   const rootIdx = noteIndex(chord.root);
   const respelledNotes = chord.type.intervals.map(iv => indexToNote((rootIdx + iv) % 12, useFlats));
   const bassPitch = respelledNotes[inversionIdx % respelledNotes.length];
   const rootMidi = noteToMidi(chord.root, 4);
   const upperMidi = chord.type.intervals.map(iv => rootMidi + iv);
   const bassMidi = noteToMidi(bassPitch, 2);
-  // Respell upper notes for display (audio engine accepts either spelling).
-  const FLAT_FOR_SHARP = { 'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb' };
-  const upperNotes = upperMidi.map(m => {
-    const raw = midiToNoteName(m);
-    const baseN = raw.replace(/[0-9]/g, '');
-    const oct = raw.match(/\d+/)[0];
-    if (useFlats && FLAT_FOR_SHARP[baseN]) return FLAT_FOR_SHARP[baseN] + oct;
-    return raw;
+  // Upper-note labels: respelled note names with ascending octaves based on pitch-class progression.
+  let oct = 4;
+  let prevIdx = -1;
+  const upperNotes = respelledNotes.map(n => {
+    const idx = noteIndex(n);
+    if (prevIdx >= 0 && idx <= prevIdx) oct++;
+    prevIdx = idx;
+    return n + oct;
   });
   const slashLabel = inversionIdx === 0 ? chord.name : (chord.name + '/' + bassPitch);
   return {
@@ -20574,16 +20600,19 @@ const etState = {
   currentChord: null,
   currentVoicing: null,
   // User's revisable selections during build phase
-  userQuality: null,            // quality id (e.g., 'maj7') or null
-  userBass: null,               // note name (e.g., 'B') or null
-  // After Confirm, we lock these in and evaluate
+  userRoot: null,               // note name (e.g., 'Bb')
+  userQuality: null,            // quality id (e.g., 'maj7')
+  userBass: null,               // note name (e.g., 'D')
+  // After Confirm
   confirmed: false,
-  confirmResult: null,          // { qualityRight, bassRight, totalPts }
+  confirmResult: null,          // { rootRight, qualityRight, bassRight, totalPts }
   // Per-step hint tracking
-  hintsUsedStep1: false,
-  hintsUsedStep2: false,
-  hintShown1: false,            // textual hint visible under step 1
-  hintShown2: false,
+  hintUsedRoot: false,
+  hintUsedQuality: false,
+  hintUsedBass: false,
+  hintShownRoot: false,
+  hintShownQuality: false,
+  hintShownBass: false,
   scoreTotal: 0,
   mode: 'click',
   phase: 'idle',                // 'idle' | 'playing' | 'done'
@@ -20591,9 +20620,9 @@ const etState = {
 };
 
 function etPickChord() {
-  const pool = ET_POOL;
-  const item = pool[Math.floor(Math.random() * pool.length)];
-  const chord = buildChord(item.root, item.quality);
+  const qd = ET_QUALITIES[Math.floor(Math.random() * ET_QUALITIES.length)];
+  const root = etPickRoot(qd.quality);
+  const chord = buildChord(root, qd.quality);
   const inversions = chord.notes.length;
   // Inversion weights: root 50%, 1st 28%, 2nd 16%, 3rd 6% (only if 7th).
   const r = Math.random();
@@ -20606,16 +20635,23 @@ function etPickChord() {
   return { chord, voicing: etBuildVoicing(chord, invIdx), invIdx };
 }
 
-async function etPlayCadence() {
+// Cadence anchors the listener's ear in the test chord's root.
+// I–IV–V–I in the root key (always major-flavored cadence, regardless of the chord's quality).
+async function etPlayCadence(rootNote) {
   if (!instrumentInstance) await setInstrument(currentInstrument);
+  const root = rootNote || 'C';
+  const rootIdx = noteIndex(root);
+  const useFlats = root.includes('b') || ['F'].includes(root);
+  const IVroot = indexToNote((rootIdx + 5) % 12, useFlats);
+  const Vroot  = indexToNote((rootIdx + 7) % 12, useFlats);
+  const chords = [root, IVroot, Vroot, root];
   const t0 = Tone.now() + 0.05;
-  const cadence = [
-    { notes: ['C2','C4','E4','G4'], at: 0.00 },
-    { notes: ['F2','C4','F4','A4'], at: 0.42 },
-    { notes: ['G2','B3','D4','G4'], at: 0.84 },
-    { notes: ['C2','C4','E4','G4'], at: 1.26 },
-  ];
-  cadence.forEach(c => instrumentInstance.triggerAttackRelease(c.notes, '4n', t0 + c.at));
+  chords.forEach((cr, i) => {
+    const bass = midiToNoteName(noteToMidi(cr, 2));
+    const upperMidi = [0,4,7].map(iv => noteToMidi(cr, 4) + iv);
+    const upper = upperMidi.map(midiToNoteName);
+    instrumentInstance.triggerAttackRelease([bass, ...upper], '4n', t0 + i * 0.42);
+  });
   return new Promise(r => setTimeout(r, 1900));
 }
 
@@ -20626,15 +20662,16 @@ async function etPlayChord(voicing, duration='2n') {
   instrumentInstance.triggerAttackRelease(notes, duration);
 }
 
-// Build a voicing from the user's current selection (quality + bass).
-// If bass is a chord tone, treat as inversion. Otherwise, voice the chord in root position
-// with the chosen bass below it (non-chord-tone slash bass).
+// Build a voicing from the user's current selection (root + quality + bass).
+// If bass matches a chord tone, treat as inversion. Otherwise voice root position
+// with the chosen bass note in the bass octave.
 function etBuildUserVoicing() {
-  if (!etState.userQuality) return null;
+  if (!etState.userRoot || !etState.userQuality) return null;
   const qd = etQualityById(etState.userQuality);
   if (!qd) return null;
-  const chord = buildChord('C', qd.quality);
-  const bassNote = etState.userBass || 'C';
+  const root = etState.userRoot;
+  const chord = buildChord(root, qd.quality);
+  const bassNote = etState.userBass || root;
   // Find inversion if bass is a chord tone (by pitch class, accept enharmonics)
   let invIdx = -1;
   const bassIdx = noteIndex(bassNote);
@@ -20643,8 +20680,8 @@ function etBuildUserVoicing() {
   }
   if (invIdx >= 0) return etBuildVoicing(chord, invIdx);
   // Non-chord-tone bass — voice root position on top, custom bass below.
-  const useFlats = ['m','m7','dim','7'].includes(chord.quality);
-  const upperMidi = chord.type.intervals.map(iv => noteToMidi('C', 4) + iv);
+  const useFlats = ET_FLAT_PREF_QUALITIES.has(chord.quality);
+  const upperMidi = chord.type.intervals.map(iv => noteToMidi(root, 4) + iv);
   const FLAT_FOR_SHARP = { 'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb' };
   const upperNotes = upperMidi.map(m => {
     const raw = midiToNoteName(m);
@@ -20656,12 +20693,12 @@ function etBuildUserVoicing() {
   const bassMidi = noteToMidi(bassNote, 2);
   return {
     bassNote,
-    chordRoot: 'C',
+    chordRoot: root,
     bassMidi,
     upperMidi,
     upperNotes,
     bassMidiName: midiToNoteName(bassMidi),
-    slashLabel: 'C' + (qd.symbol || '') + (etState.userBass ? '/' + bassNote : ''),
+    slashLabel: root + (qd.symbol || '') + (etState.userBass && noteIndex(bassNote) !== noteIndex(root) ? '/' + bassNote : ''),
     inversionIdx: -1,
   };
 }
@@ -20698,25 +20735,42 @@ async function etPlaySingleNote(noteName, duration='2n') {
   instrumentInstance.triggerAttackRelease(noteName, duration);
 }
 
-// Hint for step 1 (quality): play the upper structure (chord without bass) so the color is unmasked.
+// Hint for the Root step: play the chord's root note in mid octave.
+async function etPlayHintRoot() {
+  const c = etState.currentChord;
+  if (!c) return;
+  if (!instrumentInstance) await setInstrument(currentInstrument);
+  instrumentInstance.triggerAttackRelease(midiToNoteName(noteToMidi(c.root, 4)), '2n');
+  etState.hintUsedRoot = true;
+  etState.hintShownRoot = true;
+  renderEarTraining();
+}
+
+// Hint for the Quality step: play the upper structure (chord without bass) so the color is unmasked.
 async function etPlayHintQuality() {
   const v = etState.currentVoicing;
   if (!v) return;
   if (!instrumentInstance) await setInstrument(currentInstrument);
   instrumentInstance.triggerAttackRelease(v.upperNotes, '2n');
-  etState.hintsUsedStep1 = true;
-  etState.hintShown1 = true;
+  etState.hintUsedQuality = true;
+  etState.hintShownQuality = true;
   renderEarTraining();
 }
 
-// Hint for step 2 (bass): play just the bass note in isolation.
+// Hint for the Bass step: play just the bass note in isolation.
 async function etPlayHintBass() {
   const v = etState.currentVoicing;
   if (!v) return;
   if (!instrumentInstance) await setInstrument(currentInstrument);
   instrumentInstance.triggerAttackRelease(midiToNoteName(v.bassMidi), '2n');
-  etState.hintsUsedStep2 = true;
-  etState.hintShown2 = true;
+  etState.hintUsedBass = true;
+  etState.hintShownBass = true;
+  renderEarTraining();
+}
+
+function etSelectRoot(note) {
+  if (etState.confirmed) return;
+  etState.userRoot = note;
   renderEarTraining();
 }
 
@@ -20735,16 +20789,18 @@ function etSelectBass(note) {
 // Evaluate user's answer on Confirm. Award points, lock answer, reveal description.
 function etConfirm() {
   if (etState.confirmed) return;
-  if (!etState.userQuality || !etState.userBass) return;
+  if (!etState.userRoot || !etState.userQuality || !etState.userBass) return;
   const c = etState.currentChord;
   const v = etState.currentVoicing;
   const correctQuality = etQualityCategory(c.quality);
+  const rootRight = noteIndex(etState.userRoot) === noteIndex(c.root);
   const qualityRight = etState.userQuality === correctQuality;
   const bassRight = noteIndex(etState.userBass) === noteIndex(v.bassNote);
   let pts = 0;
-  if (qualityRight) pts += etState.hintsUsedStep1 ? 3 : 5;
-  if (bassRight) pts += etState.hintsUsedStep2 ? 3 : 5;
-  etState.confirmResult = { qualityRight, bassRight, totalPts: pts };
+  if (rootRight)    pts += etState.hintUsedRoot    ? 3 : 5;
+  if (qualityRight) pts += etState.hintUsedQuality ? 3 : 5;
+  if (bassRight)    pts += etState.hintUsedBass    ? 3 : 5;
+  etState.confirmResult = { rootRight, qualityRight, bassRight, totalPts: pts };
   etState.confirmed = true;
   renderEarTraining();
 }
@@ -20758,19 +20814,22 @@ async function etNextChord() {
   const pick = etPickChord();
   etState.currentChord = pick.chord;
   etState.currentVoicing = pick.voicing;
+  etState.userRoot = null;
   etState.userQuality = null;
   etState.userBass = null;
   etState.confirmed = false;
   etState.confirmResult = null;
-  etState.hintsUsedStep1 = false;
-  etState.hintsUsedStep2 = false;
-  etState.hintShown1 = false;
-  etState.hintShown2 = false;
+  etState.hintUsedRoot = false;
+  etState.hintUsedQuality = false;
+  etState.hintUsedBass = false;
+  etState.hintShownRoot = false;
+  etState.hintShownQuality = false;
+  etState.hintShownBass = false;
   etState.phase = 'playing';
   renderEarTraining();
   try {
     if (etState.cadenceOn) {
-      await etPlayCadence();
+      await etPlayCadence(pick.chord.root);
       await new Promise(r => setTimeout(r, 220));
     }
     await etPlayChord(pick.voicing);
@@ -20785,7 +20844,7 @@ function etStartSession() {
   etNextChord();
 }
 
-// Diagnostic explanation comparing user's quality vs. actual.
+// Diagnostic explanation comparing user's quality vs. actual. Root-agnostic.
 function etQualityDiff(pickedId, correctId) {
   const pickedQ = etQualityById(pickedId);
   const correctQ = etQualityById(correctId);
@@ -20796,13 +20855,13 @@ function etQualityDiff(pickedId, correctId) {
   if (pickedIvs[1] !== correctIvs[1]) {
     diff = pickedQ.id.startsWith('sus') || correctQ.id.startsWith('sus')
       ? 'one chord has a 3rd, the other has a sus interval (2nd or 4th) in its place'
-      : (correctIvs[1] === 4 ? 'the 3rd above C is major (E) — bright' : 'the 3rd above C is minor (E♭) — dark');
+      : (correctIvs[1] === 4 ? 'the actual 3rd is major (bright)' : 'the actual 3rd is minor (dark)');
   } else if (pickedIvs[2] !== correctIvs[2]) {
-    diff = correctIvs[2] === 7 ? 'the 5th is perfect (G)' : (correctIvs[2] === 6 ? 'the 5th is flat (G♭) — diminished' : 'the 5th is sharp (G♯) — augmented');
+    diff = correctIvs[2] === 7 ? 'the 5th is perfect' : (correctIvs[2] === 6 ? 'the 5th is flat (diminished)' : 'the 5th is sharp (augmented)');
   } else if ((pickedIvs[3] || -1) !== (correctIvs[3] || -1)) {
     if (correctIvs[3] === undefined) diff = 'the actual chord is just a triad — no 7th';
     else if (pickedIvs[3] === undefined) diff = 'the actual chord has a 7th — listen for the top note';
-    else diff = correctIvs[3] === 11 ? 'the 7th is major (B — half-step below C)' : 'the 7th is minor (B♭ — whole-step below C)';
+    else diff = correctIvs[3] === 11 ? 'the 7th is major (half-step below the root)' : 'the 7th is minor (whole-step below the root)';
   }
   return diff;
 }
@@ -20854,8 +20913,8 @@ function etRenderShell(bodyHtml) {
     <div class="et-view">
       <div class="et-header">
         <div class="et-header-left">
-          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· Phase 1 — fixed root C, 9 qualities</small></div>
-          <div class="et-sub">Listen to the chord. Pick the quality and the bass note. Compare your guess to the actual chord, then confirm.</div>
+          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· Phase 2 — variable root, 9 qualities</small></div>
+          <div class="et-sub">Cadence anchors your ear in the chord's root. Pick the root, then the quality, then the bass (for inversions). Compare your guess to the actual chord, then confirm.</div>
         </div>
         <div class="et-header-right">
           <div class="et-mode-toggle" id="et-mode-toggle">
@@ -20891,14 +20950,14 @@ function etRenderIdle() {
     <div class="et-view">
       <div class="et-header">
         <div class="et-header-left">
-          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· Phase 1 — diatonic C major</small></div>
-          <div class="et-sub">A 10-chord session. Each test plays a I–IV–V–I cadence to anchor your ear in C major, then plays one diatonic chord (triad or 7th, any inversion). You identify it in four steps — bass, root, quality, 7th type — with audio hints available at every step.</div>
+          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· Phase 2 — variable root</small></div>
+          <div class="et-sub">A 10-chord session. Each test plays a I–IV–V–I cadence to anchor your ear in the chord's root, then plays one chord (9 quality categories, any root, any inversion). You identify it in four steps — root, quality, bass — then confirm with audio hints available throughout.</div>
         </div>
       </div>
       <div class="et-idle">
         <div class="et-idle-icon"><i class="ph-duotone ph-ear"></i></div>
         <h3>Ready to listen?</h3>
-        <p>You'll hear a quick cadence in C, then the test chord. Use the chromatic strip and quality buttons to identify it step by step. Wrong answers don't count against you fatally — they cost points, then you can retry.</p>
+        <p>You'll hear a quick cadence (which sets your ear in the chord's home key), then the test chord. Identify the root, the quality, and the bass note — then audition your guess against the actual chord before confirming. 5 pts per dimension, 15 max per chord.</p>
         <button class="et-btn et-btn-primary" id="et-start-btn"><i class="ph-duotone ph-play"></i> Start session</button>
       </div>
     </div>
@@ -20908,6 +20967,7 @@ function etRenderIdle() {
 function etRenderSession() {
   return `
     <div class="et-steps">
+      ${etRenderStepRoot()}
       ${etRenderStepQuality()}
       ${etRenderStepBass()}
       ${etRenderStepConfirm()}
@@ -20915,7 +20975,56 @@ function etRenderSession() {
   `;
 }
 
-// STEP 1 — Quality. 9 options. User selects (revisable until Confirm). Hint plays upper structure alone.
+// Helper: render a chromatic strip for a note-pick step. target = 'root' or 'bass'.
+function etRenderNoteStrip(selected, correct, confirmed, rightFlag, target) {
+  return ET_CHROMATIC.map(n => {
+    const isSel = selected && (noteIndex(n.name) === noteIndex(selected));
+    const isCorrect = confirmed && (noteIndex(n.name) === noteIndex(correct));
+    const isWrongPick = confirmed && isSel && !rightFlag;
+    let cls = n.sharp ? 'et-key et-key-sharp' : 'et-key et-key-natural';
+    if (isSel) cls += ' is-selected';
+    if (isCorrect) cls += ' is-correct';
+    if (isWrongPick) cls += ' is-wrong';
+    const label = n.alt ? `${n.name}<span class="et-alt">/${n.alt}</span>` : n.name;
+    return `<button class="${cls}" data-target="${target}" data-note="${n.name}" ${confirmed?'disabled':''}>${label}</button>`;
+  }).join('');
+}
+
+// STEP 1 — Root. 12-note chromatic strip. Hint plays the root note alone.
+function etRenderStepRoot() {
+  const confirmed = etState.confirmed;
+  const stateClass = confirmed ? (etState.confirmResult.rootRight ? 'is-correct' : 'is-wrong') : 'is-active';
+  const selected = etState.userRoot;
+  const correct = etState.currentChord.root;
+  const keys = etRenderNoteStrip(selected, correct, confirmed, confirmed && etState.confirmResult.rootRight, 'root');
+  const head = `
+    <div class="et-step-head">
+      <div class="et-step-number">1</div>
+      <div class="et-step-title">Root</div>
+      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-root"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedRoot?' ✓':''}</button>` : ''}
+    </div>
+  `;
+  const prompt = !confirmed
+    ? `<div class="et-step-prompt">What's the root of the chord on top? The cadence anchored your ear — the chord's root sits on or near the strongest note.</div>`
+    : '';
+  const hintText = etState.hintShownRoot && !confirmed
+    ? `<div class="et-hint-text"><i class="ph-duotone ph-lightbulb"></i> I played the root note alone. Match its pitch to one of the 12 notes — root spelling can be sharp or flat, both work.</div>`
+    : '';
+  const reveal = confirmed && !etState.confirmResult.rootRight
+    ? `<div class="et-step-feedback">You picked <strong>${selected || '—'}</strong>. The actual root is <strong>${correct}</strong>.</div>`
+    : (confirmed && etState.confirmResult.rootRight ? `<div class="et-step-correct"><i class="ph-duotone ph-check-circle"></i> Root: ${correct}</div>` : '');
+  return `
+    <div class="et-step ${stateClass}">
+      ${head}
+      ${prompt}
+      <div class="et-chromatic">${keys}</div>
+      ${hintText}
+      ${reveal}
+    </div>
+  `;
+}
+
+// STEP 2 — Quality. 9 options. Generic labels until root is picked, then shows concrete chord symbol (e.g., "Bbm7").
 function etRenderStepQuality() {
   const confirmed = etState.confirmed;
   const stateClass = confirmed
@@ -20932,23 +21041,24 @@ function etRenderStepQuality() {
     if (isSel) cls += ' is-selected';
     if (isCorrect) cls += ' is-correct';
     if (isWrongPick) cls += ' is-wrong';
+    const buttonText = etState.userRoot ? (etState.userRoot + q.symbol) : q.label;
     return `<button class="${cls}" data-q="${q.id}" ${confirmed?'disabled':''}>
-      <div class="et-quality-label">${q.label}</div>
+      <div class="et-quality-label">${buttonText}</div>
       <div class="et-quality-ivs">${q.intervals}</div>
     </button>`;
   }).join('');
   const head = `
     <div class="et-step-head">
-      <div class="et-step-number">1</div>
+      <div class="et-step-number">2</div>
       <div class="et-step-title">Quality</div>
-      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-quality"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintsUsedStep1?' ✓':''}</button>` : ''}
+      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-quality"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedQuality?' ✓':''}</button>` : ''}
     </div>
   `;
   const prompt = !confirmed
     ? `<div class="et-step-prompt">What's the chord quality? Listen to the chord color — ignore the bass for now.</div>`
     : '';
-  const hintText = etState.hintShown1 && !confirmed
-    ? `<div class="et-hint-text"><i class="ph-duotone ph-lightbulb"></i> I just played the upper structure (the chord without its bass) so the color is unmasked. Listen for: bright (major), dark (minor), tense (7th), unstable (dim/aug), or open (sus).</div>`
+  const hintText = etState.hintShownQuality && !confirmed
+    ? `<div class="et-hint-text"><i class="ph-duotone ph-lightbulb"></i> I played the upper structure (chord without bass) so the color is unmasked. Listen for: bright (major), dark (minor), tense (7th), unstable (dim/aug), or open (sus).</div>`
     : '';
   const revealBlurb = confirmed && !etState.confirmResult.qualityRight && correctQd
     ? `<div class="et-step-feedback">You picked <strong>${etQualityById(selected) ? etQualityById(selected).label : '—'}</strong>. The actual quality is <strong>${correctQd.label}</strong> — ${correctQd.blurb} <em>${etQualityDiff(selected, correct) ? '('+etQualityDiff(selected, correct)+')' : ''}</em></div>`
@@ -20966,7 +21076,7 @@ function etRenderStepQuality() {
   `;
 }
 
-// STEP 2 — Bass (over). 12-note chromatic strip. Hint plays bass alone.
+// STEP 3 — Bass (over). 12-note chromatic strip. Hint plays bass alone.
 function etRenderStepBass() {
   const confirmed = etState.confirmed;
   const stateClass = confirmed
@@ -20974,29 +21084,19 @@ function etRenderStepBass() {
     : 'is-active';
   const selected = etState.userBass;
   const correct = etState.currentVoicing.bassNote;
-  const keys = ET_CHROMATIC.map(n => {
-    const isSel = selected && (noteIndex(n.name) === noteIndex(selected));
-    const isCorrect = confirmed && (noteIndex(n.name) === noteIndex(correct));
-    const isWrongPick = confirmed && isSel && !etState.confirmResult.bassRight;
-    let cls = n.sharp ? 'et-key et-key-sharp' : 'et-key et-key-natural';
-    if (isSel) cls += ' is-selected';
-    if (isCorrect) cls += ' is-correct';
-    if (isWrongPick) cls += ' is-wrong';
-    const label = n.alt ? `${n.name}<span class="et-alt">/${n.alt}</span>` : n.name;
-    return `<button class="${cls}" data-note="${n.name}" ${confirmed?'disabled':''}>${label}</button>`;
-  }).join('');
+  const keys = etRenderNoteStrip(selected, correct, confirmed, confirmed && etState.confirmResult.bassRight, 'bass');
   const head = `
     <div class="et-step-head">
-      <div class="et-step-number">2</div>
+      <div class="et-step-number">3</div>
       <div class="et-step-title">Over <small class="et-step-sub">· bass note</small></div>
-      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-bass"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintsUsedStep2?' ✓':''}</button>` : ''}
+      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-bass"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedBass?' ✓':''}</button>` : ''}
     </div>
   `;
   const prompt = !confirmed
     ? `<div class="et-step-prompt">What's the lowest note you hear? (The bass — a single sustained tone underneath the chord.)</div>`
     : '';
-  const hintText = etState.hintShown2 && !confirmed
-    ? `<div class="et-hint-text"><i class="ph-duotone ph-lightbulb"></i> I just played the bass alone. Match its pitch to one of the 12 notes.</div>`
+  const hintText = etState.hintShownBass && !confirmed
+    ? `<div class="et-hint-text"><i class="ph-duotone ph-lightbulb"></i> I played the bass alone. Match its pitch to one of the 12 notes.</div>`
     : '';
   const revealBlurb = confirmed && !etState.confirmResult.bassRight
     ? `<div class="et-step-feedback">You picked <strong>${selected || '—'}</strong>. The actual bass is <strong>${correct}</strong>.</div>`
@@ -21018,7 +21118,7 @@ function etRenderStepBass() {
 // Before confirm: lets the user audition their constructed chord vs. the actual one.
 // After confirm: reveals correct symbol, description, and full playback controls + Next.
 function etRenderStepConfirm() {
-  const ready = etState.userQuality && etState.userBass;
+  const ready = etState.userRoot && etState.userQuality && etState.userBass;
   const confirmed = etState.confirmed;
   const userVoicing = etBuildUserVoicing();
   const userLabel = userVoicing ? userVoicing.slashLabel : '—';
@@ -21027,7 +21127,7 @@ function etRenderStepConfirm() {
 
   const head = `
     <div class="et-step-head">
-      <div class="et-step-number">3</div>
+      <div class="et-step-number">4</div>
       <div class="et-step-title">${confirmed ? 'Result' : 'Confirm'}</div>
     </div>
   `;
@@ -21035,7 +21135,7 @@ function etRenderStepConfirm() {
   if (!confirmed) {
     const prompt = ready
       ? `<div class="et-step-prompt">Play your chord and compare it with the actual one. When you're sure, hit Confirm.</div>`
-      : `<div class="et-step-prompt">Pick a quality and a bass note above. Then come back here to confirm.</div>`;
+      : `<div class="et-step-prompt">Pick a root, quality, and bass note above. Then come back here to confirm.</div>`;
     return `
       <div class="et-step ${ready ? 'is-active' : 'is-future'}">
         ${head}
@@ -21061,17 +21161,18 @@ function etRenderStepConfirm() {
   const chordToneNames = ['root','3rd','5th','7th'];
   const qd = etQualityById(etQualityCategory(etState.currentChord.quality));
   let invDesc;
-  if (inv === 0) invDesc = `In <strong>root position</strong> — the root (C) is in the bass.`;
+  if (inv === 0) invDesc = `In <strong>root position</strong> — the root (${etState.currentChord.root}) is in the bass.`;
   else invDesc = `In <strong>${invNames[inv]}</strong> — the ${chordToneNames[inv]} (${v.bassNote}) is in the bass instead of the root.`;
   const upperLabel = v.upperNotes.map(n => n.replace(/[0-9]/g,'')).join(' – ');
-  const allRight = etState.confirmResult.qualityRight && etState.confirmResult.bassRight;
+  const r = etState.confirmResult;
+  const allRight = r.rootRight && r.qualityRight && r.bassRight;
   return `
     <div class="et-step is-active ${allRight?'is-correct':'is-partial'}">
       ${head}
       <div class="et-review">
         <div class="et-review-label">
           <div class="et-review-symbol">${actualLabel}</div>
-          <div class="et-review-meta">${upperLabel} · bass ${v.bassNote} · ${etState.confirmResult.totalPts} / 10 pts</div>
+          <div class="et-review-meta">${upperLabel} · bass ${v.bassNote} · ${r.totalPts} / 15 pts</div>
         </div>
         <div class="et-review-blurb">
           ${qd ? qd.blurb : ''}
@@ -21128,8 +21229,10 @@ function etAdvanceToNext() {
   etState.results.push({
     chord: etState.currentChord,
     voicing: etState.currentVoicing,
+    userRoot: etState.userRoot,
     userQuality: etState.userQuality,
     userBass: etState.userBass,
+    rootRight: etState.confirmResult.rootRight,
     qualityRight: etState.confirmResult.qualityRight,
     bassRight: etState.confirmResult.bassRight,
     score: etState.confirmResult.totalPts,
@@ -21140,8 +21243,11 @@ function etAdvanceToNext() {
 
 function etRenderResults() {
   const total = etState.scoreTotal;
-  const max = etState.sessionLength * 10;
+  const max = etState.sessionLength * 15;
   const pct = max > 0 ? Math.round((total / max) * 100) : 0;
+  const ic = ok => ok
+    ? '<i class="ph-duotone ph-check" style="color:#22c55e"></i>'
+    : '<i class="ph-duotone ph-x" style="color:#ef4444"></i>';
   return `
     <div class="et-results">
       <div class="et-results-head">
@@ -21149,17 +21255,13 @@ function etRenderResults() {
         <div class="et-results-score">${total} / ${max}<span class="et-results-pct">${pct}%</span></div>
       </div>
       <div class="et-results-list">
-        ${etState.results.map((r, i) => {
-          const qIcon = r.qualityRight ? '<i class="ph-duotone ph-check" style="color:#22c55e"></i>' : '<i class="ph-duotone ph-x" style="color:#ef4444"></i>';
-          const bIcon = r.bassRight    ? '<i class="ph-duotone ph-check" style="color:#22c55e"></i>' : '<i class="ph-duotone ph-x" style="color:#ef4444"></i>';
-          return `
+        ${etState.results.map((r, i) => `
           <div class="et-result-row">
             <div class="et-result-num">${i + 1}</div>
             <div class="et-result-chord">${r.voicing.slashLabel}</div>
-            <div class="et-result-flags">${qIcon} quality · ${bIcon} bass</div>
-            <div class="et-result-score">${r.score} / 10</div>
-          </div>`;
-        }).join('')}
+            <div class="et-result-flags">${ic(r.rootRight)} root · ${ic(r.qualityRight)} quality · ${ic(r.bassRight)} bass</div>
+            <div class="et-result-score">${r.score} / 15</div>
+          </div>`).join('')}
       </div>
       <button class="et-btn et-btn-primary" id="et-restart-btn"><i class="ph-duotone ph-arrow-clockwise"></i> Start a new session</button>
     </div>
@@ -21184,18 +21286,22 @@ function etWireShellHandlers(view) {
 }
 
 function etWireStepHandlers(view) {
-  // Step 1: quality selection
+  // Quality selection
   view.querySelectorAll('.et-quality-btn[data-q]').forEach(btn => {
     btn.onclick = () => etSelectQuality(btn.dataset.q);
   });
-  // Step 2: bass selection
-  view.querySelectorAll('.et-key').forEach(btn => {
-    btn.onclick = () => etSelectBass(btn.dataset.note);
+  // Note selection (root vs bass — routed by data-target)
+  view.querySelectorAll('.et-key[data-target]').forEach(btn => {
+    btn.onclick = () => {
+      if (btn.dataset.target === 'root') etSelectRoot(btn.dataset.note);
+      else if (btn.dataset.target === 'bass') etSelectBass(btn.dataset.note);
+    };
   });
   // Hints
+  view.querySelectorAll('[data-action="hint-root"]').forEach(btn => { btn.onclick = () => etPlayHintRoot(); });
   view.querySelectorAll('[data-action="hint-quality"]').forEach(btn => { btn.onclick = () => etPlayHintQuality(); });
   view.querySelectorAll('[data-action="hint-bass"]').forEach(btn => { btn.onclick = () => etPlayHintBass(); });
-  // Step 3: confirm + playback
+  // Confirm + playback
   view.querySelectorAll('[data-action="play-user"]').forEach(btn => { btn.onclick = () => etPlayUserChord(); });
   view.querySelectorAll('[data-action="play-actual"]').forEach(btn => { btn.onclick = () => etPlayChord(etState.currentVoicing); });
   view.querySelectorAll('[data-action="play-actual-arp"]').forEach(btn => { btn.onclick = () => etPlayArpeggio(etState.currentVoicing); });
