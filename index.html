@@ -3654,7 +3654,7 @@ function renderGenrePicker() {
   const el = document.getElementById('genre-picker');
   el.innerHTML = '';
   Object.entries(GENRES).forEach(([key, g]) => {
-    if (key === 'playground' || key === 'listener' || key === 'splitter') return; // All have their own dedicated header buttons
+    if (key === 'playground' || key === 'listener' || key === 'splitter' || key === 'singer' || key === 'eartraining') return; // All have their own dedicated header buttons
     const btn = document.createElement('button');
     btn.className = 'pill' + (state.genreKey === key ? ' active' : '');
     btn.innerHTML = (g.iconHtml ? g.iconHtml + ' ' : '') + g.name;
