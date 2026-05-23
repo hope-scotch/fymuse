@@ -1256,9 +1256,12 @@
 
   .et-status { display: flex; gap: 24px; align-items: center; padding: 14px 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; flex-wrap: wrap; }
   .et-status-meta { display: flex; gap: 24px; }
-  .et-progress, .et-score { display: flex; flex-direction: column; gap: 2px; }
-  .et-progress-label, .et-score-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
+  .et-progress, .et-score, .et-sound { display: flex; flex-direction: column; gap: 2px; }
+  .et-progress-label, .et-score-label, .et-sound-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
   .et-progress-count, .et-score-val { font-size: 17px; font-weight: 700; color: var(--text); font-family: var(--font-mono); }
+  .et-sound-picker { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 5px 9px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font-sans); transition: border-color 0.15s; min-width: 130px; }
+  .et-sound-picker:hover { border-color: var(--accent-2); }
+  .et-sound-picker:focus { outline: none; border-color: var(--accent-2); }
   .et-controls { display: flex; gap: 8px; margin-left: auto; }
 
   .et-btn { padding: 9px 16px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 600; font-family: var(--font-sans); display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
@@ -20933,9 +20936,13 @@ function etRenderShell(bodyHtml) {
             <span class="et-score-label">Score</span>
             <span class="et-score-val">${scoreNow}</span>
           </div>
+          <div class="et-sound">
+            <span class="et-sound-label">Sound</span>
+            <select class="et-sound-picker" id="et-sound-picker" title="Pick the instrument used for playback"></select>
+          </div>
         </div>
         <div class="et-controls">
-          <button class="et-btn" id="et-replay-cadence-btn" title="Re-anchor your ear to C major"><i class="ph-duotone ph-music-notes"></i> Cadence</button>
+          <button class="et-btn" id="et-replay-cadence-btn" title="Re-anchor your ear to the chord's root"><i class="ph-duotone ph-music-notes"></i> Cadence</button>
           <button class="et-btn" id="et-arpeggio-btn" title="Hear the chord as an arpeggio (notes one at a time, ascending)"><i class="ph-duotone ph-waveform"></i> Arpeggio</button>
           <button class="et-btn et-btn-primary" id="et-replay-btn"><i class="ph-duotone ph-play"></i> Replay chord</button>
         </div>
@@ -21274,7 +21281,25 @@ function etWireShellHandlers(view) {
   const arp = view.querySelector('#et-arpeggio-btn');
   if (arp) arp.onclick = () => etPlayArpeggio(etState.currentVoicing);
   const cad = view.querySelector('#et-replay-cadence-btn');
-  if (cad) cad.onclick = () => etPlayCadence();
+  if (cad) cad.onclick = () => etPlayCadence(etState.currentChord ? etState.currentChord.root : 'C');
+  // Sound picker (mirror of the global instrument picker)
+  const sound = view.querySelector('#et-sound-picker');
+  if (sound) {
+    sound.innerHTML = '';
+    Object.entries(INSTRUMENTS).forEach(([k, v]) => {
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = v.label;
+      if (k === currentInstrument) opt.selected = true;
+      sound.appendChild(opt);
+    });
+    sound.onchange = async (e) => {
+      await setInstrument(e.target.value);
+      // Sync the global header picker so they stay in lockstep.
+      const hp = document.getElementById('instrument-picker');
+      if (hp) hp.value = e.target.value;
+    };
+  }
   view.querySelectorAll('.et-mode-btn').forEach(btn => {
     btn.onclick = () => {
       if (btn.classList.contains('et-mode-disabled')) return;
