@@ -20583,13 +20583,13 @@ const ET_LEVELS = [
     qualities: ['maj','min','maj7','m7','7','sus2','sus4','dim','aug'],
     maxInversion: 3,
     invWeights: [0.50, 0.28, 0.16, 0.06],
-    timerSeconds: 10 },
+    timerSeconds: 20 },
   { id: 2, label: 'Advanced', desc: 'Root is hidden · identify root + quality + bass',
     rootShown: false,
     qualities: ['maj','min','maj7','m7','7','sus2','sus4','dim','aug'],
     maxInversion: 3,
     invWeights: [0.50, 0.28, 0.16, 0.06],
-    timerSeconds: 10 },
+    timerSeconds: 20 },
 ];
 function etCurrentLevel() {
   return ET_LEVELS.find(l => l.id === etState.level) || ET_LEVELS[0];
