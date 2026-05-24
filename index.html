@@ -1256,9 +1256,18 @@
 
   .et-status { display: flex; gap: 24px; align-items: center; padding: 14px 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; flex-wrap: wrap; }
   .et-status-meta { display: flex; gap: 24px; }
-  .et-progress, .et-score, .et-sound { display: flex; flex-direction: column; gap: 2px; }
-  .et-progress-label, .et-score-label, .et-sound-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
-  .et-progress-count, .et-score-val { font-size: 17px; font-weight: 700; color: var(--text); font-family: var(--font-mono); }
+  .et-progress, .et-score, .et-sound, .et-timer { display: flex; flex-direction: column; gap: 2px; }
+  .et-progress-label, .et-score-label, .et-sound-label, .et-timer-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
+  .et-progress-count, .et-score-val, .et-timer-val { font-size: 17px; font-weight: 700; color: var(--text); font-family: var(--font-mono); }
+  .et-timer.is-mid .et-timer-val { color: var(--accent); }
+  .et-timer.is-low .et-timer-val { color: #ef4444; animation: et-timer-pulse 0.6s ease-in-out infinite alternate; }
+  @keyframes et-timer-pulse { from { opacity: 0.6; } to { opacity: 1; } }
+  .et-timed-out { color: #ef4444; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 6px; }
+  .et-hint-cost { color: #ef4444; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; margin-left: 4px; opacity: 0.9; }
+  .et-step.is-given { background: var(--panel-2); border-color: var(--border); opacity: 0.92; }
+  .et-step.is-given .et-step-title { color: var(--text-2); }
+  .et-step.is-given .et-step-number { background: var(--text-2); color: #0a0a10; }
+  .et-results-level { font-weight: 400; color: var(--muted); font-size: 13px; letter-spacing: 0; }
   .et-sound-picker { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 5px 9px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font-sans); transition: border-color 0.15s; min-width: 130px; }
   .et-sound-picker:hover { border-color: var(--accent-2); }
   .et-sound-picker:focus { outline: none; border-color: var(--accent-2); }
@@ -6656,6 +6665,10 @@ function renderAll() {
   // Stop splitter playback if leaving splitter view
   if (typeof splitterState !== 'undefined' && splitterState.playing && !(state.genre && state.genre.isSplitter)) {
     splitterStopAll();
+  }
+  // Stop the Ear Training round timer if leaving the view
+  if (typeof etState !== 'undefined' && etState.timerHandle && !(state.genre && state.genre.isEarTraining)) {
+    etStopTimer();
   }
   // Stop singer mic / track / recording if leaving singer view
   if (typeof singerState !== 'undefined' && !(state.genre && state.genre.isSinger)) {
@@ -20559,26 +20572,28 @@ function etPickRoot(quality) {
   return (useFlats ? ET_ROOTS_FLAT : ET_ROOTS_SHARP)[idx];
 }
 
-// Difficulty levels — control quality pool, root behavior, and inversion frequency.
+// Difficulty levels — control whether the root is shown to the user, and inversion frequency.
+// Both levels use all 9 qualities and all inversions; only the root-identification task differs.
 const ET_LEVELS = [
-  { id: 1, label: 'Beginner',     desc: 'Fixed root C · 5 common qualities (maj, min, maj7, m7, dom7) · mostly root position',
-    fixedRoot: 'C',
-    qualities: ['maj','min','maj7','m7','7'],
-    maxInversion: 1,    // root pos + occasional 1st inv
-    invWeights: [0.75, 0.25] },
-  { id: 2, label: 'Intermediate', desc: 'Fixed root C · all 9 qualities · all inversions',
-    fixedRoot: 'C',
+  { id: 1, label: 'Beginner', desc: 'Root is shown to you · identify quality + bass',
+    rootShown: true,
     qualities: ['maj','min','maj7','m7','7','sus2','sus4','dim','aug'],
     maxInversion: 3,
-    invWeights: [0.55, 0.25, 0.14, 0.06] },
-  { id: 3, label: 'Advanced',     desc: 'Any root · all 9 qualities · all inversions',
-    fixedRoot: null,
+    invWeights: [0.50, 0.28, 0.16, 0.06],
+    timerSeconds: 10 },
+  { id: 2, label: 'Advanced', desc: 'Root is hidden · identify root + quality + bass',
+    rootShown: false,
     qualities: ['maj','min','maj7','m7','7','sus2','sus4','dim','aug'],
     maxInversion: 3,
-    invWeights: [0.50, 0.28, 0.16, 0.06] },
+    invWeights: [0.50, 0.28, 0.16, 0.06],
+    timerSeconds: 10 },
 ];
 function etCurrentLevel() {
   return ET_LEVELS.find(l => l.id === etState.level) || ET_LEVELS[0];
+}
+function etMaxPerChord() {
+  // L1 (root shown): root is free, doesn't score → 10 max. L2: 15 max.
+  return etCurrentLevel().rootShown ? 10 : 15;
 }
 
 // Map a raw CHORD_TYPES quality to a UI quality id.
@@ -20645,14 +20660,43 @@ const etState = {
   mode: 'click',
   phase: 'idle',                // 'idle' | 'playing' | 'done'
   cadenceOn: true,
-  level: 1,                     // 1=Beginner, 2=Intermediate, 3=Advanced
+  level: 1,                     // 1=Beginner (root shown), 2=Advanced (root hidden)
+  // Round timer
+  timerRemaining: 0,
+  timerHandle: null,
+  timerStarted: false,
 };
+
+function etStartTimer() {
+  etStopTimer();
+  const lvl = etCurrentLevel();
+  etState.timerRemaining = lvl.timerSeconds || 10;
+  etState.timerStarted = true;
+  etState.timerHandle = setInterval(() => {
+    if (etState.confirmed || etState.phase !== 'playing') { etStopTimer(); return; }
+    etState.timerRemaining--;
+    if (etState.timerRemaining <= 0) {
+      etStopTimer();
+      etConfirm(); // auto-confirm with whatever's selected (missing dimensions score 0)
+      return;
+    }
+    renderEarTraining();
+  }, 1000);
+  renderEarTraining();
+}
+
+function etStopTimer() {
+  if (etState.timerHandle) {
+    clearInterval(etState.timerHandle);
+    etState.timerHandle = null;
+  }
+}
 
 function etPickChord() {
   const lvl = etCurrentLevel();
   const availableQualities = ET_QUALITIES.filter(q => lvl.qualities.includes(q.id));
   const qd = availableQualities[Math.floor(Math.random() * availableQualities.length)];
-  const root = lvl.fixedRoot || etPickRoot(qd.quality);
+  const root = etPickRoot(qd.quality);
   const chord = buildChord(root, qd.quality);
   const inversions = chord.notes.length;
   // Inversion: pick by cumulative weights, clamped to available inversions of this chord.
@@ -20821,34 +20865,43 @@ function etSelectBass(note) {
 }
 
 // Evaluate user's answer on Confirm. Award points, lock answer, reveal description.
+// Allows missing selections (timer-expiry path) — missing dimensions score 0.
 function etConfirm() {
   if (etState.confirmed) return;
-  if (!etState.userRoot || !etState.userQuality || !etState.userBass) return;
+  etStopTimer();
   const c = etState.currentChord;
   const v = etState.currentVoicing;
+  const lvl = etCurrentLevel();
   const correctQuality = etQualityCategory(c.quality);
-  const rootRight = noteIndex(etState.userRoot) === noteIndex(c.root);
+  // In beginner mode, the root is given so it's always "right" — but it doesn't earn points.
+  const rootRight = lvl.rootShown
+    ? true
+    : (etState.userRoot ? noteIndex(etState.userRoot) === noteIndex(c.root) : false);
   const qualityRight = etState.userQuality === correctQuality;
-  const bassRight = noteIndex(etState.userBass) === noteIndex(v.bassNote);
+  const bassRight = etState.userBass ? (noteIndex(etState.userBass) === noteIndex(v.bassNote)) : false;
   let pts = 0;
-  if (rootRight)    pts += etState.hintUsedRoot    ? 3 : 5;
-  if (qualityRight) pts += etState.hintUsedQuality ? 3 : 5;
-  if (bassRight)    pts += etState.hintUsedBass    ? 3 : 5;
-  etState.confirmResult = { rootRight, qualityRight, bassRight, totalPts: pts };
+  // Root scores only if the player had to identify it.
+  if (!lvl.rootShown && rootRight) pts += etState.hintUsedRoot    ? 3 : 5;
+  if (qualityRight)                pts += etState.hintUsedQuality ? 3 : 5;
+  if (bassRight)                   pts += etState.hintUsedBass    ? 3 : 5;
+  etState.confirmResult = { rootRight, qualityRight, bassRight, totalPts: pts, timedOut: etState.timerRemaining <= 0 };
   etState.confirmed = true;
   renderEarTraining();
 }
 
 async function etNextChord() {
+  etStopTimer();
   if (etState.currentIdx >= etState.sessionLength) {
     etState.phase = 'done';
     renderEarTraining();
     return;
   }
   const pick = etPickChord();
+  const lvl = etCurrentLevel();
   etState.currentChord = pick.chord;
   etState.currentVoicing = pick.voicing;
-  etState.userRoot = null;
+  // If root is shown to the user (Beginner level), pre-fill it so step 1 is non-interactive.
+  etState.userRoot = lvl.rootShown ? pick.chord.root : null;
   etState.userQuality = null;
   etState.userBass = null;
   etState.confirmed = false;
@@ -20859,6 +20912,8 @@ async function etNextChord() {
   etState.hintShownRoot = false;
   etState.hintShownQuality = false;
   etState.hintShownBass = false;
+  etState.timerRemaining = lvl.timerSeconds || 10;
+  etState.timerStarted = false;
   etState.phase = 'playing';
   renderEarTraining();
   try {
@@ -20867,6 +20922,9 @@ async function etNextChord() {
       await new Promise(r => setTimeout(r, 220));
     }
     await etPlayChord(pick.voicing);
+    // Give the chord a beat to ring out, then start the timer.
+    await new Promise(r => setTimeout(r, 600));
+    if (etState.phase === 'playing' && !etState.confirmed) etStartTimer();
   } catch (e) { console.warn('ET audio failed', e); }
 }
 
@@ -20970,13 +21028,18 @@ function etRenderShell(bodyHtml) {
             <span class="et-score-label">Score</span>
             <span class="et-score-val">${scoreNow}</span>
           </div>
+          ${etState.phase === 'playing' && !etState.confirmed && etState.timerStarted ? `
+          <div class="et-timer ${etState.timerRemaining <= 3 ? 'is-low' : (etState.timerRemaining <= 5 ? 'is-mid' : '')}">
+            <span class="et-timer-label">Time</span>
+            <span class="et-timer-val">${etState.timerRemaining}s</span>
+          </div>` : ''}
           <div class="et-sound">
             <span class="et-sound-label">Sound</span>
             <select class="et-sound-picker" id="et-sound-picker" title="Pick the instrument used for playback"></select>
           </div>
           <div class="et-sound">
             <span class="et-sound-label">Level</span>
-            <select class="et-sound-picker" id="et-level-picker" title="Pick the difficulty">
+            <select class="et-sound-picker" id="et-level-picker" ${etState.phase === 'playing' ? 'disabled title="Difficulty is locked during a session — finish first or restart to change."' : 'title="Pick the difficulty"'}>
               ${ET_LEVELS.map(l => `<option value="${l.id}" ${l.id===etState.level?'selected':''}>${l.id}. ${l.label}</option>`).join('')}
             </select>
           </div>
@@ -21044,29 +21107,50 @@ function etRenderNoteStrip(selected, correct, confirmed, rightFlag, target) {
   }).join('');
 }
 
-// STEP 1 — Root. 12-note chromatic strip. Hint plays the root note alone.
+// STEP 1 — Root. 12-note chromatic strip.
+// In Beginner mode (rootShown), step 1 is non-interactive — the correct root is pre-selected
+// and the buttons are disabled. No hint, no scoring on this step.
 function etRenderStepRoot() {
   const confirmed = etState.confirmed;
-  const stateClass = confirmed ? (etState.confirmResult.rootRight ? 'is-correct' : 'is-wrong') : 'is-active';
-  const selected = etState.userRoot;
+  const lvl = etCurrentLevel();
+  const rootShown = lvl.rootShown;
   const correct = etState.currentChord.root;
-  const keys = etRenderNoteStrip(selected, correct, confirmed, confirmed && etState.confirmResult.rootRight, 'root');
+  const selected = rootShown ? correct : etState.userRoot;
+  // Build the strip: in rootShown mode, all buttons disabled with the correct one pre-selected.
+  const keys = ET_CHROMATIC.map(n => {
+    const isSel = selected && (noteIndex(n.name) === noteIndex(selected));
+    const isCorrect = (confirmed || rootShown) && (noteIndex(n.name) === noteIndex(correct));
+    const isWrongPick = confirmed && !rootShown && isSel && !etState.confirmResult.rootRight;
+    let cls = n.sharp ? 'et-key et-key-sharp' : 'et-key et-key-natural';
+    if (isSel) cls += ' is-selected';
+    if (isCorrect) cls += ' is-correct';
+    if (isWrongPick) cls += ' is-wrong';
+    const label = n.alt ? `${n.name}<span class="et-alt">/${n.alt}</span>` : n.name;
+    const disabled = (confirmed || rootShown) ? 'disabled' : '';
+    return `<button class="${cls}" data-target="root" data-note="${n.name}" ${disabled}>${label}</button>`;
+  }).join('');
+  const stateClass = rootShown
+    ? 'is-given'
+    : (confirmed ? (etState.confirmResult.rootRight ? 'is-correct' : 'is-wrong') : 'is-active');
   const head = `
     <div class="et-step-head">
       <div class="et-step-number">1</div>
-      <div class="et-step-title">Root</div>
-      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-root"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedRoot?' ✓':''}</button>` : ''}
+      <div class="et-step-title">Root ${rootShown ? '<small class="et-step-sub">· given</small>' : ''}</div>
+      ${!confirmed && !rootShown ? `<button class="et-hint-btn" data-action="hint-root"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedRoot?' ✓':''} <span class="et-hint-cost">−2</span></button>` : ''}
     </div>
   `;
-  const prompt = !confirmed
-    ? `<div class="et-step-prompt">What's the root of the chord on top? The cadence anchored your ear — the chord's root sits on or near the strongest note.</div>`
+  let prompt = '';
+  if (rootShown) {
+    prompt = `<div class="et-step-prompt">The root is <strong>${correct}</strong> — given to you. Focus on identifying the quality and bass below.</div>`;
+  } else if (!confirmed) {
+    prompt = `<div class="et-step-prompt">What's the root of the chord? The cadence anchored your ear — the chord's root sits on or near the strongest note.</div>`;
+  }
+  const hintText = !rootShown && etState.hintShownRoot && !confirmed
+    ? `<div class="et-hint-text"><i class="ph-duotone ph-lightbulb"></i> I played the root note alone. Match its pitch to one of the 12 notes — sharp or flat spelling, both work.</div>`
     : '';
-  const hintText = etState.hintShownRoot && !confirmed
-    ? `<div class="et-hint-text"><i class="ph-duotone ph-lightbulb"></i> I played the root note alone. Match its pitch to one of the 12 notes — root spelling can be sharp or flat, both work.</div>`
-    : '';
-  const reveal = confirmed && !etState.confirmResult.rootRight
+  const reveal = !rootShown && confirmed && !etState.confirmResult.rootRight
     ? `<div class="et-step-feedback">You picked <strong>${selected || '—'}</strong>. The actual root is <strong>${correct}</strong>.</div>`
-    : (confirmed && etState.confirmResult.rootRight ? `<div class="et-step-correct"><i class="ph-duotone ph-check-circle"></i> Root: ${correct}</div>` : '');
+    : (!rootShown && confirmed && etState.confirmResult.rootRight ? `<div class="et-step-correct"><i class="ph-duotone ph-check-circle"></i> Root: ${correct}</div>` : '');
   return `
     <div class="et-step ${stateClass}">
       ${head}
@@ -21105,7 +21189,7 @@ function etRenderStepQuality() {
     <div class="et-step-head">
       <div class="et-step-number">2</div>
       <div class="et-step-title">Quality</div>
-      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-quality"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedQuality?' ✓':''}</button>` : ''}
+      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-quality"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedQuality?' ✓':''} <span class="et-hint-cost">−2</span></button>` : ''}
     </div>
   `;
   const prompt = !confirmed
@@ -21143,7 +21227,7 @@ function etRenderStepBass() {
     <div class="et-step-head">
       <div class="et-step-number">3</div>
       <div class="et-step-title">Over <small class="et-step-sub">· bass note</small></div>
-      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-bass"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedBass?' ✓':''}</button>` : ''}
+      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-bass"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedBass?' ✓':''} <span class="et-hint-cost">−2</span></button>` : ''}
     </div>
   `;
   const prompt = !confirmed
@@ -21172,7 +21256,9 @@ function etRenderStepBass() {
 // Before confirm: lets the user audition their constructed chord vs. the actual one.
 // After confirm: reveals correct symbol, description, and full playback controls + Next.
 function etRenderStepConfirm() {
-  const ready = etState.userRoot && etState.userQuality && etState.userBass;
+  const lvl = etCurrentLevel();
+  // Root is auto-set in rootShown mode, so we only need quality + bass picked.
+  const ready = (lvl.rootShown || etState.userRoot) && etState.userQuality && etState.userBass;
   const confirmed = etState.confirmed;
   const userVoicing = etBuildUserVoicing();
   const userLabel = userVoicing ? userVoicing.slashLabel : '—';
@@ -21219,14 +21305,15 @@ function etRenderStepConfirm() {
   else invDesc = `In <strong>${invNames[inv]}</strong> — the ${chordToneNames[inv]} (${v.bassNote}) is in the bass instead of the root.`;
   const upperLabel = v.upperNotes.map(n => n.replace(/[0-9]/g,'')).join(' – ');
   const r = etState.confirmResult;
-  const allRight = r.rootRight && r.qualityRight && r.bassRight;
+  const allRight = (lvl.rootShown ? true : r.rootRight) && r.qualityRight && r.bassRight;
+  const timedOutBadge = r.timedOut ? ' <span class="et-timed-out">⏱ Timed out</span>' : '';
   return `
     <div class="et-step is-active ${allRight?'is-correct':'is-partial'}">
       ${head}
       <div class="et-review">
         <div class="et-review-label">
           <div class="et-review-symbol">${actualLabel}</div>
-          <div class="et-review-meta">${upperLabel} · bass ${v.bassNote} · ${r.totalPts} / 15 pts</div>
+          <div class="et-review-meta">${upperLabel} · bass ${v.bassNote} · ${r.totalPts} / ${etMaxPerChord()} pts${timedOutBadge}</div>
         </div>
         <div class="et-review-blurb">
           ${qd ? qd.blurb : ''}
@@ -21297,7 +21384,9 @@ function etAdvanceToNext() {
 
 function etRenderResults() {
   const total = etState.scoreTotal;
-  const max = etState.sessionLength * 15;
+  const lvl = etCurrentLevel();
+  const maxPer = lvl.rootShown ? 10 : 15;
+  const max = etState.sessionLength * maxPer;
   const pct = max > 0 ? Math.round((total / max) * 100) : 0;
   const ic = ok => ok
     ? '<i class="ph-duotone ph-check" style="color:#22c55e"></i>'
@@ -21305,7 +21394,7 @@ function etRenderResults() {
   return `
     <div class="et-results">
       <div class="et-results-head">
-        <div class="et-results-title">Session complete</div>
+        <div class="et-results-title">Session complete <small class="et-results-level">· ${lvl.label}</small></div>
         <div class="et-results-score">${total} / ${max}<span class="et-results-pct">${pct}%</span></div>
       </div>
       <div class="et-results-list">
@@ -21313,8 +21402,8 @@ function etRenderResults() {
           <div class="et-result-row">
             <div class="et-result-num">${i + 1}</div>
             <div class="et-result-chord">${r.voicing.slashLabel}</div>
-            <div class="et-result-flags">${ic(r.rootRight)} root · ${ic(r.qualityRight)} quality · ${ic(r.bassRight)} bass</div>
-            <div class="et-result-score">${r.score} / 15</div>
+            <div class="et-result-flags">${lvl.rootShown ? '' : ic(r.rootRight) + ' root · '}${ic(r.qualityRight)} quality · ${ic(r.bassRight)} bass</div>
+            <div class="et-result-score">${r.score} / ${maxPer}</div>
           </div>`).join('')}
       </div>
       <button class="et-btn et-btn-primary" id="et-restart-btn"><i class="ph-duotone ph-arrow-clockwise"></i> Start a new session</button>
