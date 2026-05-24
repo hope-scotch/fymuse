@@ -6666,10 +6666,13 @@ function renderAll() {
   if (typeof splitterState !== 'undefined' && splitterState.playing && !(state.genre && state.genre.isSplitter)) {
     splitterStopAll();
   }
-  // Stop the Ear Training round timer if leaving the view
-  if (typeof etState !== 'undefined' && etState.timerHandle && !(state.genre && state.genre.isEarTraining)) {
-    etStopTimer();
-  }
+  // Stop the Ear Training round timer if leaving the view.
+  // Wrapped in try/catch because etState is declared later in the script (TDZ during init).
+  try {
+    if (etState && etState.timerHandle && !(state.genre && state.genre.isEarTraining)) {
+      etStopTimer();
+    }
+  } catch (e) { /* etState not yet initialized — nothing to clean up */ }
   // Stop singer mic / track / recording if leaving singer view
   if (typeof singerState !== 'undefined' && !(state.genre && state.genre.isSinger)) {
     if (singerState.active || singerState.recording || singerState.trackPlaying) singerStopAll();
