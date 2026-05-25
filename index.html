@@ -1287,6 +1287,46 @@
   .et-idle-level-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
   .et-idle-level .et-sound-picker { min-width: 340px; padding: 7px 11px; font-size: 12.5px; }
 
+  /* Mode picker cards on the idle screen */
+  .et-mode-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; margin: 12px 0 18px; }
+  .et-mode-card { padding: 18px 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.15s; }
+  .et-mode-card:hover { border-color: var(--accent-2); transform: translateY(-2px); }
+  .et-mode-card.is-selected { border-color: var(--accent); background: linear-gradient(180deg, var(--accent-soft), var(--panel)); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .et-mode-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .et-mode-card-head i { font-size: 22px; color: var(--accent); }
+  .et-mode-card-head h3 { margin: 0; font-size: 17px; font-weight: 700; color: var(--text); }
+  .et-mode-card p { margin: 0 0 10px; color: var(--text-2); font-size: 13px; line-height: 1.55; }
+  .et-mode-card strong { color: var(--text); }
+  .et-mode-list { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12.5px; color: var(--text-2); }
+  .et-mode-list li { padding: 4px 0; line-height: 1.5; }
+  .et-mode-list strong { color: var(--accent); font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.3px; }
+  .et-idle-start { display: flex; justify-content: center; }
+
+  /* In-game reveal: +5s bonus badge and "auto-advancing" placeholder */
+  .et-bonus { color: #22c55e; font-family: var(--font-mono); font-weight: 700; font-size: 13px; margin-left: 8px; padding: 2px 7px; background: rgba(34,197,94,0.15); border-radius: 4px; }
+  .et-auto-next { color: var(--muted); font-size: 12.5px; font-style: italic; padding: 9px 16px; align-self: center; }
+
+  /* Between-stages screen */
+  .et-stage-done { padding: 28px 32px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; text-align: center; }
+  .et-stage-done h2 { font-size: 22px; font-weight: 700; color: var(--accent); margin: 0 0 12px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .et-stage-done-stat { font-size: 17px; font-family: var(--font-mono); color: var(--text); margin-bottom: 14px; }
+  .et-stage-done p { color: var(--text-2); font-size: 13.5px; margin: 0 0 18px; max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+
+  /* Results screens — game stage breakdown + practice weakness report */
+  .et-results-stages { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
+  .et-result-stage-row { display: grid; grid-template-columns: 84px 1fr auto; align-items: center; gap: 14px; padding: 12px 14px; background: var(--panel-2); border-radius: 8px; }
+  .et-result-stage-num { color: var(--accent); font-family: var(--font-mono); font-weight: 700; font-size: 13.5px; }
+  .et-result-stage-desc { color: var(--text-2); font-size: 12.5px; }
+  .et-result-stage-score { color: var(--text); font-family: var(--font-mono); font-weight: 700; font-size: 13.5px; }
+  .et-results-overalls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .et-result-overall { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--panel-2); border-radius: 8px; }
+  .et-result-overall-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
+  .et-result-overall-val { font-size: 16px; color: var(--text); font-family: var(--font-mono); font-weight: 700; }
+  .et-result-overall-pct { font-size: 13px; color: var(--accent); font-family: var(--font-mono); font-weight: 700; }
+  .et-results-section { margin-bottom: 20px; }
+  .et-results-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.7px; color: var(--muted); margin-bottom: 8px; font-weight: 700; }
+  .et-result-empty { color: var(--muted); font-style: italic; font-size: 13px; padding: 8px 14px; }
+
   .et-steps { display: flex; flex-direction: column; gap: 12px; }
   .et-step { padding: 16px 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; transition: all 0.2s; }
   .et-step.is-future { opacity: 0.45; }
@@ -6666,11 +6706,11 @@ function renderAll() {
   if (typeof splitterState !== 'undefined' && splitterState.playing && !(state.genre && state.genre.isSplitter)) {
     splitterStopAll();
   }
-  // Stop the Ear Training round timer if leaving the view.
+  // Stop the Ear Training stage timer if leaving the view.
   // Wrapped in try/catch because etState is declared later in the script (TDZ during init).
   try {
-    if (etState && etState.timerHandle && !(state.genre && state.genre.isEarTraining)) {
-      etStopTimer();
+    if (etState && etState.stageHandle && !(state.genre && state.genre.isEarTraining)) {
+      etStopStageTimer();
     }
   } catch (e) { /* etState not yet initialized — nothing to clean up */ }
   // Stop singer mic / track / recording if leaving singer view
@@ -20575,29 +20615,31 @@ function etPickRoot(quality) {
   return (useFlats ? ET_ROOTS_FLAT : ET_ROOTS_SHARP)[idx];
 }
 
-// Difficulty levels — control whether the root is shown to the user, and inversion frequency.
-// Both levels use all 9 qualities and all inversions; only the root-identification task differs.
-const ET_LEVELS = [
-  { id: 1, label: 'Beginner', desc: 'Root is shown to you · identify quality + bass',
-    rootShown: true,
-    qualities: ['maj','min','maj7','m7','7','sus2','sus4','dim','aug'],
-    maxInversion: 3,
-    invWeights: [0.50, 0.28, 0.16, 0.06],
-    timerSeconds: 20 },
-  { id: 2, label: 'Advanced', desc: 'Root is hidden · identify root + quality + bass',
-    rootShown: false,
-    qualities: ['maj','min','maj7','m7','7','sus2','sus4','dim','aug'],
-    maxInversion: 3,
-    invWeights: [0.50, 0.28, 0.16, 0.06],
-    timerSeconds: 20 },
+// Game mode stages — sequential. Each stage has its own 120s timer; +5s per correct guess.
+// "active" controls which dimensions the player must identify; non-active dimensions are
+// pre-filled with the correct answer and disabled (still visible so the player learns).
+const ET_STAGES = [
+  { id: 1, label: 'Stage 1', desc: 'Identify the quality (root + bass are given)',
+    active: { root: false, quality: true,  bass: false },
+    timer: 120, bonus: 5 },
+  { id: 2, label: 'Stage 2', desc: 'Identify quality + bass (root is given)',
+    active: { root: false, quality: true,  bass: true  },
+    timer: 120, bonus: 5 },
+  { id: 3, label: 'Stage 3', desc: 'Identify root + quality + bass (nothing is given)',
+    active: { root: true,  quality: true,  bass: true  },
+    timer: 120, bonus: 5 },
 ];
-function etCurrentLevel() {
-  return ET_LEVELS.find(l => l.id === etState.level) || ET_LEVELS[0];
+function etCurrentStage() {
+  return ET_STAGES.find(s => s.id === etState.stage) || ET_STAGES[0];
 }
-function etMaxPerChord() {
-  // L1 (root shown): root is free, doesn't score → 10 max. L2: 15 max.
-  return etCurrentLevel().rootShown ? 10 : 15;
+function etActiveDimensions() {
+  // Game: per-stage. Practice: all three.
+  if (etState.mode === 'practice') return { root: true, quality: true, bass: true };
+  return etCurrentStage().active;
 }
+// All qualities and inversions are always in play — common qualities are not filtered.
+const ET_QUALITY_IDS = ET_QUALITIES.map(q => q.id);
+const ET_INVERSION_WEIGHTS = [0.50, 0.28, 0.16, 0.06];
 
 // Map a raw CHORD_TYPES quality to a UI quality id.
 function etQualityCategory(q) {
@@ -20659,28 +20701,42 @@ const etState = {
   hintShownRoot: false,
   hintShownQuality: false,
   hintShownBass: false,
-  scoreTotal: 0,
-  mode: 'click',
-  phase: 'idle',                // 'idle' | 'playing' | 'done'
+  scoreTotal: 0,                // legacy — kept for any backward refs, not used by game/practice
+  phase: 'idle',                // 'idle' | 'playing' | 'stage-done' | 'done'
   cadenceOn: true,
-  level: 1,                     // 1=Beginner (root shown), 2=Advanced (root hidden)
-  // Round timer
-  timerRemaining: 0,
-  timerHandle: null,
-  timerStarted: false,
+  // === Game-mode state ===
+  mode: 'game',                 // 'game' | 'practice'
+  stage: 1,                     // game: 1..3
+  stageTimeRemaining: 0,        // seconds left in the current stage
+  stageHandle: null,            // interval handle
+  stageStarted: false,          // has the stage timer been kicked off this stage?
+  stageScore: 0,                // correct guesses in current stage
+  stageAttempts: 0,             // total attempts in current stage
+  stageResults: [],             // [{ stage, score, attempts, finalTime }, ...]
+  // === Practice-mode state ===
+  practiceStats: {              // tracked across all rounds in this practice session
+    rounds: 0,
+    rootRight: 0,
+    qualityRight: 0,
+    bassRight: 0,
+    perQuality: {},             // { qid: { right, total } }
+    perRoot: {},                // { 'C': { right, total }, ... } — pitch-class keyed
+  },
 };
 
-function etStartTimer() {
-  etStopTimer();
-  const lvl = etCurrentLevel();
-  etState.timerRemaining = lvl.timerSeconds || 10;
-  etState.timerStarted = true;
-  etState.timerHandle = setInterval(() => {
-    if (etState.confirmed || etState.phase !== 'playing') { etStopTimer(); return; }
-    etState.timerRemaining--;
-    if (etState.timerRemaining <= 0) {
-      etStopTimer();
-      etConfirm(); // auto-confirm with whatever's selected (missing dimensions score 0)
+// Stage timer — counts down across multiple chords within a stage. Hits 0 → end of stage.
+function etStartStageTimer() {
+  etStopStageTimer();
+  if (etState.mode !== 'game') return;
+  const stg = etCurrentStage();
+  etState.stageTimeRemaining = stg.timer;
+  etState.stageStarted = true;
+  etState.stageHandle = setInterval(() => {
+    if (etState.phase !== 'playing' || etState.mode !== 'game') { etStopStageTimer(); return; }
+    etState.stageTimeRemaining--;
+    if (etState.stageTimeRemaining <= 0) {
+      etStopStageTimer();
+      etEndStage();
       return;
     }
     renderEarTraining();
@@ -20688,23 +20744,23 @@ function etStartTimer() {
   renderEarTraining();
 }
 
-function etStopTimer() {
-  if (etState.timerHandle) {
-    clearInterval(etState.timerHandle);
-    etState.timerHandle = null;
+function etStopStageTimer() {
+  if (etState.stageHandle) {
+    clearInterval(etState.stageHandle);
+    etState.stageHandle = null;
   }
 }
 
+// Backwards-compatible alias for the renderAll cleanup hook.
+function etStopTimer() { etStopStageTimer(); }
+
 function etPickChord() {
-  const lvl = etCurrentLevel();
-  const availableQualities = ET_QUALITIES.filter(q => lvl.qualities.includes(q.id));
-  const qd = availableQualities[Math.floor(Math.random() * availableQualities.length)];
+  const qd = ET_QUALITIES[Math.floor(Math.random() * ET_QUALITIES.length)];
   const root = etPickRoot(qd.quality);
   const chord = buildChord(root, qd.quality);
   const inversions = chord.notes.length;
-  // Inversion: pick by cumulative weights, clamped to available inversions of this chord.
-  const maxInv = Math.min(lvl.maxInversion, inversions - 1);
-  const weights = lvl.invWeights.slice(0, maxInv + 1);
+  const maxInv = Math.min(ET_INVERSION_WEIGHTS.length - 1, inversions - 1);
+  const weights = ET_INVERSION_WEIGHTS.slice(0, maxInv + 1);
   const sum = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * sum;
   let invIdx = 0;
@@ -20867,46 +20923,73 @@ function etSelectBass(note) {
   renderEarTraining();
 }
 
-// Evaluate user's answer on Confirm. Award points, lock answer, reveal description.
-// Allows missing selections (timer-expiry path) — missing dimensions score 0.
+// Evaluate user's answer on Confirm. Behaviour differs by mode:
+//   Game: only checks the active dimensions; all-correct adds +5s to stage timer and
+//         +1 to stage score; auto-advances to next chord after a brief reveal.
+//   Practice: checks all three dimensions, updates per-quality/per-root stats, then
+//             waits for the user to click Next.
 function etConfirm() {
   if (etState.confirmed) return;
-  etStopTimer();
   const c = etState.currentChord;
   const v = etState.currentVoicing;
-  const lvl = etCurrentLevel();
+  const active = etActiveDimensions();
   const correctQuality = etQualityCategory(c.quality);
-  // In beginner mode, the root is given so it's always "right" — but it doesn't earn points.
-  const rootRight = lvl.rootShown
-    ? true
-    : (etState.userRoot ? noteIndex(etState.userRoot) === noteIndex(c.root) : false);
+  const rootRight = etState.userRoot ? noteIndex(etState.userRoot) === noteIndex(c.root) : false;
   const qualityRight = etState.userQuality === correctQuality;
-  const bassRight = etState.userBass ? (noteIndex(etState.userBass) === noteIndex(v.bassNote)) : false;
-  let pts = 0;
-  // Root scores only if the player had to identify it.
-  if (!lvl.rootShown && rootRight) pts += etState.hintUsedRoot    ? 3 : 5;
-  if (qualityRight)                pts += etState.hintUsedQuality ? 3 : 5;
-  if (bassRight)                   pts += etState.hintUsedBass    ? 3 : 5;
-  etState.confirmResult = { rootRight, qualityRight, bassRight, totalPts: pts, timedOut: etState.timerRemaining <= 0 };
+  const bassRight = etState.userBass ? noteIndex(etState.userBass) === noteIndex(v.bassNote) : false;
+  // "All active correct" = perfect for this round.
+  const activePass =
+    (!active.root    || rootRight) &&
+    (!active.quality || qualityRight) &&
+    (!active.bass    || bassRight);
+  etState.confirmResult = {
+    rootRight, qualityRight, bassRight,
+    activePass,
+    bonus: 0,
+  };
+  if (etState.mode === 'game') {
+    etState.stageAttempts++;
+    if (activePass) {
+      etState.stageScore++;
+      // +5s reward — only counted when the timer is actually running.
+      const bonus = etCurrentStage().bonus || 5;
+      etState.stageTimeRemaining = (etState.stageTimeRemaining || 0) + bonus;
+      etState.confirmResult.bonus = bonus;
+    }
+  } else if (etState.mode === 'practice') {
+    const ps = etState.practiceStats;
+    ps.rounds++;
+    if (rootRight) ps.rootRight++;
+    if (qualityRight) ps.qualityRight++;
+    if (bassRight) ps.bassRight++;
+    const qid = correctQuality;
+    ps.perQuality[qid] = ps.perQuality[qid] || { right: 0, total: 0 };
+    ps.perQuality[qid].total++;
+    if (qualityRight) ps.perQuality[qid].right++;
+    const rootKey = c.root;
+    ps.perRoot[rootKey] = ps.perRoot[rootKey] || { right: 0, total: 0 };
+    ps.perRoot[rootKey].total++;
+    if (rootRight) ps.perRoot[rootKey].right++;
+  }
   etState.confirmed = true;
   renderEarTraining();
+  // In game mode, briefly show the reveal then auto-advance to the next chord.
+  if (etState.mode === 'game' && etState.phase === 'playing') {
+    setTimeout(() => {
+      if (etState.phase === 'playing' && etState.confirmed) etNextChord();
+    }, 1400);
+  }
 }
 
 async function etNextChord() {
-  etStopTimer();
-  if (etState.currentIdx >= etState.sessionLength) {
-    etState.phase = 'done';
-    renderEarTraining();
-    return;
-  }
   const pick = etPickChord();
-  const lvl = etCurrentLevel();
+  const active = etActiveDimensions();
   etState.currentChord = pick.chord;
   etState.currentVoicing = pick.voicing;
-  // If root is shown to the user (Beginner level), pre-fill it so step 1 is non-interactive.
-  etState.userRoot = lvl.rootShown ? pick.chord.root : null;
-  etState.userQuality = null;
-  etState.userBass = null;
+  // Auto-fill disabled (non-active) dimensions with the correct value.
+  etState.userRoot    = active.root    ? null : pick.chord.root;
+  etState.userQuality = active.quality ? null : etQualityCategory(pick.chord.quality);
+  etState.userBass    = active.bass    ? null : pick.voicing.bassNote;
   etState.confirmed = false;
   etState.confirmResult = null;
   etState.hintUsedRoot = false;
@@ -20915,8 +20998,6 @@ async function etNextChord() {
   etState.hintShownRoot = false;
   etState.hintShownQuality = false;
   etState.hintShownBass = false;
-  etState.timerRemaining = lvl.timerSeconds || 10;
-  etState.timerStarted = false;
   etState.phase = 'playing';
   renderEarTraining();
   try {
@@ -20925,18 +21006,64 @@ async function etNextChord() {
       await new Promise(r => setTimeout(r, 220));
     }
     await etPlayChord(pick.voicing);
-    // Give the chord a beat to ring out, then start the timer.
-    await new Promise(r => setTimeout(r, 600));
-    if (etState.phase === 'playing' && !etState.confirmed) etStartTimer();
+    // In game mode: if this is the first chord of the stage, start the stage timer now.
+    if (etState.mode === 'game' && !etState.stageStarted) {
+      await new Promise(r => setTimeout(r, 600));
+      if (etState.phase === 'playing') etStartStageTimer();
+    }
   } catch (e) { console.warn('ET audio failed', e); }
 }
 
-function etStartSession() {
-  etState.currentIdx = 0;
-  etState.results = [];
-  etState.scoreTotal = 0;
+// Called from the stage timer when it hits 0 — ends current stage, advances or finishes game.
+function etEndStage() {
+  etStopStageTimer();
+  etState.stageResults.push({
+    stage: etState.stage,
+    score: etState.stageScore,
+    attempts: etState.stageAttempts,
+  });
+  if (etState.stage >= ET_STAGES.length) {
+    etState.phase = 'done';
+  } else {
+    etState.phase = 'stage-done';
+  }
+  renderEarTraining();
+}
+
+// Begin the next stage (called from the "Continue" button after a stage ends).
+function etBeginNextStage() {
+  etState.stage++;
+  etState.stageScore = 0;
+  etState.stageAttempts = 0;
+  etState.stageStarted = false;
+  etState.stageTimeRemaining = etCurrentStage().timer;
   etState.phase = 'playing';
   etNextChord();
+}
+
+function etStartSession() {
+  // Reset session state for whichever mode is selected.
+  if (etState.mode === 'game') {
+    etState.stage = 1;
+    etState.stageScore = 0;
+    etState.stageAttempts = 0;
+    etState.stageStarted = false;
+    etState.stageTimeRemaining = etCurrentStage().timer;
+    etState.stageResults = [];
+  } else {
+    etState.practiceStats = {
+      rounds: 0, rootRight: 0, qualityRight: 0, bassRight: 0,
+      perQuality: {}, perRoot: {},
+    };
+  }
+  etState.phase = 'playing';
+  etNextChord();
+}
+
+function etEndPracticeSession() {
+  etStopStageTimer();
+  etState.phase = 'done';
+  renderEarTraining();
 }
 
 // Diagnostic explanation comparing user's quality vs. actual. Root-agnostic.
@@ -20986,68 +21113,87 @@ function renderEarTraining() {
     view.innerHTML = etRenderIdle();
     const start = view.querySelector('#et-start-btn');
     if (start) start.onclick = () => etStartSession();
-    const idleLevel = view.querySelector('#et-idle-level-picker');
-    if (idleLevel) idleLevel.onchange = (e) => { etState.level = parseInt(e.target.value, 10); renderEarTraining(); };
+    view.querySelectorAll('.et-mode-card').forEach(card => {
+      card.onclick = () => {
+        etState.mode = card.dataset.pick;
+        renderEarTraining();
+      };
+    });
+    return;
+  }
+  if (etState.phase === 'stage-done') {
+    view.innerHTML = etRenderShell(etRenderStageDone());
+    etWireShellHandlers(view);
+    const next = view.querySelector('#et-next-stage-btn');
+    if (next) next.onclick = () => etBeginNextStage();
     return;
   }
   if (etState.phase === 'done') {
     view.innerHTML = etRenderShell(etRenderResults());
     etWireShellHandlers(view);
     const restart = view.querySelector('#et-restart-btn');
-    if (restart) restart.onclick = () => etStartSession();
+    if (restart) restart.onclick = () => {
+      etState.phase = 'idle';
+      renderEarTraining();
+    };
     return;
   }
-  // playing / between
+  // playing
   view.innerHTML = etRenderShell(etRenderSession());
   etWireShellHandlers(view);
   etWireStepHandlers(view);
+  // End-practice button (only present in practice mode)
+  const endP = view.querySelector('#et-end-practice-btn');
+  if (endP) endP.onclick = () => etEndPracticeSession();
 }
 
 function etRenderShell(bodyHtml) {
-  const scoreNow = etState.scoreTotal + (etState.confirmed ? etState.confirmResult.totalPts : 0);
-  const counterIdx = Math.min(etState.currentIdx + (etState.phase === 'playing' ? 1 : 0), etState.sessionLength);
-  const lvl = etCurrentLevel();
+  const isGame = etState.mode === 'game';
+  const stg = isGame ? etCurrentStage() : null;
+  const titleLabel = isGame ? `Game · ${stg.label}` : 'Practice';
+  const titleDesc  = isGame ? stg.desc : 'Identify root, quality, and bass. No timer.';
+  const timeLeft = etState.stageTimeRemaining;
+  const timerHtml = isGame && etState.stageStarted && etState.phase === 'playing'
+    ? `<div class="et-timer ${timeLeft <= 5 ? 'is-low' : (timeLeft <= 15 ? 'is-mid' : '')}">
+         <span class="et-timer-label">Time</span>
+         <span class="et-timer-val">${timeLeft}s</span>
+       </div>`
+    : '';
+  const scoreHtml = isGame
+    ? `<div class="et-score">
+         <span class="et-score-label">Correct</span>
+         <span class="et-score-val">${etState.stageScore}</span>
+       </div>`
+    : `<div class="et-score">
+         <span class="et-score-label">Rounds</span>
+         <span class="et-score-val">${etState.practiceStats.rounds}</span>
+       </div>`;
+  const stageHtml = isGame
+    ? `<div class="et-progress">
+         <span class="et-progress-label">Stage</span>
+         <span class="et-progress-count">${etState.stage} / ${ET_STAGES.length}</span>
+       </div>`
+    : '';
   return `
     <div class="et-view">
       <div class="et-header">
         <div class="et-header-left">
-          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· ${lvl.label}</small></div>
-          <div class="et-sub">${lvl.desc}</div>
-        </div>
-        <div class="et-header-right">
-          <div class="et-mode-toggle" id="et-mode-toggle">
-            <button class="et-mode-btn ${etState.mode==='click'?'active':''}" data-mode="click">Click</button>
-            <button class="et-mode-btn et-mode-disabled" data-mode="sing" title="Coming soon — sing the bass and root into the mic">Sing<span class="et-soon">soon</span></button>
-          </div>
+          <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training <small>· ${titleLabel}</small></div>
+          <div class="et-sub">${titleDesc}</div>
         </div>
       </div>
       <div class="et-status">
         <div class="et-status-meta">
-          <div class="et-progress">
-            <span class="et-progress-label">Chord</span>
-            <span class="et-progress-count">${counterIdx} / ${etState.sessionLength}</span>
-          </div>
-          <div class="et-score">
-            <span class="et-score-label">Score</span>
-            <span class="et-score-val">${scoreNow}</span>
-          </div>
-          ${etState.phase === 'playing' && !etState.confirmed && etState.timerStarted ? `
-          <div class="et-timer ${etState.timerRemaining <= 3 ? 'is-low' : (etState.timerRemaining <= 5 ? 'is-mid' : '')}">
-            <span class="et-timer-label">Time</span>
-            <span class="et-timer-val">${etState.timerRemaining}s</span>
-          </div>` : ''}
+          ${stageHtml}
+          ${scoreHtml}
+          ${timerHtml}
           <div class="et-sound">
             <span class="et-sound-label">Sound</span>
             <select class="et-sound-picker" id="et-sound-picker" title="Pick the instrument used for playback"></select>
           </div>
-          <div class="et-sound">
-            <span class="et-sound-label">Level</span>
-            <select class="et-sound-picker" id="et-level-picker" ${etState.phase === 'playing' ? 'disabled title="Difficulty is locked during a session — finish first or restart to change."' : 'title="Pick the difficulty"'}>
-              ${ET_LEVELS.map(l => `<option value="${l.id}" ${l.id===etState.level?'selected':''}>${l.id}. ${l.label}</option>`).join('')}
-            </select>
-          </div>
         </div>
         <div class="et-controls">
+          ${etState.mode === 'practice' && etState.phase === 'playing' ? `<button class="et-btn" id="et-end-practice-btn" title="End practice session and see your weakness report"><i class="ph-duotone ph-flag"></i> End session</button>` : ''}
           <button class="et-btn" id="et-replay-cadence-btn" title="Re-anchor your ear to the chord's root"><i class="ph-duotone ph-music-notes"></i> Cadence</button>
           <button class="et-btn" id="et-arpeggio-btn" title="Hear the chord as an arpeggio (notes one at a time, ascending)"><i class="ph-duotone ph-waveform"></i> Arpeggio</button>
           <button class="et-btn et-btn-primary" id="et-replay-btn"><i class="ph-duotone ph-play"></i> Replay chord</button>
@@ -21059,26 +21205,35 @@ function etRenderShell(bodyHtml) {
 }
 
 function etRenderIdle() {
-  const lvl = etCurrentLevel();
   return `
     <div class="et-view">
       <div class="et-header">
         <div class="et-header-left">
           <div class="et-title"><i class="ph-duotone ph-headphones"></i> Ear Training</div>
-          <div class="et-sub">A 10-chord session. Each test plays a I–IV–V–I cadence to anchor your ear, then plays one chord. You identify the root, the quality, and the bass note — then audition your guess against the actual chord before confirming. 5 pts per dimension, 15 max per chord.</div>
+          <div class="et-sub">Pick a mode and start listening.</div>
         </div>
       </div>
-      <div class="et-idle">
-        <div class="et-idle-icon"><i class="ph-duotone ph-ear"></i></div>
-        <h3>Ready to listen?</h3>
-        <div class="et-idle-level">
-          <label class="et-idle-level-label" for="et-idle-level-picker">Difficulty</label>
-          <select class="et-sound-picker" id="et-idle-level-picker">
-            ${ET_LEVELS.map(l => `<option value="${l.id}" ${l.id===etState.level?'selected':''}>${l.id}. ${l.label} — ${l.desc}</option>`).join('')}
-          </select>
+      <div class="et-mode-cards">
+        <div class="et-mode-card ${etState.mode==='game'?'is-selected':''}" data-pick="game">
+          <div class="et-mode-card-head">
+            <i class="ph-duotone ph-game-controller"></i>
+            <h3>Game</h3>
+          </div>
+          <p>Three sequential stages, 120 s each. Each correct guess adds <strong>+5 s</strong> to the clock. Stage 1 quality only; Stage 2 adds bass; Stage 3 adds root. Guess as many as you can before time runs out.</p>
+          <ul class="et-mode-list">
+            ${ET_STAGES.map(s => `<li><strong>${s.label}:</strong> ${s.desc}</li>`).join('')}
+          </ul>
         </div>
-        <p>${lvl.desc}</p>
-        <button class="et-btn et-btn-primary" id="et-start-btn"><i class="ph-duotone ph-play"></i> Start session</button>
+        <div class="et-mode-card ${etState.mode==='practice'?'is-selected':''}" data-pick="practice">
+          <div class="et-mode-card-head">
+            <i class="ph-duotone ph-graph"></i>
+            <h3>Practice</h3>
+          </div>
+          <p>No timer. Identify root + quality + bass on every chord. The app tracks per-quality and per-root accuracy and shows a <strong>weakness report</strong> when you finish — your weak spots become the focus for spaced-repetition later.</p>
+        </div>
+      </div>
+      <div class="et-idle-start">
+        <button class="et-btn et-btn-primary" id="et-start-btn"><i class="ph-duotone ph-play"></i> Start ${etState.mode === 'game' ? 'game' : 'practice'}</button>
       </div>
     </div>
   `;
@@ -21111,14 +21266,14 @@ function etRenderNoteStrip(selected, correct, confirmed, rightFlag, target) {
 }
 
 // STEP 1 — Root. 12-note chromatic strip.
-// In Beginner mode (rootShown), step 1 is non-interactive — the correct root is pre-selected
+// If the current stage doesn't require root identification, the correct root is pre-selected
 // and the buttons are disabled. No hint, no scoring on this step.
 function etRenderStepRoot() {
   const confirmed = etState.confirmed;
-  const lvl = etCurrentLevel();
-  const rootShown = lvl.rootShown;
+  const active = etActiveDimensions();
+  const rootShown = !active.root;
   const correct = etState.currentChord.root;
-  const selected = rootShown ? correct : etState.userRoot;
+  const selected = etState.userRoot;
   // Build the strip: in rootShown mode, all buttons disabled with the correct one pre-selected.
   const keys = ET_CHROMATIC.map(n => {
     const isSel = selected && (noteIndex(n.name) === noteIndex(selected));
@@ -21218,30 +21373,47 @@ function etRenderStepQuality() {
 }
 
 // STEP 3 — Bass (over). 12-note chromatic strip. Hint plays bass alone.
+// If the current stage doesn't require bass identification, pre-selected + disabled.
 function etRenderStepBass() {
   const confirmed = etState.confirmed;
-  const stateClass = confirmed
-    ? (etState.confirmResult.bassRight ? 'is-correct' : 'is-wrong')
-    : 'is-active';
-  const selected = etState.userBass;
+  const active = etActiveDimensions();
+  const bassShown = !active.bass;
   const correct = etState.currentVoicing.bassNote;
-  const keys = etRenderNoteStrip(selected, correct, confirmed, confirmed && etState.confirmResult.bassRight, 'bass');
+  const selected = etState.userBass;
+  const keys = ET_CHROMATIC.map(n => {
+    const isSel = selected && (noteIndex(n.name) === noteIndex(selected));
+    const isCorrect = (confirmed || bassShown) && (noteIndex(n.name) === noteIndex(correct));
+    const isWrongPick = confirmed && !bassShown && isSel && !etState.confirmResult.bassRight;
+    let cls = n.sharp ? 'et-key et-key-sharp' : 'et-key et-key-natural';
+    if (isSel) cls += ' is-selected';
+    if (isCorrect) cls += ' is-correct';
+    if (isWrongPick) cls += ' is-wrong';
+    const label = n.alt ? `${n.name}<span class="et-alt">/${n.alt}</span>` : n.name;
+    const disabled = (confirmed || bassShown) ? 'disabled' : '';
+    return `<button class="${cls}" data-target="bass" data-note="${n.name}" ${disabled}>${label}</button>`;
+  }).join('');
+  const stateClass = bassShown
+    ? 'is-given'
+    : (confirmed ? (etState.confirmResult.bassRight ? 'is-correct' : 'is-wrong') : 'is-active');
   const head = `
     <div class="et-step-head">
       <div class="et-step-number">3</div>
-      <div class="et-step-title">Over <small class="et-step-sub">· bass note</small></div>
-      ${!confirmed ? `<button class="et-hint-btn" data-action="hint-bass"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedBass?' ✓':''} <span class="et-hint-cost">−2</span></button>` : ''}
+      <div class="et-step-title">Over ${bassShown ? '<small class="et-step-sub">· given</small>' : '<small class="et-step-sub">· bass note</small>'}</div>
+      ${!confirmed && !bassShown ? `<button class="et-hint-btn" data-action="hint-bass"><i class="ph-duotone ph-lightbulb"></i> Hint${etState.hintUsedBass?' ✓':''} <span class="et-hint-cost">−2</span></button>` : ''}
     </div>
   `;
-  const prompt = !confirmed
-    ? `<div class="et-step-prompt">What's the lowest note you hear? (The bass — a single sustained tone underneath the chord.)</div>`
-    : '';
-  const hintText = etState.hintShownBass && !confirmed
+  let prompt = '';
+  if (bassShown) {
+    prompt = `<div class="et-step-prompt">The bass is <strong>${correct}</strong> — given to you.</div>`;
+  } else if (!confirmed) {
+    prompt = `<div class="et-step-prompt">What's the lowest note you hear? (The bass — a single sustained tone underneath the chord.)</div>`;
+  }
+  const hintText = !bassShown && etState.hintShownBass && !confirmed
     ? `<div class="et-hint-text"><i class="ph-duotone ph-lightbulb"></i> I played the bass alone. Match its pitch to one of the 12 notes.</div>`
     : '';
-  const revealBlurb = confirmed && !etState.confirmResult.bassRight
+  const revealBlurb = !bassShown && confirmed && !etState.confirmResult.bassRight
     ? `<div class="et-step-feedback">You picked <strong>${selected || '—'}</strong>. The actual bass is <strong>${correct}</strong>.</div>`
-    : (confirmed && etState.confirmResult.bassRight
+    : (!bassShown && confirmed && etState.confirmResult.bassRight
        ? `<div class="et-step-correct"><i class="ph-duotone ph-check-circle"></i> Bass: ${correct}</div>`
        : '');
   return `
@@ -21259,9 +21431,10 @@ function etRenderStepBass() {
 // Before confirm: lets the user audition their constructed chord vs. the actual one.
 // After confirm: reveals correct symbol, description, and full playback controls + Next.
 function etRenderStepConfirm() {
-  const lvl = etCurrentLevel();
-  // Root is auto-set in rootShown mode, so we only need quality + bass picked.
-  const ready = (lvl.rootShown || etState.userRoot) && etState.userQuality && etState.userBass;
+  const active = etActiveDimensions();
+  // Each dimension is either pre-filled (because the stage doesn't require it) or the
+  // player must pick a value. Confirm is ready when every dimension has a value.
+  const ready = etState.userRoot && etState.userQuality && etState.userBass;
   const confirmed = etState.confirmed;
   const userVoicing = etBuildUserVoicing();
   const userLabel = userVoicing ? userVoicing.slashLabel : '—';
@@ -21308,15 +21481,16 @@ function etRenderStepConfirm() {
   else invDesc = `In <strong>${invNames[inv]}</strong> — the ${chordToneNames[inv]} (${v.bassNote}) is in the bass instead of the root.`;
   const upperLabel = v.upperNotes.map(n => n.replace(/[0-9]/g,'')).join(' – ');
   const r = etState.confirmResult;
-  const allRight = (lvl.rootShown ? true : r.rootRight) && r.qualityRight && r.bassRight;
-  const timedOutBadge = r.timedOut ? ' <span class="et-timed-out">⏱ Timed out</span>' : '';
+  const allRight = r.activePass;
+  const bonusBadge = (etState.mode === 'game' && r.bonus) ? ` <span class="et-bonus">+${r.bonus}s</span>` : '';
+  const verdict = allRight ? 'Correct' : 'Missed';
   return `
     <div class="et-step is-active ${allRight?'is-correct':'is-partial'}">
       ${head}
       <div class="et-review">
         <div class="et-review-label">
           <div class="et-review-symbol">${actualLabel}</div>
-          <div class="et-review-meta">${upperLabel} · bass ${v.bassNote} · ${r.totalPts} / ${etMaxPerChord()} pts${timedOutBadge}</div>
+          <div class="et-review-meta">${upperLabel} · bass ${v.bassNote} · <strong>${verdict}</strong>${bonusBadge}</div>
         </div>
         <div class="et-review-blurb">
           ${qd ? qd.blurb : ''}
@@ -21328,7 +21502,7 @@ function etRenderStepConfirm() {
           <button class="et-btn" data-action="play-actual-bass"><i class="ph-duotone ph-play"></i> Bass only</button>
           <button class="et-btn" data-action="play-actual-upper"><i class="ph-duotone ph-play"></i> Upper only</button>
           <button class="et-btn" data-action="play-user"><i class="ph-duotone ph-play"></i> Your chord</button>
-          <button class="et-btn et-btn-primary" data-action="next-chord">Next chord <i class="ph-duotone ph-arrow-right"></i></button>
+          ${etState.mode === 'practice' ? `<button class="et-btn et-btn-primary" data-action="next-chord">Next chord <i class="ph-duotone ph-arrow-right"></i></button>` : `<span class="et-auto-next">Auto-advancing…</span>`}
         </div>
       </div>
     </div>
@@ -21366,50 +21540,105 @@ function etFormatAnswer(step, value) {
   return value;
 }
 
-// Called when the user clicks Next after Confirm — banks the result, advances.
+// Practice-mode advance: user clicks Next after a chord. Just picks a new chord.
 function etAdvanceToNext() {
   if (!etState.confirmed) return;
-  etState.scoreTotal += etState.confirmResult.totalPts;
-  etState.results.push({
-    chord: etState.currentChord,
-    voicing: etState.currentVoicing,
-    userRoot: etState.userRoot,
-    userQuality: etState.userQuality,
-    userBass: etState.userBass,
-    rootRight: etState.confirmResult.rootRight,
-    qualityRight: etState.confirmResult.qualityRight,
-    bassRight: etState.confirmResult.bassRight,
-    score: etState.confirmResult.totalPts,
-  });
-  etState.currentIdx++;
   etNextChord();
 }
 
 function etRenderResults() {
-  const total = etState.scoreTotal;
-  const lvl = etCurrentLevel();
-  const maxPer = lvl.rootShown ? 10 : 15;
-  const max = etState.sessionLength * maxPer;
-  const pct = max > 0 ? Math.round((total / max) * 100) : 0;
-  const ic = ok => ok
-    ? '<i class="ph-duotone ph-check" style="color:#22c55e"></i>'
-    : '<i class="ph-duotone ph-x" style="color:#ef4444"></i>';
+  if (etState.mode === 'game') return etRenderGameResults();
+  return etRenderPracticeResults();
+}
+
+function etRenderGameResults() {
+  const totalCorrect = etState.stageResults.reduce((sum, s) => sum + s.score, 0);
+  const totalAttempts = etState.stageResults.reduce((sum, s) => sum + s.attempts, 0);
+  const acc = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
   return `
     <div class="et-results">
       <div class="et-results-head">
-        <div class="et-results-title">Session complete <small class="et-results-level">· ${lvl.label}</small></div>
-        <div class="et-results-score">${total} / ${max}<span class="et-results-pct">${pct}%</span></div>
+        <div class="et-results-title">Game complete</div>
+        <div class="et-results-score">${totalCorrect} correct<span class="et-results-pct">${acc}% accuracy</span></div>
       </div>
-      <div class="et-results-list">
-        ${etState.results.map((r, i) => `
-          <div class="et-result-row">
-            <div class="et-result-num">${i + 1}</div>
-            <div class="et-result-chord">${r.voicing.slashLabel}</div>
-            <div class="et-result-flags">${lvl.rootShown ? '' : ic(r.rootRight) + ' root · '}${ic(r.qualityRight)} quality · ${ic(r.bassRight)} bass</div>
-            <div class="et-result-score">${r.score} / ${maxPer}</div>
-          </div>`).join('')}
+      <div class="et-results-stages">
+        ${etState.stageResults.map(s => {
+          const stg = ET_STAGES.find(x => x.id === s.stage);
+          const pct = s.attempts > 0 ? Math.round((s.score / s.attempts) * 100) : 0;
+          return `<div class="et-result-stage-row">
+            <div class="et-result-stage-num">${stg ? stg.label : 'Stage ' + s.stage}</div>
+            <div class="et-result-stage-desc">${stg ? stg.desc : ''}</div>
+            <div class="et-result-stage-score">${s.score} correct · ${s.attempts} tried · ${pct}%</div>
+          </div>`;
+        }).join('')}
       </div>
-      <button class="et-btn et-btn-primary" id="et-restart-btn"><i class="ph-duotone ph-arrow-clockwise"></i> Start a new session</button>
+      <button class="et-btn et-btn-primary" id="et-restart-btn"><i class="ph-duotone ph-arrow-clockwise"></i> Play again</button>
+    </div>
+  `;
+}
+
+function etRenderPracticeResults() {
+  const ps = etState.practiceStats;
+  const accFor = obj => obj && obj.total > 0 ? Math.round((obj.right / obj.total) * 100) : null;
+  // Sort qualities and roots by accuracy ascending — weakest first.
+  const qualityRows = Object.entries(ps.perQuality)
+    .map(([qid, st]) => ({ qid, label: (etQualityById(qid) || {label:qid}).label, right: st.right, total: st.total, acc: accFor(st) }))
+    .sort((a,b) => (a.acc - b.acc) || (b.total - a.total));
+  const rootRows = Object.entries(ps.perRoot)
+    .map(([root, st]) => ({ root, right: st.right, total: st.total, acc: accFor(st) }))
+    .sort((a,b) => (a.acc - b.acc) || (b.total - a.total));
+  const overall = (label, right, total) => {
+    const pct = total > 0 ? Math.round((right / total) * 100) : 0;
+    return `<div class="et-result-overall"><span class="et-result-overall-label">${label}</span><span class="et-result-overall-val">${right} / ${total}</span><span class="et-result-overall-pct">${pct}%</span></div>`;
+  };
+  return `
+    <div class="et-results">
+      <div class="et-results-head">
+        <div class="et-results-title">Practice session</div>
+        <div class="et-results-score">${ps.rounds} rounds</div>
+      </div>
+      <div class="et-results-overalls">
+        ${overall('Root',    ps.rootRight,    ps.rounds)}
+        ${overall('Quality', ps.qualityRight, ps.rounds)}
+        ${overall('Bass',    ps.bassRight,    ps.rounds)}
+      </div>
+      <div class="et-results-section">
+        <div class="et-results-section-title">Weakness report — by quality</div>
+        <div class="et-results-list">
+          ${qualityRows.length ? qualityRows.map(q => `<div class="et-result-row">
+            <div class="et-result-chord">${q.label}</div>
+            <div class="et-result-flags">${q.right} / ${q.total}</div>
+            <div class="et-result-score">${q.acc != null ? q.acc + '%' : '—'}</div>
+          </div>`).join('') : `<div class="et-result-empty">No data yet.</div>`}
+        </div>
+      </div>
+      <div class="et-results-section">
+        <div class="et-results-section-title">Weakness report — by root</div>
+        <div class="et-results-list">
+          ${rootRows.length ? rootRows.map(r => `<div class="et-result-row">
+            <div class="et-result-chord">${r.root}</div>
+            <div class="et-result-flags">${r.right} / ${r.total}</div>
+            <div class="et-result-score">${r.acc != null ? r.acc + '%' : '—'}</div>
+          </div>`).join('') : `<div class="et-result-empty">No data yet.</div>`}
+        </div>
+      </div>
+      <button class="et-btn et-btn-primary" id="et-restart-btn"><i class="ph-duotone ph-arrow-clockwise"></i> New session</button>
+    </div>
+  `;
+}
+
+// Between-stages screen — game mode only, after stage timer hits 0 but more stages remain.
+function etRenderStageDone() {
+  const last = etState.stageResults[etState.stageResults.length - 1];
+  const stg = ET_STAGES.find(s => s.id === last.stage);
+  const next = ET_STAGES.find(s => s.id === last.stage + 1);
+  const pct = last.attempts > 0 ? Math.round((last.score / last.attempts) * 100) : 0;
+  return `
+    <div class="et-stage-done">
+      <h2><i class="ph-duotone ph-check-circle"></i> ${stg.label} complete</h2>
+      <div class="et-stage-done-stat">${last.score} correct · ${last.attempts} attempts · ${pct}%</div>
+      <p>${next.desc}</p>
+      <button class="et-btn et-btn-primary" id="et-next-stage-btn"><i class="ph-duotone ph-play"></i> Continue to ${next.label}</button>
     </div>
   `;
 }
@@ -21437,14 +21666,6 @@ function etWireShellHandlers(view) {
       // Sync the global header picker so they stay in lockstep.
       const hp = document.getElementById('instrument-picker');
       if (hp) hp.value = e.target.value;
-    };
-  }
-  // Level picker — affects the next chord pick (mid-session changes are fine).
-  const level = view.querySelector('#et-level-picker');
-  if (level) {
-    level.onchange = (e) => {
-      etState.level = parseInt(e.target.value, 10);
-      renderEarTraining();
     };
   }
   view.querySelectorAll('.et-mode-btn').forEach(btn => {
