@@ -111,6 +111,8 @@ node --check /tmp/check.js
 
 **Pure-function aggregators are Node-testable.** When adding analysis code, write the aggregator as a pure function over typed arrays so it can be smoke-tested in Node by extracting just that function. The M2 verification approach is the template.
 
+**Git locks in the cowork sandbox: `mv`, don't `rm`.** The mount that exposes `/Users/sayantanbiswas/fymuse` to the cowork sandbox disallows file deletes but permits renames. When `git commit` fails with `cannot lock ref` or `Unable to create '.git/index.lock'`, the lock file is stuck because git's automatic cleanup tries to `unlink` it and that fails silently — leaving the lock in place. Workaround: `mv .git/index.lock .git/index.lock.del.$(date +%s)`. Same for `HEAD.lock`. The `.del.*` files accumulate harmlessly. Confirmed working pattern as of the Singing v1 commit (`f614a42`).
+
 ## Pointers
 
 - **`SINGING_SPEC.md`** — canonical singing-feature spec (methodology, UI structure, analysis engine, raga tunings, exercise bank, prescription engine, v1/v2/v3 phasing)
