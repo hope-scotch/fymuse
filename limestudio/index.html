@@ -226,7 +226,7 @@
 
   /* ── View container ────────────────────────────────── */
   main { flex: 1 1 auto; overflow: hidden; position: relative; }
-  .view { position: absolute; inset: 0; overflow-y: auto; padding: 22px; display: none; }
+  .view { position: absolute; inset: 0; overflow-y: scroll; padding: 22px; display: none; }
   .view.active { display: block; }
   .view-inner { max-width: 1100px; margin: 0 auto; }
 
@@ -839,6 +839,39 @@
     width: 50px; height: 50px; position: relative; flex-shrink: 0;
     cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
   }
+  .perf-free { flex: 1 1 auto; display: none; align-items: center; justify-content: center; gap: 56px; min-height: 0; margin: 16px 0 6px; }
+  .perf-free .bpm-dial.big { width: 240px; height: 240px; }
+  .bpm-dial.big .dot { width: 15px; height: 15px; }
+  .bpm-center {
+    position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center; pointer-events: none;
+  }
+  .bpm-center .circ {
+    width: 140px; height: 140px; border-radius: 50%;
+    background: rgba(182,255,58,.07);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  }
+  .bpm-center .val {
+    font-family: var(--mono); font-size: 34px; font-weight: 700; line-height: 1; color: var(--lime);
+  }
+  .bpm-center .lbl { font-size: 10px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: var(--txt-faint); }
+  .free-side { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+  .free-side .f-lbl { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--txt-faint); }
+  .free-side .pill.tap { align-self: stretch; justify-content: center; }
+  .ps-free-wrap { margin-top: auto; padding-top: 10px; display: flex; justify-content: center; flex-shrink: 0; }
+  .ps-free {
+    width: 54px; height: 54px; border-radius: 50%; padding: 0; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--glass); border: 1px solid var(--line-2); cursor: pointer;
+    outline: 1px solid var(--line-2); outline-offset: 3px;
+    transition: border-color .15s, outline-color .15s, box-shadow .2s, transform .1s;
+  }
+  .ps-free .ico { width: 24px; height: 24px; color: var(--txt-dim); transition: color .15s; }
+  .ps-free:hover { border-color: var(--lime-dim); outline-color: var(--lime-dim); }
+  .ps-free:hover .ico { color: var(--lime); }
+  .ps-free:active { transform: scale(.95); }
+  .ps-free.on { border-color: var(--lime-dim); outline-color: var(--lime-dim); box-shadow: 0 0 14px rgba(182,255,58,.25); }
+  .ps-free.on .ico { color: var(--lime); filter: drop-shadow(0 0 7px rgba(182,255,58,.45)); }
   .bpm-dial.active { cursor: grabbing; }
   .bpm-dial svg { width: 100%; height: 100%; display: block; }
   .bpm-dial .track, .bpm-dial .arc {
@@ -885,12 +918,21 @@
     border-radius: 12px; background: rgba(6,8,11,.55);
     border: 1px solid var(--glass-brd); box-shadow: inset 0 1px 4px rgba(0,0,0,.4);
   }
-  .tl-inner { position: relative; height: 118px; }
+  .tl-inner { position: relative; height: 140px; }
   .tl-lane { position: absolute; left: 0; right: 0; }
   .tl-tempo { top: 0; height: 24px; }
   .tl-secs  { top: 24px; height: 27px; }
   .tl-bars  { top: 51px; height: 42px; }
   .tl-cues  { top: 93px; height: 25px; }
+  .tl-light { top: 118px; height: 22px; }
+  .tl-legend { position: absolute; left: 0; top: 0; bottom: 0; width: 148px; z-index: 3; border-right: 1px solid rgba(255,255,255,.07); }
+  .tl-legend .lg { pointer-events: none; }
+  .tl-legend .lg { position: absolute; right: 8px; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .tl-legend .lg.t { top: 7px; color: var(--lime); }
+  .tl-legend .lg.s { top: 32px; color: var(--txt-dim); }
+  .tl-legend .lg.b { top: 66px; color: var(--txt-faint); }
+  .tl-legend .lg.c { top: 99px; color: var(--accent); }
+  .tl-legend .lg.l { top: 123px; color: rgb(192,140,255); }
   .tl-bar { position: absolute; top: 0; bottom: 0; border-left: 1px solid rgba(255,255,255,.10); cursor: pointer; }
   .tl-bar:hover { background: rgba(182,255,58,.08); }
   .tl-bar.b4 { border-left-color: rgba(255,255,255,.22); }
@@ -943,27 +985,53 @@
     box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow-lg);
     padding: 20px 22px; display: flex; flex-direction: column; gap: 13px; animation: modalIn .3s var(--ease-out);
   }
-  .editor #ed-tl {
-    flex: 1 1 auto; min-height: 0;
+  .editor .ed-tl-card {
+    flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
     padding: 12px; border-radius: 12px;
     border: 1px solid rgba(182,255,58,.32); background: rgba(182,255,58,.035);
   }
+  .editor #ed-tl { flex: 1 1 auto; min-height: 0; }
+  .lg-ctl { position: absolute; left: 12px; top: 12px; width: 78px; display: flex; flex-direction: column; gap: 11px; }
+  .lgc label { display: block; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--txt-faint); margin-bottom: 3px; }
+  select.lime-mini {
+    width: 100%; background: transparent; border: none; padding: 0 16px 0 0;
+    color: var(--lime); font-family: var(--display); font-size: 16px; font-weight: 600;
+    background-position: right 0 center; background-size: 12px; cursor: pointer; line-height: 1.2;
+  }
+  select.lime-mini:focus { box-shadow: none; border: none; }
+  select.lime-mini option { font-family: -apple-system, system-ui, sans-serif; font-size: 13px; font-weight: 400; }
+  .lime-len { position: relative; display: flex; align-items: center; gap: 6px; }
+  .lime-len input {
+    width: auto; max-width: 36px; min-width: 0; flex: 0 1 auto; background: transparent; border: none; padding: 0;
+    color: var(--lime); font-family: var(--mono); font-size: 16px; font-weight: 600; line-height: 1.2;
+    -moz-appearance: textfield; appearance: textfield;
+  }
+  .lime-len input::-webkit-inner-spin-button, .lime-len input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .lime-len input:focus { box-shadow: none; border: none; background: rgba(182,255,58,.08); border-radius: 4px; }
+  .lime-len .step-btns { position: static; transform: none; display: flex; flex-direction: column; gap: 2px; }
+  .lime-len .step-btns button { width: 15px; height: 10px; font-size: 5.5px; border-radius: 3px; }
   .editor #ed-tl::-webkit-scrollbar { width: 9px; height: 9px; }
   .editor #ed-tl::-webkit-scrollbar-track { background: transparent; }
   .editor #ed-tl::-webkit-scrollbar-thumb { background: transparent; border-radius: 5px; }
   .editor #ed-tl:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); }
+  .editor::-webkit-scrollbar, .view::-webkit-scrollbar { width: 9px; height: 9px; }
+  .editor::-webkit-scrollbar-track, .view::-webkit-scrollbar-track { background: transparent; }
+  .editor::-webkit-scrollbar-thumb, .view::-webkit-scrollbar-thumb { background: transparent; border-radius: 5px; }
+  .editor:hover::-webkit-scrollbar-thumb, .view:hover::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); }
   .editor #ed-notes { min-height: 40px; max-height: 76px; }
 
   /* wrapped (multi-row) timeline — fills the width, grows downward, scrolls vertically */
-  .tlw { overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; }
+  .tlw { overflow-y: scroll; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; position: relative; }
   .tlw-row {
-    position: relative; height: 118px; flex-shrink: 0; border-radius: 12px;
+    position: relative; height: 140px; flex-shrink: 0; border-radius: 12px;
     background: rgba(6,8,11,.55); border: 1px solid var(--glass-brd);
     box-shadow: inset 0 1px 4px rgba(0,0,0,.4); overflow: hidden;
   }
   .tlw-row .tl-inner { height: 100%; }
+  .ed-top { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+  .ed-top .btn { height: 41px; padding: 0 18px; display: inline-flex; align-items: center; flex-shrink: 0; }
   input[type=text].ed-title-h {
-    width: 100%; background: transparent; border: none; border-radius: 0;
+    flex: 1 1 auto; width: auto; min-width: 0; background: transparent; border: none; border-radius: 0;
     font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
     color: var(--lime); padding: 0 2px 8px;
   }
@@ -998,6 +1066,7 @@
   .tl-pop .chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
   .tl-pop .chips button { padding: 4px 9px; font-size: 11px; border-radius: 999px; background: var(--bg-3); border: 1px solid var(--line-2); color: var(--txt-dim); }
   .tl-pop .chips button:hover { color: var(--lime); border-color: var(--lime-dim); }
+  .tl-pop .chips button.on { color: var(--lime); border-color: var(--lime); background: rgba(182,255,58,.1); }
 
   /* ── Performance: split view ──────────────────────────── */
   .perf-body { flex: 1 1 auto; display: flex; min-height: 0; }
@@ -1030,6 +1099,9 @@
   .tl-edit .tl-tempo { cursor: copy; }
   .tl-edit .tl-secs  { cursor: copy; }
   .tl-edit .tl-cues  { cursor: copy; }
+  .tl-edit .tl-light { cursor: copy; }
+  .tl-edit .tl-light:hover { background: rgba(192,140,255,.06); }
+  .tl-lightseg { padding: 2px 7px; font-size: 9.5px; border-radius: 6px; text-transform: capitalize; }
   .tl-edit .tl-tempo:hover { background: rgba(182,255,58,.05); }
   .tl-edit .tl-secs:hover  { background: rgba(255,255,255,.035); }
   .tl-sec .lbl { pointer-events: auto; cursor: pointer; border-radius: 4px; padding: 1px 4px; margin: -1px -4px; }
@@ -1063,27 +1135,6 @@
     </div>
     <div class="hsep"></div>
 
-    <div class="hgroup">
-      <button class="transport-btn" id="transport" title="Start / stop click (Space)">
-        <svg id="transport-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-      </button>
-      <div class="bpm-box">
-        <input class="val" id="hdr-bpm" type="number" min="20" max="300" value="120" title="Type a tempo and press Enter">
-        <div class="lbl">BPM</div>
-      </div>
-      <div class="bpm-dial" id="bpm-dial" title="Drag in any direction (or scroll) to set the tempo · hold Shift for fine control · double-click resets to 120">
-        <svg viewBox="0 0 48 48" aria-hidden="true">
-          <circle class="track" cx="24" cy="24" r="19"/>
-          <circle class="arc" id="bpm-arc" cx="24" cy="24" r="19"/>
-          <circle class="ring2" cx="24" cy="24" r="13"/>
-          <circle class="ring3" cx="24" cy="24" r="7.5"/>
-        </svg>
-        <div class="dot" id="bpm-dot"></div>
-      </div>
-      <button class="pill tap" id="tap-tempo">Tap</button>
-    </div>
-
-    <div class="hsep"></div>
     <div class="beat-dots" id="beat-dots"></div>
 
     <div class="spacer"></div>
@@ -1258,6 +1309,32 @@
                 </div>
               </div>
             </div>
+            <div class="perf-free" id="perf-freebox">
+              <div class="bpm-dial big" id="bpm-dial" title="Drag in any direction (or scroll) to set the tempo · hold Shift for fine control · double-click resets to 120">
+                <svg viewBox="0 0 48 48" aria-hidden="true">
+                  <circle class="track" cx="24" cy="24" r="19"/>
+                  <circle class="arc" id="bpm-arc" cx="24" cy="24" r="19"/>
+                  <circle class="ring2" cx="24" cy="24" r="16.5"/>
+                  <circle class="ring3" cx="24" cy="24" r="14"/>
+                </svg>
+                <div class="dot" id="bpm-dot"></div>
+                <div class="bpm-center">
+                  <div class="circ">
+                    <div class="val" id="hdr-bpm">120</div>
+                    <div class="lbl">BPM</div>
+                  </div>
+                </div>
+              </div>
+              <div class="free-side">
+                <div class="f-lbl">Time signature</div>
+                <div class="seg" id="free-sig">
+                  <button data-sig="3">3/4</button>
+                  <button data-sig="4">4/4</button>
+                  <button data-sig="6">6/8</button>
+                </div>
+                <button class="pill tap" id="tap-tempo">Tap</button>
+              </div>
+            </div>
             <div class="perf-tl" id="perf-tl"></div>
             <div class="perf-barpos" id="perf-barpos"></div>
             <div class="perf-beats" id="perf-beats"></div>
@@ -1380,32 +1457,13 @@
 <!-- ── Song editor (bar timeline) ── -->
 <div class="editor-bg" id="editor">
   <div class="editor">
-    <input type="text" id="ed-title" class="ed-title-h" placeholder="Song name" spellcheck="false" title="Song title — click to edit">
-    <div class="editor-head">
-      <div class="field" style="width:88px;"><label>Key</label><select id="ed-key"></select></div>
-      <div class="field" style="width:118px;"><label>Length (bars)</label>
-        <div class="stepper">
-          <input type="number" id="ed-len" min="1" max="999">
-          <div class="step-btns">
-            <button type="button" id="ed-len-up" tabindex="-1" title="One bar more">&#9650;</button>
-            <button type="button" id="ed-len-dn" tabindex="-1" title="One bar less">&#9660;</button>
-          </div>
-        </div>
-      </div>
-      <div class="field" style="width:140px;"><label>Lighting scene</label>
-        <select id="ed-scene">
-          <option value="reactive">Reactive</option>
-          <option value="chase">Chase</option>
-          <option value="static">Static</option>
-          <option value="off">Off</option>
-        </select>
-      </div>
-      <div class="ed-actions">
-        <button class="btn primary" id="ed-done">Done</button>
-      </div>
+    <div class="ed-top">
+      <input type="text" id="ed-title" class="ed-title-h" placeholder="Song name" spellcheck="false" title="Song title — click to edit">
+      <button class="btn primary" id="ed-done">Done</button>
     </div>
-    <div class="hint">Click the <b>bar grid</b> to move the playhead there · click the <b style="color:var(--lime)">tempo</b> lane (top), <b>section</b> lane, or <b style="color:var(--accent)">cue</b> lane (bottom) to add a marker at that bar · click a marker to edit or remove it · changes save automatically.</div>
-    <div id="ed-tl"></div>
+    <div class="ed-tl-card">
+      <div id="ed-tl"></div>
+    </div>
     <div class="field">
       <div class="row-between">
         <label>Backing tracks <span class="hint">— audio pinned to a bar, plays locked to the click</span></label>
@@ -1465,7 +1523,7 @@
   <p><b style="color:var(--lime)">Performance</b> — the big, glanceable view for during the show: song title, giant BPM, beat dots, and one-tap cue buttons.</p>
 
   <h4>The click track</h4>
-  <p>The lime circle up top starts/stops the click. Set the tempo by dragging the <b>dial</b> up or down (scroll works too; hold Shift for fine control), or hit <b>Tap</b> and tap along. Turn on <b>Audio</b> and Lime Studio listens to the room and shows a detected BPM you can apply — or let <b>Follow</b> chase it live.</p>
+  <p>The metronome lives in <b>Performance</b>: tap the <b>metronome button</b> at the bottom of the setlist for a big dial you can drag (or scroll; hold Shift for fine control), set a time signature, or hit <b>Tap</b> and tap along. The big round button starts and stops it. Turn on <b>Audio</b> and Lime Studio listens to the room and shows a detected BPM you can apply — or let <b>Follow</b> chase it live.</p>
 
   <h4>Keyboard shortcuts</h4>
   <div class="krow"><span>Start / stop click</span><kbd>Space</kbd></div>
@@ -1559,6 +1617,7 @@ const ICONS_FILLED = {
   square:  '<rect x="5" y="5" width="14" height="14" rx="3"/>',
   grip:    '<circle cx="9" cy="5" r="1.6"/><circle cx="15" cy="5" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="19" r="1.6"/><circle cx="15" cy="19" r="1.6"/>',
   note:    '<path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  metro:   '<path d="M10 3h4l4.5 18h-13z"/><line x1="12" y1="16.5" x2="16.5" y2="6.5"/><circle cx="15.6" cy="8.5" r="1.4" fill="currentColor" stroke="none"/>',
 };
 function ic(name) {
   if (ICONS_FILLED[name]) return `<svg class="ico" viewBox="0 0 24 24" fill="currentColor">${ICONS_FILLED[name]}</svg>`;
@@ -1918,7 +1977,6 @@ function syncTransport() {
   renderBpmDial();
   const locked = tempoLocked();
   const dial = $("bpm-dial"); if (dial) dial.classList.toggle("locked", locked);
-  const num = $("hdr-bpm"); if (num) num.disabled = locked;
   const pt = $("perf-transport");
   if (pt) {
     pt.classList.toggle("running", S.click.running);
@@ -1927,10 +1985,13 @@ function syncTransport() {
       : '<path d="M8 5v14l11-7z"/>';
   }
   const t = $("transport");
-  t.classList.toggle("running", S.click.running);
-  $("transport-icon").innerHTML = S.click.running
-    ? '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'
-    : '<path d="M8 5v14l11-7z"/>';
+  if (t) {
+    t.classList.toggle("running", S.click.running);
+    $("transport-icon").innerHTML = S.click.running
+      ? '<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>'
+      : '<path d="M8 5v14l11-7z"/>';
+  }
+  if ($("free-sig")) paintSeg("free-sig", "sig", String(S.click.time_sig));
   buildBeatDots();
   renderPerfHeader();
 }
@@ -1939,7 +2000,7 @@ function syncTransport() {
 const DIAL_MIN = 20, DIAL_MAX = 300, DIAL_C = 2 * Math.PI * 19, DIAL_SWEEP = 0.75;
 function setHdrBpm(v) {
   const e = $("hdr-bpm");
-  if (e && document.activeElement !== e) e.value = v;   // don't fight the user typing
+  if (e) e.textContent = v;   // display-only — the dial (or Tap) sets the tempo
 }
 function renderBpmDial() {
   const arc = $("bpm-arc"), dot = $("bpm-dot");
@@ -1981,11 +2042,6 @@ function wireBpmDial() {
   dial.addEventListener("wheel", (e) => { e.preventDefault(); if (tempoLocked()) { lockToast(); return; } nudgeBpm((e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 1 : 2)); }, { passive: false });
   dial.addEventListener("dblclick", () => { setBpm(120); toast("Tempo reset to 120"); });
 
-  // editable number: type a tempo, Enter / blur applies
-  const num = $("hdr-bpm");
-  num.onfocus = () => num.select();
-  num.onchange = () => setBpm(clamp(parseInt(num.value, 10) || 120, 20, 300));
-  num.onkeydown = (e) => { if (e.key === "Enter") num.blur(); e.stopPropagation(); };
 }
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -2014,8 +2070,8 @@ function pushSetlist() {
   if (!send("set_setlist", { setlist: S.setlist })) { /* local: nothing to sync */ }
 }
 function activateSong(idx) {
-  const song = S.setlist[idx];
-  const title = song ? song.title : "Song";
+  const song = (idx != null) ? S.setlist[idx] : null;
+  const title = song ? song.title : "Metronome";
   if (send("activate_song", { idx })) {
     // mid-playback the server queues the switch for the end of the current bar
     if (S.click.running && S.click.mode === "song" && idx !== S.active_song_idx)
@@ -2468,9 +2524,9 @@ function renderPerfHeader() {
   const idx = S.active_song_idx;
   const song = (idx != null) ? S.setlist[idx] : null;
   if (song) migrateSong(song);
-  $("perf-title").textContent = song ? song.title : "No song loaded";
-  $("perf-bpm").textContent = song ? (S.click.bpm || song.bpm) : (S.click.running ? S.click.bpm : "—");
-  $("perf-sig").textContent = song ? `${sigLbl(song.time_sig || 4)} · ${song.key || ""}`.trim() : "";
+  $("perf-title").textContent = song ? song.title : "Metronome";
+  $("perf-bpm").textContent = S.click.bpm || (song ? song.bpm : "—");
+  $("perf-sig").textContent = song ? `${sigLbl(song.time_sig || 4)} · ${song.key || ""}`.trim() : sigLbl(S.click.time_sig || 4);
   $("perf-section").textContent = (S.pos && S.pos.section && S.click.running) ? S.pos.section : "Now playing";
   const next = (idx != null && S.setlist[idx+1]) ? S.setlist[idx+1] : null;
   $("perf-next").innerHTML = next ? `Up next · <b>${escapeHtml(next.title)}</b>` :
@@ -2622,9 +2678,14 @@ function wire() {
   $("perf-transport").onclick = toggleClick;
 
   // transport
-  $("transport").onclick = toggleClick;
   wireBpmDial();
   $("tap-tempo").onclick = makeTapper((bpm) => setBpm(bpm));
+  document.querySelectorAll("#free-sig button").forEach(b => b.onclick = () => {
+    S.click.time_sig = parseInt(b.dataset.sig, 10);
+    paintSeg("free-sig", "sig", String(S.click.time_sig));
+    send("update_click", { bpm: S.click.bpm, time_sig: S.click.time_sig });
+    buildBeatDots();
+  });
 
   // quick cues
   document.querySelectorAll(".qcue").forEach(q => q.onclick = () => triggerCue(q.dataset.cue));
@@ -2943,6 +3004,7 @@ function toggleMidiConnect() {
 const SIG_LABEL = { 3: "3/4", 4: "4/4", 6: "6/8" };
 const sigLbl = (s) => SIG_LABEL[s] || (s + "/4");
 const SEC_COLORS = ["182,255,58", "255,122,26", "77,155,255", "58,209,122", "212,83,126", "199,255,102"];
+const LIGHT_COLORS = { reactive: "192,140,255", chase: "255,110,199", static: "94,222,212", off: "120,126,140" };
 
 function migrateSong(song) {
   if (!song || typeof song !== "object") return song;
@@ -2950,6 +3012,10 @@ function migrateSong(song) {
     song.tempo_map = [{ bar: 1, bpm: song.bpm || 120, time_sig: song.time_sig || 4 }];
   song.tempo_map.sort((a, b) => (a.bar || 1) - (b.bar || 1));
   song.tempo_map[0].bar = 1;
+  song.light_map = (song.light_map || [])
+    .filter(l => SCENES.includes(l.scene))
+    .map(l => ({ bar: Math.max(1, parseInt(l.bar, 10) || 1), scene: l.scene }))
+    .sort((a, b) => a.bar - b.bar);
   song.sections = song.sections || [];
   song.cues = (song.cues || []).map(c => Object.assign({ bar: 1 }, c));
   song.length_bars = clamp(parseInt(song.length_bars, 10) || 32, 1, 999);
@@ -2990,10 +3056,11 @@ function renderTimeline(song, mount, opts) {
   inner.style.width = (bars * BW + 2) + "px";
   mount.appendChild(inner);
   const laneT = el("div", "tl-lane tl-tempo"), laneS = el("div", "tl-lane tl-secs"),
-        laneB = el("div", "tl-lane tl-bars"), laneC = el("div", "tl-lane tl-cues");
-  inner.append(laneT, laneS, laneB, laneC);
+        laneB = el("div", "tl-lane tl-bars"), laneC = el("div", "tl-lane tl-cues"),
+        laneL = el("div", "tl-lane tl-light");
+  inner.append(laneT, laneS, laneB, laneC, laneL);
   mount.classList.toggle("tl-edit", !!opts.onLane);
-  wireLaneClicks(opts, BW, bars, 1, laneT, laneS, laneC);
+  wireLaneClicks(opts, BW, bars, 1, laneT, laneS, laneC, laneL);
 
   for (let b = 1; b <= bars; b++) {
     const cell = el("div", "tl-bar" + ((b - 1) % 4 === 0 ? " b4" : ""));
@@ -3041,6 +3108,18 @@ function renderTimeline(song, mount, opts) {
     if (opts.onMarker) d.onclick = (e) => { e.stopPropagation(); opts.onMarker("track", t, e); };
     laneC.appendChild(d);
   });
+  (song.light_map || []).forEach((L, i, lms) => {
+    const endBar = lms[i + 1] ? lms[i + 1].bar : bars + 1;   // scene holds until the next change
+    const c = LIGHT_COLORS[L.scene] || "192,140,255";
+    const d = el("div", "tl-sec tl-lightseg");
+    d.style.left = ((L.bar - 1) * BW + 1) + "px";
+    d.style.width = Math.max(18, (endBar - L.bar) * BW - 3) + "px";
+    d.style.background = `rgba(${c},.13)`; d.style.borderColor = `rgba(${c},.38)`; d.style.color = `rgb(${c})`;
+    const lbl = el("span", "lbl", escapeHtml(L.scene));
+    if (opts.onMarker) lbl.onclick = (e) => { e.stopPropagation(); opts.onMarker("light", L, e); };
+    d.appendChild(lbl);
+    laneL.appendChild(d);
+  });
   const ph = el("div", "tl-playhead"); ph.style.left = "-10px";
   inner.appendChild(ph);
   mount._tl = { ph, BW, bars };
@@ -3048,9 +3127,9 @@ function renderTimeline(song, mount, opts) {
 }
 // Lane clicks: empty space in the tempo / section / cue lanes adds a marker
 // at that bar (markers themselves stopPropagation and edit instead).
-function wireLaneClicks(opts, BW, bars, startBar, laneT, laneS, laneC) {
+function wireLaneClicks(opts, BW, bars, startBar, laneT, laneS, laneC, laneL) {
   if (!opts.onLane) return;
-  [[laneT, "tempo"], [laneS, "section"], [laneC, "cue"]].forEach(([lane, kind]) => {
+  [[laneT, "tempo"], [laneS, "section"], [laneC, "cue"], [laneL, "light"]].forEach(([lane, kind]) => {
     lane.onclick = (e) => {
       if (e.target !== lane) return;   // a marker was clicked — it edits itself
       const x = e.clientX - lane.getBoundingClientRect().left;
@@ -3070,23 +3149,46 @@ function renderTimelineWrapped(song, mount, opts) {
   mount.classList.toggle("tl-edit", !!opts.onLane);
   const _cs = getComputedStyle(mount);
   const _pad = (parseFloat(_cs.paddingLeft) || 0) + (parseFloat(_cs.paddingRight) || 0);
+  const LGW = opts.legend ? 148 : 0;          // info block inside row 1
   const usable = Math.max(200, (mount.clientWidth || 960) - _pad - 2);
   const perRow = Math.max(4, Math.floor(usable / BW0));
   const BW = usable / perRow;          // stretch so full rows end flush right
   const nRows = Math.ceil(bars / perRow);
   const secs = (song.sections || []).slice().sort((a, b) => a.bar - b.bar);
   const rows = [];
+  // row plan: row 1 holds fewer bars (its bars start after the lane legend);
+  // every full row stretches its own bar width so it ends flush right
+  const plan = [];
+  if (LGW) {
+    const n0 = Math.max(2, Math.floor((usable - LGW) / BW0));
+    plan.push([1, Math.min(bars, n0)]);
+    for (let b0 = n0 + 1; b0 <= bars; b0 += perRow) plan.push([b0, Math.min(bars, b0 + perRow - 1)]);
+  } else {
+    for (let r = 0; r < nRows; r++) plan.push([r * perRow + 1, Math.min(bars, (r + 1) * perRow)]);
+  }
 
-  for (let r = 0; r < nRows; r++) {
-    const start = r * perRow + 1, end = Math.min(bars, (r + 1) * perRow);
+  for (let r = 0; r < plan.length; r++) {
+    const start = plan[r][0], end = plan[r][1];
+    const first = (r === 0 && LGW);
+    const span = first ? (usable - LGW) : usable;
+    const full = end - start + 1 === (first ? Math.max(2, Math.floor((usable - LGW) / BW0)) : perRow);
+    const BW = full ? span / (end - start + 1) : (first ? (usable - LGW) : usable) / (first ? Math.max(2, Math.floor((usable - LGW) / BW0)) : perRow);
     const rowEl = el("div", "tlw-row");
+    if (first) {
+      const lg = el("div", "tl-legend",
+        '<span class="lg t">Tempo</span><span class="lg s">Sections</span><span class="lg b">Bars</span><span class="lg c">Cues</span><span class="lg l">Lights</span>');
+      rowEl.appendChild(lg);
+      if (opts.legendExtra) opts.legendExtra(lg);
+    }
     const inner = el("div", "tl-inner");
     inner.style.width = ((end - start + 1) * BW + 2) + "px";
+    if (first) inner.style.marginLeft = LGW + "px";
     rowEl.appendChild(inner);
     const laneT = el("div", "tl-lane tl-tempo"), laneS = el("div", "tl-lane tl-secs"),
-          laneB = el("div", "tl-lane tl-bars"), laneC = el("div", "tl-lane tl-cues");
-    inner.append(laneT, laneS, laneB, laneC);
-    wireLaneClicks(opts, BW, bars, start, laneT, laneS, laneC);
+          laneB = el("div", "tl-lane tl-bars"), laneC = el("div", "tl-lane tl-cues"),
+          laneL = el("div", "tl-lane tl-light");
+    inner.append(laneT, laneS, laneB, laneC, laneL);
+    wireLaneClicks(opts, BW, bars, start, laneT, laneS, laneC, laneL);
 
     for (let b = start; b <= end; b++) {
       const cell = el("div", "tl-bar" + ((b - 1) % 4 === 0 ? " b4" : ""));
@@ -3138,10 +3240,24 @@ function renderTimelineWrapped(song, mount, opts) {
       if (opts.onMarker) d.onclick = (e) => { e.stopPropagation(); opts.onMarker("track", t, e); };
       laneC.appendChild(d);
     });
+    (song.light_map || []).forEach((L, i, lms) => {
+      const segEnd = (lms[i + 1] ? lms[i + 1].bar : bars + 1) - 1;   // scene holds until the next change
+      const a = Math.max(L.bar, start), z = Math.min(segEnd, end);
+      if (a > z) return;
+      const c = LIGHT_COLORS[L.scene] || "192,140,255";
+      const d = el("div", "tl-sec tl-lightseg");
+      d.style.left = ((a - start) * BW + 1) + "px";
+      d.style.width = Math.max(18, (z - a + 1) * BW - 3) + "px";
+      d.style.background = `rgba(${c},.13)`; d.style.borderColor = `rgba(${c},.38)`; d.style.color = `rgb(${c})`;
+      const lbl = el("span", "lbl", escapeHtml(L.scene));
+      if (opts.onMarker) lbl.onclick = (e) => { e.stopPropagation(); opts.onMarker("light", L, e); };
+      d.appendChild(lbl);
+      laneL.appendChild(d);
+    });
     const ph = el("div", "tl-playhead"); ph.style.display = "none";
     inner.appendChild(ph);
     mount.appendChild(rowEl);
-    rows.push({ rowEl, ph, start, end });
+    rows.push({ rowEl, ph, start, end, BW, off: first ? LGW : 0 });
   }
   mount._tl = { wrap: true, BW, bars, rows };
   return mount._tl;
@@ -3153,7 +3269,7 @@ function tlSetPlayhead(mount, bar, frac) {
     t.rows.forEach((r, ri) => {
       if (bar >= r.start && bar <= r.end) {
         r.ph.style.display = "block";
-        r.ph.style.left = (((bar - r.start) + (frac || 0)) * t.BW).toFixed(1) + "px";
+        r.ph.style.left = (((bar - r.start) + (frac || 0)) * (r.BW || t.BW)).toFixed(1) + "px";   // inner already carries the legend offset
         // auto-scroll only when the playhead ENTERS a new row (and only if that
         // row is actually out of view) — never fight the user's own scrolling
         if (t.lastRow !== ri) {
@@ -3319,10 +3435,7 @@ function openSongEditor(idx) {
   const song = edSong(); if (!song) return;
   migrateSong(song);
   $("ed-title").value = song.title || "";
-  $("ed-key").value = song.key || "C";
-  $("ed-len").value = song.length_bars;
   $("ed-notes").value = song.notes || "";
-  $("ed-scene").value = song.scene || "reactive";
   $("editor").classList.add("open");   // before render — the wrapped timeline measures its width
   renderEditorTimeline();
   preloadSongTracks(song);
@@ -3340,11 +3453,63 @@ function commitSong(rerenderTl) {
   pushSetlist();
   if (rerenderTl !== false) renderEditorTimeline();
 }
+// Key + Length live inside the row-1 info block; the timeline re-renders often,
+// so they are rebuilt (with fresh wiring) every time.
+function buildEdSideControls(legendEl, song) {
+  const box = el("div", "lg-ctl");
+  const g1 = el("div", "lgc", '<label>Scale</label>');
+  const sel = el("select", "lime-mini"); sel.id = "ed-key"; sel.title = "Key / scale";
+  KEYS.forEach(k => { const o = el("option"); o.value = o.textContent = k; sel.appendChild(o); });
+  sel.value = song.key || "C";
+  sel.onchange = () => { const s = edSong(); if (s) { s.key = sel.value; commitSong(false); } };
+  g1.appendChild(sel);
+  box.appendChild(g1);
+
+  const g2 = el("div", "lgc", '<label>Bars</label>');
+  const lenBox = el("div", "lime-len");
+  lenBox.innerHTML = '<input type="number" id="ed-len" min="1" max="999" title="Song length — type, use the arrows, or drag up/down">' +
+    '<div class="step-btns">' +
+    '<button type="button" id="ed-len-up" tabindex="-1" title="One bar more">&#9650;</button>' +
+    '<button type="button" id="ed-len-dn" tabindex="-1" title="One bar less">&#9660;</button></div>';
+  g2.appendChild(lenBox);
+  box.appendChild(g2);
+  const inp = lenBox.querySelector("#ed-len");
+  inp.value = song.length_bars;
+  const commitLen = () => {
+    const s = edSong(); if (!s) return;
+    s.length_bars = clamp(parseInt(inp.value, 10) || 32, 1, 999);
+    inp.value = s.length_bars;
+    commitSong();
+  };
+  inp.onchange = commitLen;
+  lenBox.querySelector("#ed-len-up").onclick = () => { inp.value = clamp((parseInt(inp.value, 10) || 32) + 1, 1, 999); commitLen(); };
+  lenBox.querySelector("#ed-len-dn").onclick = () => { inp.value = clamp((parseInt(inp.value, 10) || 32) - 1, 1, 999); commitLen(); };
+  // drag up/down to scrub (typing still works)
+  inp.style.cursor = "ns-resize";
+  let sy = 0, sv = 0, down = false, scrub = false;
+  inp.addEventListener("pointerdown", (e) => {
+    down = true; scrub = false; sy = e.clientY; sv = parseInt(inp.value, 10) || 32;
+    try { inp.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  inp.addEventListener("pointermove", (e) => {
+    if (!down || e.buttons === 0) { down = false; scrub = false; return; }
+    const dy = sy - e.clientY;
+    if (!scrub && Math.abs(dy) > 4) scrub = true;
+    if (scrub) { e.preventDefault(); inp.value = clamp(Math.round(sv + dy * 0.3), 1, 999); }
+  });
+  const up = () => { if (scrub) { commitLen(); inp.blur(); } down = false; scrub = false; };
+  inp.addEventListener("pointerup", up);
+  inp.addEventListener("pointercancel", up);
+  inp.addEventListener("lostpointercapture", up);
+  legendEl.prepend(box);
+}
 function renderEditorTimeline() {
   const song = edSong(); if (!song) return;
   renderTimeline(song, $("ed-tl"), {
     barW: 34,
     wrap: true,   // fill the width, grow downward — no horizontal scrolling
+    legend: true,
+    legendExtra: (lg) => buildEdSideControls(lg, song),
     // grid click = move the playhead there (playback starts from it)
     onBar: (bar) => {
       if (edIdx !== S.active_song_idx) {
@@ -3362,6 +3527,7 @@ function renderEditorTimeline() {
       tlPopAt(e);
       if (kind === "tempo") tlPopTempo(bar);
       else if (kind === "section") tlPopSection(bar);
+      else if (kind === "light") tlPopLight(bar);
       else tlPopCue(bar);
     },
     onMarker: (kind, obj, e) => {
@@ -3369,6 +3535,7 @@ function renderEditorTimeline() {
       if (kind === "tempo") tlPopTempo(obj.bar);
       else if (kind === "section") tlPopSection(obj.bar);
       else if (kind === "track") tlPopTrack(obj);
+      else if (kind === "light") tlPopLight(obj.bar);
       else tlPopCue(obj.bar);
     },
   });
@@ -3466,6 +3633,24 @@ function tlPopCue(bar) {
   const del = $("tp-del"); if (del) del.onclick = () => { removeMarker(song.cues, bar); commitSong(); tlPopHide(); };
   $("tp-x").onclick = tlPopHide;
 }
+function tlPopLight(bar) {
+  const song = edSong(); if (!song) return;
+  const ex = song.light_map.find(l => l.bar === bar);
+  $("tl-pop").innerHTML =
+    `<div class="tp-title">Lighting · bar ${bar}</div>
+     <div class="field"><label>Scene from this bar onward</label><div class="chips" id="tp-scenes"></div></div>
+     <div class="tp-row">` +
+     (ex ? `<button class="btn danger sm" id="tp-del">Remove</button>` : "") +
+     `<button class="btn ghost sm" id="tp-x">Cancel</button></div>`;
+  tlPopShow();
+  SCENES.forEach(sc => {
+    const b = el("button", (ex && ex.scene === sc) ? "on" : null, sc.charAt(0).toUpperCase() + sc.slice(1));
+    b.onclick = () => { upsertMarker(song.light_map, bar, { scene: sc }); commitSong(); tlPopHide(); };
+    $("tp-scenes").appendChild(b);
+  });
+  const del = $("tp-del"); if (del) del.onclick = () => { removeMarker(song.light_map, bar); commitSong(); tlPopHide(); };
+  $("tp-x").onclick = tlPopHide;
+}
 function tlPopTrack(track) {
   const song = edSong(); if (!song) return;
   $("tl-pop").innerHTML =
@@ -3507,56 +3692,10 @@ function renderEditorTracks() {
 }
 
 function wireEditor() {
-  KEYS.forEach(k => { const o = el("option"); o.value = o.textContent = k; $("ed-key").appendChild(o); });
   $("ed-done").onclick = closeSongEditor;
   $("editor").onclick = (e) => { if (e.target.id === "editor") closeSongEditor(); };
   $("ed-title").onchange = () => { const s = edSong(); if (s) { s.title = $("ed-title").value.trim() || "Untitled"; commitSong(false); } };
-  $("ed-key").onchange = () => { const s = edSong(); if (s) { s.key = $("ed-key").value; commitSong(false); } };
   $("ed-notes").onchange = () => { const s = edSong(); if (s) { s.notes = $("ed-notes").value; commitSong(false); } };
-  $("ed-len").onchange = () => {
-    const s = edSong(); if (!s) return;
-    s.length_bars = clamp(parseInt($("ed-len").value, 10) || 32, 1, 999);
-    $("ed-len").value = s.length_bars;
-    commitSong();
-  };
-  // drag up/down on the bars field to scrub the value (typing still works)
-  (function () {
-    const inp = $("ed-len");
-    inp.style.cursor = "ns-resize";
-    let sy = 0, sv = 0, down = false, scrub = false;
-    inp.addEventListener("pointerdown", (e) => {
-      down = true; scrub = false; sy = e.clientY; sv = parseInt(inp.value, 10) || 32;
-      try { inp.setPointerCapture(e.pointerId); } catch (err) {}   // release ALWAYS reaches us
-    });
-    inp.addEventListener("pointermove", (e) => {
-      if (!down || e.buttons === 0) { down = false; scrub = false; return; }  // button already released
-      const dy = sy - e.clientY;                      // drag up = more bars
-      if (!scrub && Math.abs(dy) > 4) scrub = true;
-      if (scrub) { e.preventDefault(); inp.value = clamp(Math.round(sv + dy * 0.3), 1, 999); }
-    });
-    const up = () => {
-      if (scrub) {
-        const s = edSong();
-        if (s) { s.length_bars = clamp(parseInt(inp.value, 10) || 32, 1, 999); inp.value = s.length_bars; commitSong(); }
-        inp.blur();
-      }
-      down = false; scrub = false;
-    };
-    inp.addEventListener("pointerup", up);
-    inp.addEventListener("pointercancel", up);
-    inp.addEventListener("lostpointercapture", up);
-  })();
-  $("ed-scene").onchange = () => {
-    const s = edSong(); if (!s) return;
-    s.scene = $("ed-scene").value; commitSong(false);
-  };
-  const stepLen = (d) => {
-    const i = $("ed-len");
-    i.value = clamp((parseInt(i.value, 10) || 32) + d, 1, 999);
-    i.onchange();
-  };
-  $("ed-len-up").onclick = () => stepLen(1);
-  $("ed-len-dn").onclick = () => stepLen(-1);
   $("ed-add-track").onclick = () => $("ed-track-file").click();
   $("ed-track-file").onchange = (e) => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
@@ -3580,7 +3719,7 @@ function wireEditor() {
 function renderPerfSetlist() {
   const box = $("perf-set"); box.innerHTML = "";
   box.appendChild(el("div", "ps-head", "Setlist"));
-  if (!S.setlist.length) { box.appendChild(el("div", "hint", "No songs yet — add some in the Setlist tab.")); return; }
+  if (!S.setlist.length) box.appendChild(el("div", "hint", "No songs yet — add some in the Setlist tab."));
   S.setlist.forEach((song, i) => {
     migrateSong(song);
     const pend = (S.click.pending_song === i);
@@ -3600,17 +3739,34 @@ function renderPerfSetlist() {
     });
     box.appendChild(row);
   });
+  // metronome — no bars, no setlist, just a beat for on-the-spot playing
+  const wrap = el("div", "ps-free-wrap");
+  const fr = el("button", "ps-free" + (S.active_song_idx == null ? " on" : ""), ic("metro"));
+  fr.title = "Metronome — a dial, a time signature and a click";
+  fr.onclick = () => { if (S.active_song_idx != null) activateSong(null); };
+  wrap.appendChild(fr);
+  box.appendChild(wrap);
 }
 let _perfTlKey = "";
 function renderPerfTimeline() {
   const song = (S.active_song_idx != null) ? S.setlist[S.active_song_idx] : null;
   const mount = $("perf-tl");
-  if (!song) { mount.innerHTML = '<div class="hint" style="padding:16px;">Pick a song on the left — its bars, sections and cues appear here with a live playhead.</div>'; mount._tl = null; _perfTlKey = ""; $("perf-barpos").textContent = ""; return; }
+  const freebox = $("perf-freebox");
+  if (!song) {
+    if (freebox) freebox.style.display = "flex";
+    mount.style.display = "none";
+    mount.innerHTML = ""; mount._tl = null; _perfTlKey = ""; $("perf-barpos").textContent = "";
+    renderBpmDial();
+    return;
+  }
+  if (freebox) freebox.style.display = "none";
+  mount.style.display = "";
   migrateSong(song);
   // only rebuild when the song's structure (or available width) changes —
   // constant rebuilds were resetting the scroll position on every state sync
   const key = [S.active_song_idx, song.length_bars, song.tempo_map.length,
-               song.sections.length, song.cues.length, song.tracks.length, mount.clientWidth].join("|");
+               song.sections.length, song.cues.length, song.tracks.length,
+               song.light_map.length, mount.clientWidth].join("|");
   if (key === _perfTlKey && mount._tl) {
     if (S.pos && S.pos.bar) tlSetPlayhead(mount, S.pos.bar, S.pos.beat / (S.click.time_sig || 4));
     return;
@@ -3649,7 +3805,6 @@ function markWelcomed() { try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e
 function hideWelcome() { $("welcome").classList.remove("show"); markWelcomed(); }
 
 const TOUR = [
-  { sel: "#transport", title: "Your click track", body: "This lime button starts and stops the metronome. Drag the dial up or down (or scroll it) to set the tempo, or hit Tap and tap along — Space works too.", pad: 10 },
   { sel: '.tab[data-view="setlist"]', title: "Setlist", body: "Your songs, in order. Tap a song to load its tempo, time signature and lighting. Drag to reorder, double-click to edit.", pad: 6 },
   { sel: '.tab[data-view="lighting"]', title: "Lighting", body: "A live stage preview. Pick a scene, set colours, patch fixtures, and connect real DMX at the venue. Works in simulator mode with no gear.", pad: 6 },
   { sel: '.tab[data-view="perf"]', title: "Performance", body: "The big, glanceable view for during the show — song title, giant BPM, beat dots and one-tap cues.", pad: 6 },

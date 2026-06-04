@@ -152,6 +152,13 @@ def _migrate_song(song):
         except (TypeError, ValueError):
             t["gain"] = 1.0
     song["tracks"] = trs
+    # lighting lane: scene changes pinned to bars (applied by the click thread)
+    lm = []
+    for L in song.get("light_map") or []:
+        sc = str(L.get("scene", "")).lower()
+        if sc in ("reactive", "chase", "static", "off"):
+            lm.append({"bar": max(1, int(L.get("bar", 1))), "scene": sc})
+    song["light_map"] = sorted(lm, key=lambda L: L["bar"])
     song["bpm"] = tm[0]["bpm"]
     song["time_sig"] = tm[0]["time_sig"]
     return song
@@ -688,6 +695,20 @@ def click_thread():
                     if nxt:
                         counts = ", ".join(str(i) for i in range(2, time_sig + 1))
                         broadcast("cue", {"text": nxt["label"] + (", " + counts if counts else "")})
+                # lighting lane: the latest scene change at/before this bar wins
+                # (covers normal playback, seeks and mid-song joins alike)
+                lm = song.get("light_map") or []
+                if lm:
+                    cur = None
+                    for L in lm:
+                        if L["bar"] <= bar:
+                            cur = L["scene"]
+                        else:
+                            break
+                    if cur and cur != state["lighting"]["scene"]:
+                        state["lighting"]["scene"] = cur
+                        _update_dmx_from_lighting()
+                        broadcast("state", _full_state())
 
             broadcast("beat", {
                 "beat": beat, "bar": bar,
