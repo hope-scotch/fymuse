@@ -46,6 +46,12 @@ except ImportError:
     HAS_PYAUDIO = False
 
 try:
+    import sounddevice as sd
+    HAS_SD = True
+except Exception:          # missing lib OR no usable PortAudio on this box
+    HAS_SD = False
+
+try:
     from flask import Flask, jsonify, request, send_from_directory
     from flask_sock import Sock
     HAS_FLASK = True
@@ -386,6 +392,7 @@ class ClickOutput:
         self._active = []           # [waveform, position] of currently sounding ticks
         self.device = None
         self.error = None
+        self.backend = None
         self._w_down = self._tone(1000.0)
         self._w_beat = self._tone(800.0)
 
@@ -399,33 +406,51 @@ class ClickOutput:
         return w
 
     def state(self):
-        return {"device": self.device, "error": self.error, "available": HAS_PYAUDIO}
+        return {"device": self.device, "error": self.error,
+                "available": HAS_SD or HAS_PYAUDIO,
+                "backend": self.backend}
 
     def start(self, device_idx):
         self.stop()
         if device_idx is None:
             return True
-        if not HAS_PYAUDIO:
-            self.error = "PyAudio not installed on the server"
-            return False
-        try:
-            self._pa = pyaudio.PyAudio()
-            self._stream = self._pa.open(
-                format=pyaudio.paFloat32, channels=1, rate=self.RATE,
-                output=True, output_device_index=int(device_idx),
-                frames_per_buffer=512, stream_callback=self._cb)
-            self._stream.start_stream()
-            self.device = int(device_idx)
-            self.error = None
-            return True
-        except Exception as e:
-            self.error = str(e)
-            self._teardown()
-            return False
+        if HAS_SD:                      # preferred: maintained, wheels bundle PortAudio
+            try:
+                self._stream = sd.RawOutputStream(
+                    samplerate=self.RATE, blocksize=512, device=int(device_idx),
+                    channels=1, dtype="float32", callback=self._sd_cb)
+                self._stream.start()
+                self.backend = "sounddevice"
+                self.device = int(device_idx)
+                self.error = None
+                return True
+            except Exception as e:
+                self.error = str(e)
+                self._stream = None      # fall through to pyaudio if present
+        if HAS_PYAUDIO:
+            try:
+                self._pa = pyaudio.PyAudio()
+                self._stream = self._pa.open(
+                    format=pyaudio.paFloat32, channels=1, rate=self.RATE,
+                    output=True, output_device_index=int(device_idx),
+                    frames_per_buffer=512, stream_callback=self._cb)
+                self._stream.start_stream()
+                self.backend = "pyaudio"
+                self.device = int(device_idx)
+                self.error = None
+                return True
+            except Exception as e:
+                self.error = str(e)
+                self._teardown()
+                return False
+        if not (HAS_SD or HAS_PYAUDIO):
+            self.error = "no audio backend — pip install sounddevice"
+        return False
 
     def stop(self):
         self._teardown()
         self.device = None
+        self.backend = None
 
     def _teardown(self):
         try:
@@ -450,7 +475,7 @@ class ClickOutput:
         with self._lock:
             self._active.append([self._w_down if downbeat else self._w_beat, 0])
 
-    def _cb(self, in_data, frame_count, time_info, status_flags):
+    def _mix(self, frame_count):
         buf = array.array("f", bytes(4 * frame_count))
         with self._lock:
             keep = []
@@ -463,7 +488,13 @@ class ClickOutput:
                 if t[1] < len(w):
                     keep.append(t)
             self._active = keep
-        return (buf.tobytes(), pyaudio.paContinue)
+        return buf
+
+    def _sd_cb(self, outdata, frames, time_info, status_flags):
+        outdata[:] = self._mix(frames).tobytes()
+
+    def _cb(self, in_data, frame_count, time_info, status_flags):
+        return (self._mix(frame_count).tobytes(), pyaudio.paContinue)
 
 
 click_out = ClickOutput()
@@ -1047,6 +1078,19 @@ def api_audio_devices():
 @app.route("/api/output/audio-devices")
 def api_output_audio_devices():
     """Playback devices the click can be routed to (IEM feeds etc.)."""
+    if HAS_SD:
+        devices = []
+        try:
+            default_out = sd.default.device[1]
+        except Exception:
+            default_out = None
+        try:
+            for i, d in enumerate(sd.query_devices()):
+                if d.get("max_output_channels", 0) > 0:
+                    devices.append({"idx": i, "name": d["name"], "default": i == default_out})
+        except Exception:
+            pass
+        return jsonify({"devices": devices, "available": True})
     if not HAS_PYAUDIO:
         return jsonify({"devices": [], "available": False})
     pa = pyaudio.PyAudio()
