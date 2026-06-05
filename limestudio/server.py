@@ -5,6 +5,7 @@ Run: python3 server.py
 Open: http://localhost:4748
 """
 
+import array
 import asyncio
 import json
 import math
@@ -370,6 +371,104 @@ CONFIG_DIR = Path.home() / ".limestudio"
 SHOW_FILE = CONFIG_DIR / "show.json"
 
 
+# ── Click output routing ─────────────────────────────────────────────────────
+# Renders the click on a dedicated output device (PyAudio callback stream) so
+# it can feed e.g. the drummer's IEMs while backing tracks and spoken cues
+# stay on the system default output. The browser mutes its local click while
+# a device is selected.
+class ClickOutput:
+    RATE = 44100
+
+    def __init__(self):
+        self._pa = None
+        self._stream = None
+        self._lock = threading.Lock()
+        self._active = []           # [waveform, position] of currently sounding ticks
+        self.device = None
+        self.error = None
+        self._w_down = self._tone(1000.0)
+        self._w_beat = self._tone(800.0)
+
+    @staticmethod
+    def _tone(freq, dur=0.05, vol=0.6):
+        n = int(ClickOutput.RATE * dur)
+        w = array.array("f", bytes(4 * n))
+        for i in range(n):
+            t = i / ClickOutput.RATE
+            w[i] = vol * math.exp(-t / 0.012) * math.sin(2 * math.pi * freq * t)
+        return w
+
+    def state(self):
+        return {"device": self.device, "error": self.error, "available": HAS_PYAUDIO}
+
+    def start(self, device_idx):
+        self.stop()
+        if device_idx is None:
+            return True
+        if not HAS_PYAUDIO:
+            self.error = "PyAudio not installed on the server"
+            return False
+        try:
+            self._pa = pyaudio.PyAudio()
+            self._stream = self._pa.open(
+                format=pyaudio.paFloat32, channels=1, rate=self.RATE,
+                output=True, output_device_index=int(device_idx),
+                frames_per_buffer=512, stream_callback=self._cb)
+            self._stream.start_stream()
+            self.device = int(device_idx)
+            self.error = None
+            return True
+        except Exception as e:
+            self.error = str(e)
+            self._teardown()
+            return False
+
+    def stop(self):
+        self._teardown()
+        self.device = None
+
+    def _teardown(self):
+        try:
+            if self._stream:
+                self._stream.stop_stream()
+                self._stream.close()
+        except Exception:
+            pass
+        try:
+            if self._pa:
+                self._pa.terminate()
+        except Exception:
+            pass
+        self._stream = None
+        self._pa = None
+        with self._lock:
+            self._active = []
+
+    def tick(self, downbeat):
+        if not self._stream:
+            return
+        with self._lock:
+            self._active.append([self._w_down if downbeat else self._w_beat, 0])
+
+    def _cb(self, in_data, frame_count, time_info, status_flags):
+        buf = array.array("f", bytes(4 * frame_count))
+        with self._lock:
+            keep = []
+            for t in self._active:
+                w, p = t[0], t[1]
+                n = min(frame_count, len(w) - p)
+                for i in range(n):
+                    buf[i] += w[p + i]
+                t[1] = p + n
+                if t[1] < len(w):
+                    keep.append(t)
+            self._active = keep
+        return (buf.tobytes(), pyaudio.paContinue)
+
+
+click_out = ClickOutput()
+
+
 def _save_show():
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -379,6 +478,7 @@ def _save_show():
             "lighting": {k: state["lighting"][k]
                          for k in ("scene", "color", "brightness", "num_fixtures")},
             "midi_mapping": midi.mapping,
+            "click_out_device": click_out.device,
         }
         tmp = SHOW_FILE.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))
@@ -400,6 +500,8 @@ def _load_show():
         state["lighting"].update({k: v for k, v in lit.items() if k in state["lighting"]})
         if d.get("midi_mapping"):
             midi.set_mapping(d["midi_mapping"])
+        if d.get("click_out_device") is not None:
+            click_out.start(d["click_out_device"])
     except Exception:
         pass
 
@@ -526,6 +628,15 @@ def handle_ws_message(payload: dict, ws):
         _save_show()
         broadcast("state", _full_state())
 
+    elif action == "set_click_output":
+        dev = data.get("device", None)
+        if dev is None:
+            click_out.stop()
+        else:
+            click_out.start(dev)
+        _save_show()
+        broadcast("state", _full_state())
+
     elif action == "set_scene":
         state["lighting"]["scene"] = data.get("scene", "reactive")
         _update_dmx_from_lighting()
@@ -624,6 +735,7 @@ def _full_state():
         "output": output.state(),
         "profiles": {k: v["width"] for k, v in PROFILES.items()},
         "midi": midi.state(),
+        "click_out": click_out.state(),
     }
 
 
@@ -717,6 +829,7 @@ def click_thread():
                 "section": _song_section(song, bar),
                 "length_bars": song["length_bars"],
             })
+            click_out.tick(beat == 0)
 
             if state["lighting"]["scene"] == "chase":
                 _chase_pos += 1
@@ -745,6 +858,7 @@ def click_thread():
                 "beat": beat, "bpm": bpm, "time_sig": time_sig,
                 "downbeat": (beat % time_sig == 0),
             })
+            click_out.tick(beat % time_sig == 0)
             if state["lighting"]["scene"] == "chase":
                 _chase_pos += 1
                 _update_dmx_from_lighting()
@@ -928,6 +1042,27 @@ def api_audio_devices():
             devices.append({"idx": i, "name": d["name"]})
     pa.terminate()
     return jsonify({"devices": devices, "sim": False})
+
+
+@app.route("/api/output/audio-devices")
+def api_output_audio_devices():
+    """Playback devices the click can be routed to (IEM feeds etc.)."""
+    if not HAS_PYAUDIO:
+        return jsonify({"devices": [], "available": False})
+    pa = pyaudio.PyAudio()
+    devices = []
+    try:
+        try:
+            default_idx = pa.get_default_output_device_info().get("index")
+        except Exception:
+            default_idx = None
+        for i in range(pa.get_device_count()):
+            d = pa.get_device_info_by_index(i)
+            if d.get("maxOutputChannels", 0) > 0:
+                devices.append({"idx": i, "name": d["name"], "default": i == default_idx})
+    finally:
+        pa.terminate()
+    return jsonify({"devices": devices, "available": True})
 
 
 @app.route("/api/audio/start", methods=["POST"])

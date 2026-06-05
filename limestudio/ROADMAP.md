@@ -18,12 +18,13 @@ click tick and TTS cues.
 - Stop/duck on song stop · survive tempo changes (no warping in v1 — just
   bar-aligned triggering)
 
-### 2. Multi-output audio routing
+### 2. Multi-output audio routing — ✅ v1 SHIPPED (click → dedicated device)
 Click → drummer's IEMs only (e.g. interface out 3/4); tracks → FOH (out 1/2).
-Today everything goes to the default output, so "click in ears only" needs a
-physical split.
-- Enumerate CoreAudio devices/channels, per-role output picker
-  (click / cues / tracks)
+- ✅ Click can be routed to any CoreAudio output device (Outputs button in the
+  header): the server renders it via a PyAudio callback stream while tracks +
+  spoken cues stay on the default output; browser mutes its local click.
+- Remaining: per-CHANNEL routing within one interface, and per-role pickers
+  for tracks / cues (cues to IEMs is a likely ask).
 
 ### 3. Sample-accurate click scheduling — ✅ LARGELY SHIPPED with #1 (Web Audio lookahead scheduler in song mode + drift-free server deadlines; free-mode click still event-driven)
 The click is currently a Python thread (`time.sleep` per beat) → WebSocket →

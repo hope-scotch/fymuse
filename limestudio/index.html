@@ -226,7 +226,7 @@
 
   /* ── View container ────────────────────────────────── */
   main { flex: 1 1 auto; overflow: hidden; position: relative; }
-  .view { position: absolute; inset: 0; overflow-y: scroll; padding: 22px; display: none; }
+  .view { position: absolute; inset: 0; overflow-y: scroll; overflow-x: hidden; padding: 22px; display: none; }
   .view.active { display: block; }
   .view-inner { max-width: 1100px; margin: 0 auto; }
 
@@ -1141,6 +1141,7 @@
 
     <div class="hsep"></div>
     <button class="pill" id="audio-toggle" data-ic="mic"><span class="lbl">Audio</span></button>
+    <button class="pill" id="out-btn" data-ic="phones" title="Route the click to a separate output — e.g. the drummer's in-ears"><span class="lbl">Outputs</span></button>
     <button class="pill detect" id="tempo-chip" title="Tap to set the click to the detected tempo" style="display:none;"></button>
     <button class="pill" id="autofollow" title="Auto-follow the detected tempo" style="display:none;" data-ic="follow"><span class="lbl">Follow</span></button>
     <button class="pill midi" id="midi-btn" title="MIDI cue triggers"><span class="mled"></span><span data-ic="midi"></span><span class="lbl">MIDI</span></button>
@@ -1163,7 +1164,7 @@
         <div class="setlist-head">
           <div>
             <h2 class="view-title">Setlist</h2>
-            <div class="view-sub">Drag to reorder · tap the play button to load a song into the controller</div>
+            <div class="view-sub">Drag to reorder · click a song to edit it · load songs from the Performance tab</div>
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn ghost sm" id="btn-demo">Load demo set</button>
@@ -1317,7 +1318,6 @@
                   <circle class="ring2" cx="24" cy="24" r="16.5"/>
                   <circle class="ring3" cx="24" cy="24" r="14"/>
                 </svg>
-                <div class="dot" id="bpm-dot"></div>
                 <div class="bpm-center">
                   <div class="circ">
                     <div class="val" id="hdr-bpm">120</div>
@@ -1409,6 +1409,18 @@
 </div>
 
 <!-- ── MIDI setup modal ── -->
+<div class="modal-bg" id="out-modal">
+  <div class="modal" style="max-width:440px;">
+    <h3>Audio outputs</h3>
+    <div class="field">
+      <label>Click output — in-ear monitor feed</label>
+      <select id="click-out-dev"><option value="">Same as everything (default output)</option></select>
+    </div>
+    <div class="hint" id="click-out-hint" style="margin-bottom:14px;">Pick your interface's IEM output and the click is rendered straight to it on the server — backing tracks and spoken cues stay on the default output for front of house.</div>
+    <div class="tp-row" style="justify-content:flex-end;"><button class="btn primary sm" id="out-close">Done</button></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="midi-modal">
   <div class="modal" style="max-width:680px;">
     <div class="modal-head">
@@ -1618,6 +1630,7 @@ const ICONS_FILLED = {
   grip:    '<circle cx="9" cy="5" r="1.6"/><circle cx="15" cy="5" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="19" r="1.6"/><circle cx="15" cy="19" r="1.6"/>',
   note:    '<path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   metro:   '<path d="M10 3h4l4.5 18h-13z"/><line x1="12" y1="16.5" x2="16.5" y2="6.5"/><circle cx="15.6" cy="8.5" r="1.4" fill="currentColor" stroke="none"/>',
+  phones:  '<path d="M4 14a8 8 0 0 1 16 0"/><rect x="3" y="14" width="4" height="6" rx="2"/><rect x="17" y="14" width="4" height="6" rx="2"/>',
 };
 function ic(name) {
   if (ICONS_FILLED[name]) return `<svg class="ico" viewBox="0 0 24 24" fill="currentColor">${ICONS_FILLED[name]}</svg>`;
@@ -1788,6 +1801,8 @@ function ensureAudio() {
   if (audioCtx.state === "suspended") audioCtx.resume();
   return audioCtx;
 }
+// true when the server renders the click on a dedicated device (IEMs)
+function clickRouted() { return !!(S.click_out && S.click_out.device != null); }
 function playClick(downbeat) {
   const ctx = ensureAudio();
   const osc = ctx.createOscillator();
@@ -1806,7 +1821,7 @@ function onBeat(d) {
   S.click.beat = d.beat;
   if (d.bar) S.pos = { bar: d.bar, beat: d.beat, section: d.section || null, len: d.length_bars || 0 };
   const audioScheduled = d.bar ? schedOnServerBeat(d) : false;
-  if (!audioScheduled) playClick(d.downbeat);
+  if (!audioScheduled && !clickRouted()) playClick(d.downbeat);
   // beat-synced cue segments: each lands exactly on a click
   if (cueSegQueue.length)
     speakNow(cueSegQueue.shift(), Math.max(1.0, Math.min(1.7, S.click.bpm / 105)),
@@ -1992,6 +2007,7 @@ function syncTransport() {
       : '<path d="M8 5v14l11-7z"/>';
   }
   if ($("free-sig")) paintSeg("free-sig", "sig", String(S.click.time_sig));
+  const ob = $("out-btn"); if (ob) ob.classList.toggle("live", clickRouted());
   buildBeatDots();
   renderPerfHeader();
 }
@@ -2003,13 +2019,10 @@ function setHdrBpm(v) {
   if (e) e.textContent = v;   // display-only — the dial (or Tap) sets the tempo
 }
 function renderBpmDial() {
-  const arc = $("bpm-arc"), dot = $("bpm-dot");
-  if (!arc || !dot) return;
+  const arc = $("bpm-arc");
+  if (!arc) return;
   const frac = (clamp(S.click.bpm, DIAL_MIN, DIAL_MAX) - DIAL_MIN) / (DIAL_MAX - DIAL_MIN);
   arc.style.strokeDasharray = `${(frac * DIAL_SWEEP * DIAL_C).toFixed(2)} ${DIAL_C.toFixed(2)}`;
-  const ang = (135 + frac * 270) * Math.PI / 180;   // 135° → 405°, clockwise
-  dot.style.left = (50 + 39.6 * Math.cos(ang)) + "%";
-  dot.style.top  = (50 + 39.6 * Math.sin(ang)) + "%";
 }
 let _dialSendT = 0;
 function setBpmLive(bpm) {
@@ -2108,7 +2121,6 @@ function renderSetlist() {
     row.draggable = true;
     row.dataset.idx = i;
     migrateSong(song);
-    const sceneClass = SCENES.includes(song.scene) ? song.scene : "reactive";
     row.innerHTML =
       `<span class="song-grip">${ic("grip")}</span>` +
       `<span class="song-num">${i + 1}</span>` +
@@ -2119,19 +2131,14 @@ function renderSetlist() {
           `<span class="chip">${sigLbl(song.time_sig || 4)}</span>` +
           `<span class="chip">${song.length_bars || 32} bars</span>` +
           `<span class="chip">key <b>${escapeHtml(song.key || "—")}</b></span>` +
-          `<span class="scene-tag ${sceneClass}">${sceneClass}</span>` +
           (song.cues && song.cues.length ? `<span class="chip">${song.cues.length} cue${song.cues.length>1?"s":""}</span>` : "") +
         `</div>` +
       `</div>` +
       `<div class="song-actions">` +
-        `<button class="icon-btn go" title="Load" data-act="go"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>` +
-        `<button class="icon-btn" title="Edit" data-act="edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M13 7l4 4"/></svg></button>` +
         `<button class="icon-btn" title="Remove" data-act="del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"/></svg></button>` +
       `</div>`;
 
-    // actions
-    row.querySelector('[data-act=go]').onclick = (e) => { e.stopPropagation(); activateSong(i); };
-    row.querySelector('[data-act=edit]').onclick = (e) => { e.stopPropagation(); openSongEditor(i); };
+    // actions — click opens the editor; loading songs happens in Performance
     row.querySelector('[data-act=del]').onclick = (e) => { e.stopPropagation(); removeSong(i); };
     row.onclick = () => openSongEditor(i);
     row.ondblclick = () => openSongEditor(i);
@@ -2692,6 +2699,13 @@ function wire() {
 
   // audio toggle + tempo detection
   $("audio-toggle").onclick = toggleAudio;
+  $("out-btn").onclick = openOutModal;
+  $("out-close").onclick = () => $("out-modal").classList.remove("open");
+  $("out-modal").addEventListener("click", (e) => { if (e.target === $("out-modal")) $("out-modal").classList.remove("open"); });
+  $("click-out-dev").onchange = () => {
+    const v = $("click-out-dev").value;
+    send("set_click_output", { device: v === "" ? null : parseInt(v, 10) });
+  };
   $("tempo-chip").onclick = applyDetectedTempo;
   $("autofollow").onclick = toggleAutofollow;
 
@@ -2794,6 +2808,25 @@ function wire() {
 }
 
 // ── Audio capture toggle (server-driven; UI reflects state) ─────────────────
+function openOutModal() {
+  const sel = $("click-out-dev");
+  fetch("/api/output/audio-devices").then(r => r.json()).then(d => {
+    sel.innerHTML = '<option value="">Same as everything (default output)</option>';
+    (d.devices || []).forEach(dev => {
+      const o = el("option");
+      o.value = dev.idx;
+      o.textContent = dev.name + (dev.default ? "  ·  system default" : "");
+      sel.appendChild(o);
+    });
+    sel.value = (S.click_out && S.click_out.device != null) ? String(S.click_out.device) : "";
+    const hint = $("click-out-hint");
+    if (!d.available)
+      hint.textContent = "Audio backend not installed on the server — see requirements-optional.txt (pip install pyaudio).";
+    else if (S.click_out && S.click_out.error)
+      hint.textContent = "Couldn't open that device: " + S.click_out.error;
+  }).catch(() => {});
+  $("out-modal").classList.add("open");
+}
 function toggleAudio() {
   const btn = $("audio-toggle");
   const turningOn = !S.audio.running;
@@ -3389,7 +3422,7 @@ function schedPump() {
         }
       });
     }
-    schedClickAt(sched.nextT, sched.beat === 0);
+    if (!clickRouted()) schedClickAt(sched.nextT, sched.beat === 0);
     sched.beatTimes[sched.bar + ":" + sched.beat] = sched.nextT;
     sched.nextT += 60 / seg.bpm;
     sched.beat++;
@@ -3566,7 +3599,15 @@ function tlPopTempo(bar) {
   $("tl-pop").innerHTML =
     `<div class="tp-title">Tempo · bar ${bar}</div>
      <div class="field"><label>BPM from this bar</label>
-       <div style="display:flex; gap:6px;"><input type="number" id="tp-bpm" min="20" max="300" value="${seg.bpm}" style="flex:1;"><button class="btn sm" id="tp-tap">Tap</button></div></div>
+       <div style="display:flex; gap:6px;">
+         <div class="stepper" style="flex:1;">
+           <input type="number" id="tp-bpm" min="20" max="300" value="${seg.bpm}">
+           <div class="step-btns">
+             <button type="button" id="tp-bpm-up" tabindex="-1" title="+1 BPM">&#9650;</button>
+             <button type="button" id="tp-bpm-dn" tabindex="-1" title="−1 BPM">&#9660;</button>
+           </div>
+         </div>
+         <button class="btn sm" id="tp-tap">Tap</button></div></div>
      <div class="field"><label>Time signature</label>
        <div class="seg" id="tp-sig"><button data-sig="3">3/4</button><button data-sig="4">4/4</button><button data-sig="6">6/8</button></div></div>
      <div class="tp-row"><button class="btn primary sm" id="tp-save">Save</button>` +
@@ -3578,6 +3619,29 @@ function tlPopTempo(bar) {
   paint();
   document.querySelectorAll("#tp-sig button").forEach(b => b.onclick = () => { sig = parseInt(b.dataset.sig, 10); paint(); });
   $("tp-tap").onclick = makeTapper((bpm) => { $("tp-bpm").value = clamp(bpm, 20, 300); });
+  const tpStep = (d) => { const i = $("tp-bpm"); i.value = clamp((parseInt(i.value, 10) || 120) + d, 20, 300); };
+  $("tp-bpm-up").onclick = () => tpStep(1);
+  $("tp-bpm-dn").onclick = () => tpStep(-1);
+  // drag up/down on the field to scrub the BPM (typing still works)
+  (() => {
+    const inp = $("tp-bpm");
+    inp.style.cursor = "ns-resize";
+    let sy = 0, sv = 0, down = false, scrub = false;
+    inp.addEventListener("pointerdown", (e) => {
+      down = true; scrub = false; sy = e.clientY; sv = parseInt(inp.value, 10) || 120;
+      try { inp.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    inp.addEventListener("pointermove", (e) => {
+      if (!down || e.buttons === 0) { down = false; scrub = false; return; }
+      const dy = sy - e.clientY;
+      if (!scrub && Math.abs(dy) > 4) scrub = true;
+      if (scrub) { e.preventDefault(); inp.value = clamp(Math.round(sv + dy * 0.4), 20, 300); }
+    });
+    const up = () => { if (scrub) inp.blur(); down = false; scrub = false; };
+    inp.addEventListener("pointerup", up);
+    inp.addEventListener("pointercancel", up);
+    inp.addEventListener("lostpointercapture", up);
+  })();
   $("tp-save").onclick = () => {
     upsertMarker(song.tempo_map, bar, { bpm: clamp(parseInt($("tp-bpm").value, 10) || 120, 20, 300), time_sig: sig });
     commitSong(); tlPopHide();
@@ -3805,7 +3869,7 @@ function markWelcomed() { try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e
 function hideWelcome() { $("welcome").classList.remove("show"); markWelcomed(); }
 
 const TOUR = [
-  { sel: '.tab[data-view="setlist"]', title: "Setlist", body: "Your songs, in order. Tap a song to load its tempo, time signature and lighting. Drag to reorder, double-click to edit.", pad: 6 },
+  { sel: '.tab[data-view="setlist"]', title: "Setlist", body: "Your songs, in order. Click a song to open its editor, drag to reorder. Loading and playing happens in Performance.", pad: 6 },
   { sel: '.tab[data-view="lighting"]', title: "Lighting", body: "A live stage preview. Pick a scene, set colours, patch fixtures, and connect real DMX at the venue. Works in simulator mode with no gear.", pad: 6 },
   { sel: '.tab[data-view="perf"]', title: "Performance", body: "The big, glanceable view for during the show — song title, giant BPM, beat dots and one-tap cues.", pad: 6 },
   { sel: "#midi-btn", title: "Hands-free", body: "Map a foot pedal or pad here to fire cues, toggle the click or jump songs without touching the laptop.", pad: 6 },
