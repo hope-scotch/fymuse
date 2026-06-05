@@ -814,7 +814,15 @@
   .drawer.open { transform: none; }
   .drawer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .drawer-head h2 { font-family: var(--display); font-size: 20px; letter-spacing: -0.02em; }
-  .drawer-sub { color: var(--txt-faint); font-size: 12px; margin-bottom: 22px; }
+  .drawer-sub { color: var(--txt-faint); font-size: 12px; margin-bottom: 16px; }
+  .drawer-tabs { display: flex; gap: 2px; margin-bottom: 20px; border-bottom: 1px solid var(--glass-brd); }
+  .dtab { padding: 9px 14px; font-size: 13px; font-weight: 600; color: var(--txt-faint); border-bottom: 2px solid transparent; }
+  .dtab:hover { color: var(--txt-dim); }
+  .dtab.on { color: var(--lime); border-bottom-color: var(--lime); }
+  .drawer code {
+    font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,.06);
+    padding: 1px 6px; border-radius: 5px; color: var(--lime-2); white-space: nowrap;
+  }
   .drawer h4 {
     font-family: var(--display); font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
     color: var(--lime); margin: 22px 0 10px;
@@ -1529,6 +1537,12 @@
   </div>
   <div class="drawer-sub">Everything you need to run a show with Lime Studio.</div>
 
+  <div class="drawer-tabs">
+    <button class="dtab on" data-pane="guide">Guide</button>
+    <button class="dtab" data-pane="setup">Settings &amp; setup</button>
+  </div>
+
+  <div class="dpane" id="dpane-guide">
   <h4>The three views</h4>
   <p><b style="color:var(--lime)">Setlist</b> — your songs in order; drag to reorder, tap play to load one. Double-click a song to open the <b>Song editor</b>: a bar timeline where you drop tempo changes (128→144 mid-song, signature switches too), section labels (Verse / Chorus…) and cues that speak automatically when their bar arrives.</p>
   <p><b style="color:var(--lime)">Lighting</b> — a live stage preview. Pick a scene (Reactive / Chase / Static / Off), set colour and brightness, patch your fixtures, and connect real DMX (ENTTEC or Art-Net) when you're at the venue.</p>
@@ -1550,6 +1564,33 @@
   <p><b style="color:var(--lime)">MIDI</b> — click the MIDI button up top to map a foot pedal or pad: fire cues, toggle the click, blackout, jump songs — all hands-free. Use <b>Learn</b>, then tap a pad.</p>
 
   <button class="btn ghost sm" id="drawer-replay" style="width:100%; margin-top:18px;">Replay the welcome tour</button>
+  </div>
+
+  <div class="dpane" id="dpane-setup" style="display:none;">
+  <h4>Click in your in-ears</h4>
+  <p>Hit <b>Outputs</b> (headphones, top right) and pick your interface's IEM output. The click is rendered straight to that device while backing tracks and spoken cues stay on the default output for front of house. Needs the <code>sounddevice</code> package — it's in <code>requirements.txt</code>, so a normal install already has it.</p>
+
+  <h4>Backing tracks</h4>
+  <p>Open a song's editor and use <b>+ Add audio</b> under the timeline. Set which bar each file starts on and its gain — it plays sample-locked to the click, joins mid-file if you seek, and survives tempo changes. Files are stored in the app's library, so the original can move or be deleted.</p>
+
+  <h4>Stage lights</h4>
+  <p>In <b>Lighting → DMX Output</b> choose <b>ENTTEC</b> (USB DMX Pro dongle — plug in, pick the port, Connect) or <b>Art-Net</b> (enter the node's IP). Then open <b>Patch</b> and give each fixture its DMX start address and channel layout. Until then, the on-screen simulator mirrors exactly what the rig will do.</p>
+
+  <h4>Foot pedal / pads</h4>
+  <p>Click <b>MIDI</b> up top, connect your device, then use <b>Learn</b>: tap a pedal, pick what it fires — cues, click on/off, blackout, next song. Mappings save automatically.</p>
+
+  <h4>Room listening (optional)</h4>
+  <p>The <b>Audio</b> button listens to the room for reactive lighting and live BPM detection. From source this needs the optional mic backend: <code>brew install portaudio</code> then <code>pip install pyaudio</code> (see <code>requirements-optional.txt</code>).</p>
+
+  <h4>Running from source</h4>
+  <p>In the project folder: <code>python3 -m venv .venv</code> · <code>source .venv/bin/activate</code> · <code>pip install -r requirements.txt</code> · <code>python3 desktop.py</code>. On a corporate network that blocks PyPI, prefix installs with <code>PIP_INDEX_URL=https://pypi.org/simple</code>.</p>
+
+  <h4>Building the Mac app for the band</h4>
+  <p><code>./build.sh --public</code> produces <code>dist/Lime Studio.app</code>; <code>./package-for-band.sh</code> zips it for sharing. Bandmates just unzip and open — first launch needs <b>right-click → Open</b> once (unsigned app), after that it's a normal double-click.</p>
+
+  <h4>Where your data lives</h4>
+  <p>Everything autosaves to <code>~/.limestudio</code> — the setlist and settings in <code>show.json</code>, backing tracks in <code>tracks/</code>, rendered voice counts in <code>voice/</code>. Copy that folder to move a show to another Mac.</p>
+  </div>
 </aside>
 
 <!-- contextual help popover (single, repositioned) -->
@@ -3917,6 +3958,11 @@ function endTour() {
   markWelcomed();
 }
 
+document.querySelectorAll(".dtab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".dtab").forEach(x => x.classList.toggle("on", x === t));
+  document.querySelectorAll(".dpane").forEach(p => p.style.display = (p.id === "dpane-" + t.dataset.pane) ? "" : "none");
+  $("drawer").scrollTop = 0;
+});
 function openDrawer() { $("drawer-bg").classList.add("open"); $("drawer").classList.add("open"); }
 function closeDrawer() { $("drawer-bg").classList.remove("open"); $("drawer").classList.remove("open"); }
 
