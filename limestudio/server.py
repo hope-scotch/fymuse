@@ -21,6 +21,7 @@ from pathlib import Path
 import dmx_output
 import beat_detect
 import midi_input
+import mixer_osc
 
 
 def resource_path(name=""):
@@ -90,31 +91,83 @@ state = {
         "color": [255, 80, 0],
         "brightness": 255,
         "num_fixtures": 4,
+        "fade": 0.5,          # default scene crossfade, seconds (0 = snap)
+        # tempo-synced effect layered on top of the scene/look output
+        "effect": {"type": "none", "rate": 1.0, "depth": 0.6},
+        # grand master: output-level scaler applied after everything —
+        # unlike `brightness`, it also dims looks (captured m values).
+        "master": 255,
+        # lights master switch: False = stage dark, scene/look config untouched.
+        # THE blackout control (perf power button, MIDI blackout action).
+        "on": True,
+        # per-fixture paint: [r,g,b] or None per fixture index. Painted lights
+        # keep their own colour in Static (and Chase); None = global colour.
+        # Capture bakes paints into looks — this is how multicolour states
+        # are authored.
+        "static_map": [],
     },
     # Per-fixture patch: each fixture has a 1-indexed DMX base address + a
     # profile that defines its channel layout. Built/replaced via the UI.
     "patch": [],
+    # User-built looks: named per-fixture states captured from the live render.
+    # Referenced anywhere a scene name goes, as "look:<id>".
+    "looks": [],   # [{id, name, fixtures: [{r,g,b,m,p,t}, ...], effect?}]
+    # User-defined fixture profiles (the practical fixture library):
+    # {name: {width, slots}} — same shape as PROFILES, builtins win on clash.
+    "profiles": {},
+    # XR18 mixer: connection config + named mix scenes (flat OSC param dicts).
+    # Songs reference a scene by id; activation recalls it with a fader glide.
+    "mixer": {
+        "host": "",
+        "scenes": [],          # [{id, name, params: {osc_address: value}}]
+        "ch_names": ["Lead Vox", "Lead Gtr", "Bass", "Keys", "Drums",
+                     "Rhythm Gtr", "Back Vox"],
+        "bus_names": ["IEM Vox", "IEM Gtr", "IEM Bass", "IEM Keys", "IEM Drums", "Click"],
+    },
 }
+
+mixer = mixer_osc.XR18Link()
+mixer.channels = len(state["mixer"]["ch_names"])
 
 ws_clients = set()
 
 # ── Fixture profiles ──────────────────────────────────────────────────────────
-# slots: r,g,b = colour; w = white LED; d = master dimmer. Offsets are 0-based
-# from the fixture's base address.
+# slots: r,g,b = colour; w = white LED; d = master dimmer; p/t = pan/tilt;
+# pf/tf = pan/tilt fine (16-bit movement). Offsets are 0-based from the
+# fixture's base address. Users can define their own layouts (save_profile) —
+# that's the practical "fixture library" for rented/venue gear.
 PROFILES = {
     "RGB":   {"width": 3, "slots": {"r": 0, "g": 1, "b": 2}},
     "RGBD":  {"width": 4, "slots": {"r": 0, "g": 1, "b": 2, "d": 3}},
     "RGBW":  {"width": 4, "slots": {"r": 0, "g": 1, "b": 2, "w": 3}},
     "RGBWD": {"width": 5, "slots": {"r": 0, "g": 1, "b": 2, "w": 3, "d": 4}},
     "DIM":   {"width": 1, "slots": {"d": 0}},
+    # generic moving heads (8-bit and 16-bit movement)
+    "MH-PTRGBD":   {"width": 6, "slots": {"p": 0, "t": 1, "r": 2, "g": 3, "b": 4, "d": 5}},
+    "MH16-PTRGBD": {"width": 8, "slots": {"p": 0, "pf": 1, "t": 2, "tf": 3,
+                                          "r": 4, "g": 5, "b": 6, "d": 7}},
 }
 DEFAULT_PROFILE = "RGBD"
+SLOT_CODES = ("r", "g", "b", "w", "d", "p", "t", "pf", "tf", "-")
+
+
+def _profiles_all():
+    """Builtin + user-defined profiles, user names never shadow builtins."""
+    out = dict(state.get("profiles") or {})
+    out.update(PROFILES)
+    return out
+
+
+def _profile_has_pt(prof):
+    s = prof.get("slots", {})
+    return "p" in s or "t" in s
 
 
 def _default_patch(n, profile=DEFAULT_PROFILE):
     """Lay n fixtures out back-to-back from DMX address 1."""
-    w = PROFILES.get(profile, PROFILES[DEFAULT_PROFILE])["width"]
-    return [{"base": i * w + 1, "profile": profile} for i in range(n)]
+    w = _profiles_all().get(profile, PROFILES[DEFAULT_PROFILE])["width"]
+    return [{"base": i * w + 1, "profile": profile, "pan": 128, "tilt": 128}
+            for i in range(n)]
 
 
 def _active_patch():
@@ -163,9 +216,24 @@ def _migrate_song(song):
     lm = []
     for L in song.get("light_map") or []:
         sc = str(L.get("scene", "")).lower()
-        if sc in ("reactive", "chase", "static", "off"):
-            lm.append({"bar": max(1, int(L.get("bar", 1))), "scene": sc})
+        if sc in ("reactive", "chase", "static", "off") or sc.startswith("look:"):
+            try:
+                fade = max(0.0, min(64.0, float(L.get("fade", 0) or 0)))
+            except (TypeError, ValueError):
+                fade = 0.0
+            lm.append({"bar": max(1, int(L.get("bar", 1))), "scene": sc,
+                       "fade": round(fade, 2)})
     song["light_map"] = sorted(lm, key=lambda L: L["bar"])
+    # per-song mix: a dict of XR18 params, auto-saved as the song plays.
+    # Legacy string values (old scene-id model) are resolved into params.
+    mx = song.get("mix")
+    if isinstance(mx, dict):
+        song["mix"] = _clean_mix_params(mx)
+    elif isinstance(mx, str) and mx:
+        sc = _mix_scene_by_id(mx)
+        song["mix"] = _clean_mix_params(sc["params"]) if sc else {}
+    else:
+        song["mix"] = {}
     song["bpm"] = tm[0]["bpm"]
     song["time_sig"] = tm[0]["time_sig"]
     return song
@@ -237,13 +305,15 @@ def _activate_song(idx):
         broadcast("state", _full_state())
         return
     c["pending_song"] = None
+    _store_active_mix()                  # the outgoing song keeps its desk state
     state["active_song_idx"] = idx
     if idx is not None and 0 <= idx < len(state["setlist"]):
         song = _migrate_song(state["setlist"][idx])
         seg = _song_segment(song, 1)
         c.update({"mode": "song", "bar": 1, "beat": 0,
                   "bpm": seg["bpm"], "time_sig": seg["time_sig"]})
-        state["lighting"]["scene"] = song.get("scene", "reactive")
+        # lighting deliberately untouched — the master switch + lane rule the stage
+        _recall_song_mix(song)
     else:
         c.update({"mode": "free", "bar": 1, "beat": 0})
     broadcast("state", _full_state())
@@ -255,15 +325,70 @@ def _switch_pending():
     state["click"]["pending_song"] = None
     if idx is None or not (0 <= idx < len(state["setlist"])):
         return False
+    _store_active_mix()                  # the outgoing song keeps its desk state
     state["active_song_idx"] = idx
     song = _migrate_song(state["setlist"][idx])
     seg = _song_segment(song, 1)
     state["click"].update({"mode": "song", "bar": 1, "beat": 0,
                            "bpm": seg["bpm"], "time_sig": seg["time_sig"]})
-    state["lighting"]["scene"] = song.get("scene", "reactive")
-    _update_dmx_from_lighting()
+    _recall_song_mix(song)
     broadcast("state", _full_state())
     return True
+
+
+def _clean_mix_params(params):
+    """Filter a param dict to the managed (recall-safe) set — strips gain and
+    any foreign addresses."""
+    ok = set(mixer_osc.managed_addresses(16))
+    out = {}
+    for a, v in (params or {}).items():
+        if a not in ok:
+            continue
+        try:
+            out[a] = int(v) if a.endswith("/on") else max(0.0, min(1.0, float(v)))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _clean_mix_scene(sc):
+    """Sanitise one mixer preset from disk/import; None if unusable."""
+    try:
+        sid = str(sc.get("id", ""))[:16]
+        params = _clean_mix_params(sc.get("params"))
+        if not sid or not params:
+            return None
+        return {"id": sid, "name": (str(sc.get("name", "")).strip()[:32] or "Mix"),
+                "params": params}
+    except Exception:
+        return None
+
+
+def _store_active_mix():
+    """The active song owns the desk: snapshot the current mixer state into
+    it. Skipped mid-glide so a recall in flight can't half-save."""
+    if mixer.gliding:
+        return
+    s = _active_song()
+    if s is not None:
+        s["mix"] = mixer.snapshot()
+
+
+def _mix_scene_by_id(sid):
+    for sc in state["mixer"]["scenes"]:
+        if sc.get("id") == sid:
+            return sc
+    return None
+
+
+def _recall_song_mix(song):
+    """Every song owns a mix. Has one → glide the desk to it. First time
+    activated → adopt whatever the desk sounds like right now."""
+    mx = song.get("mix")
+    if isinstance(mx, dict) and mx:
+        mixer.apply(mx)
+    else:
+        song["mix"] = mixer.snapshot()
 
 
 # ── Quantized cue firing ──────────────────────────────────────────────────────
@@ -312,12 +437,12 @@ def _perform_midi_action(action, ev=None):
         state["click"]["running"] = not state["click"]["running"]
         broadcast("state", _full_state())
     elif t == "blackout":
-        state["lighting"]["scene"] = "off"
+        # toggles the lights master switch (instant both ways)
+        state["lighting"]["on"] = not state["lighting"].get("on", True)
         _update_dmx_from_lighting()
         broadcast("state", _full_state())
     elif t == "scene":
-        state["lighting"]["scene"] = action.get("scene", "reactive")
-        _update_dmx_from_lighting()
+        _set_scene(action.get("scene", "reactive"))
         broadcast("state", _full_state())
     elif t in ("next_song", "prev_song"):
         n = len(state["setlist"])
@@ -393,6 +518,8 @@ class ClickOutput:
         self._lock = threading.Lock()
         self._active = []           # [waveform, position] of currently sounding ticks
         self.device = None
+        self.channel = None         # 1-based output channel (None = mono/default)
+        self._nch = 1               # channels the stream is opened with
         self.error = None
         self.backend = None
         self._w_down = self._tone(1000.0)
@@ -409,22 +536,34 @@ class ClickOutput:
         return w
 
     def state(self):
-        return {"device": self.device, "error": self.error,
+        return {"device": self.device, "channel": self.channel,
+                "error": self.error,
                 "available": HAS_SD or HAS_PYAUDIO,
                 "backend": self.backend}
 
-    def start(self, device_idx):
+    def start(self, device_idx, channel=None):
+        """channel: 1-based output channel on the device. None = plain mono
+        (PortAudio puts it on ch 1). With e.g. channel=3 on the XR18's USB,
+        the click rides its own desk channel while the browser's tracks keep
+        USB 1/2 — per-source routing within one interface (Routing v2)."""
         self.stop()
         if device_idx is None:
             return True
+        try:
+            ch = max(1, min(32, int(channel))) if channel else None
+        except (TypeError, ValueError):
+            ch = None
+        nch = ch if ch else 1
         if HAS_SD:                      # preferred: maintained, wheels bundle PortAudio
             try:
                 self._stream = sd.RawOutputStream(
                     samplerate=self.RATE, blocksize=512, device=int(device_idx),
-                    channels=1, dtype="float32", callback=self._sd_cb)
+                    channels=nch, dtype="float32", callback=self._sd_cb)
                 self._stream.start()
                 self.backend = "sounddevice"
                 self.device = int(device_idx)
+                self.channel = ch
+                self._nch = nch
                 self.error = None
                 return True
             except Exception as e:
@@ -434,12 +573,14 @@ class ClickOutput:
             try:
                 self._pa = pyaudio.PyAudio()
                 self._stream = self._pa.open(
-                    format=pyaudio.paFloat32, channels=1, rate=self.RATE,
+                    format=pyaudio.paFloat32, channels=nch, rate=self.RATE,
                     output=True, output_device_index=int(device_idx),
                     frames_per_buffer=512, stream_callback=self._cb)
                 self._stream.start_stream()
                 self.backend = "pyaudio"
                 self.device = int(device_idx)
+                self.channel = ch
+                self._nch = nch
                 self.error = None
                 return True
             except Exception as e:
@@ -453,6 +594,8 @@ class ClickOutput:
     def stop(self):
         self._teardown()
         self.device = None
+        self.channel = None
+        self._nch = 1
         self.backend = None
 
     def _teardown(self):
@@ -496,11 +639,25 @@ class ClickOutput:
             self._active = keep
         return buf
 
+    def _render(self, frames):
+        """Mono click, interleaved into the stream's channel layout — zeros on
+        every channel except the chosen one, so other apps' audio on the same
+        device (the browser's tracks on 1/2) mixes cleanly underneath."""
+        mono = self._mix(frames)
+        if self._nch == 1:
+            return mono.tobytes()
+        buf = array.array("f", bytes(4 * frames * self._nch))
+        off = self._nch - 1            # the chosen channel is the last one opened
+        step = self._nch
+        for i in range(frames):
+            buf[i * step + off] = mono[i]
+        return buf.tobytes()
+
     def _sd_cb(self, outdata, frames, time_info, status_flags):
-        outdata[:] = self._mix(frames).tobytes()
+        outdata[:] = self._render(frames)
 
     def _cb(self, in_data, frame_count, time_info, status_flags):
-        return (self._mix(frame_count).tobytes(), pyaudio.paContinue)
+        return (self._render(frame_count), pyaudio.paContinue)
 
 
 click_out = ClickOutput()
@@ -625,14 +782,20 @@ recorder = ShowRecorder()
 
 def _save_show():
     try:
+        _store_active_mix()       # desk-side tweaks ride along with every save
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         data = {
             "setlist": state["setlist"],
             "patch": state["patch"],
+            "looks": state["looks"],
+            "profiles": state["profiles"],
+            "mixer": state["mixer"],
             "lighting": {k: state["lighting"][k]
-                         for k in ("scene", "color", "brightness", "num_fixtures")},
+                         for k in ("scene", "color", "brightness", "num_fixtures",
+                                   "fade", "effect", "master", "on", "static_map")},
             "midi_mapping": midi.mapping,
             "click_out_device": click_out.device,
+            "click_out_channel": click_out.channel,
             "midi_clock_port": midi_clock.port_name,
         }
         tmp = SHOW_FILE.with_suffix(".json.tmp")
@@ -647,16 +810,45 @@ def _load_show():
         if not SHOW_FILE.exists():
             return
         d = json.loads(SHOW_FILE.read_text())
+        # mixer presets load FIRST: song migration may resolve legacy
+        # scene-id mixes into embedded params
+        mx0 = d.get("mixer") or {}
+        state["mixer"]["scenes"] = [s for s in (_clean_mix_scene(x) for x in (mx0.get("scenes") or [])) if s]
         state["setlist"] = [_migrate_song(s) for s in (d.get("setlist", []) or [])]
         state["patch"] = d.get("patch", []) or []
+        state["looks"] = [c for c in (_clean_look(lk) for lk in (d.get("looks") or [])) if c]
+        mx = d.get("mixer") or {}
+        state["mixer"]["host"] = str(mx.get("host", ""))[:64]
+        if mx.get("ch_names"):
+            loaded = [str(n)[:16] for n in mx["ch_names"]][:16]
+            # saved shows from before Back Vox existed: extend, don't clamp
+            default = state["mixer"]["ch_names"]
+            if loaded == default[:len(loaded)] and len(loaded) < len(default):
+                loaded = list(default)
+            state["mixer"]["ch_names"] = loaded
+        if mx.get("bus_names"):
+            state["mixer"]["bus_names"] = [str(n)[:16] for n in mx["bus_names"]][:6]
+        mixer.channels = max(1, min(16, len(state["mixer"]["ch_names"])))
+        if state["mixer"]["host"]:
+            mixer.connect(state["mixer"]["host"])
+        profs = d.get("profiles") or {}
+        state["profiles"] = {
+            str(k)[:16]: {"width": max(1, min(32, int(v.get("width", 1)))),
+                          "slots": {str(s).lower(): int(off) for s, off in (v.get("slots") or {}).items()
+                                    if str(s).lower() in SLOT_CODES and 0 <= int(off) < 32}}
+            for k, v in profs.items()
+            if isinstance(v, dict) and str(k) not in PROFILES and (v.get("slots") or {})
+        }
         if state["patch"]:
             state["lighting"]["num_fixtures"] = len(state["patch"])
         lit = d.get("lighting") or {}
         state["lighting"].update({k: v for k, v in lit.items() if k in state["lighting"]})
+        state["lighting"]["effect"] = _clean_effect(state["lighting"].get("effect"))
+        state["lighting"]["static_map"] = _clean_static_map(state["lighting"].get("static_map"))
         if d.get("midi_mapping"):
             midi.set_mapping(d["midi_mapping"])
         if d.get("click_out_device") is not None:
-            click_out.start(d["click_out_device"])
+            click_out.start(d["click_out_device"], d.get("click_out_channel"))
         if d.get("midi_clock_port"):
             midi_clock.start(d["midi_clock_port"])
     except Exception:
@@ -773,9 +965,23 @@ def handle_ws_message(payload: dict, ws):
         broadcast("state", _full_state())
 
     elif action == "set_lighting":
+        sc = data.pop("scene", None)       # scene changes go through the fader
         rebuild = "num_fixtures" in data and data["num_fixtures"] != state["lighting"]["num_fixtures"]
         state["lighting"].update({k: v for k, v in data.items()
                                   if k in state["lighting"]})
+        try:                               # sanitise the default fade (seconds)
+            state["lighting"]["fade"] = max(0.0, min(30.0, float(state["lighting"].get("fade", 0.5))))
+        except (TypeError, ValueError):
+            state["lighting"]["fade"] = 0.5
+        state["lighting"]["effect"] = _clean_effect(state["lighting"].get("effect"))
+        try:
+            state["lighting"]["master"] = _clamp8(state["lighting"].get("master", 255))
+        except (TypeError, ValueError):
+            state["lighting"]["master"] = 255
+        state["lighting"]["on"] = bool(state["lighting"].get("on", True))
+        state["lighting"]["static_map"] = _clean_static_map(state["lighting"].get("static_map"))
+        if sc:
+            _set_scene(sc)
         if rebuild:
             # changing the fixture count re-lays a tidy sequential patch,
             # keeping whatever profile fixture 1 currently uses.
@@ -807,25 +1013,207 @@ def handle_ws_message(payload: dict, ws):
         if dev is None:
             click_out.stop()
         else:
-            click_out.start(dev)
+            click_out.start(dev, data.get("channel"))
         _save_show()
         broadcast("state", _full_state())
 
     elif action == "set_scene":
-        state["lighting"]["scene"] = data.get("scene", "reactive")
+        # optional "fade" (seconds) overrides the default; 0 = snap
+        _set_scene(data.get("scene", "reactive"), data.get("fade"))
+        broadcast("state", _full_state())
+
+    elif action == "mixer_connect":
+        host = str(data.get("host", "")).strip()[:64]
+        state["mixer"]["host"] = host
+        if host:
+            mixer.connect(host)
+        else:
+            mixer.disconnect()
+        _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "mixer_set":
+        # live console move — straight to the desk (or the sim cache).
+        # control set = scene params + preamp gains (gain is live-only).
+        a = str(data.get("address", ""))
+        if a in mixer_osc.control_addresses(mixer.channels):
+            mixer.set(a, data.get("value", 0))
+            # every console move writes through to the active song's mix
+            # (gain isn't in the managed set, so it never lands in a song)
+            if a in mixer_osc.managed_addresses(mixer.channels):
+                s = _active_song()
+                if s is not None and isinstance(s.get("mix"), dict):
+                    s["mix"][a] = mixer.get(a)
+        # no full-state broadcast: dragging a fader must not rebuild the UI
+
+    elif action == "mixer_query":
+        # the Mixer tab asks for current values when it opens
+        snap = {a: mixer.get(a) for a in mixer_osc.control_addresses(mixer.channels)}
+        ws.send(json.dumps({"event": "mixer_levels", "data": {"cache": snap}}))
+
+    elif action == "mixer_capture":
+        name = (str(data.get("name", "")).strip()[:32]
+                or "Mix %d" % (len(state["mixer"]["scenes"]) + 1))
+        params = mixer.capture()
+        state["mixer"]["scenes"].append(
+            {"id": uuid.uuid4().hex[:8], "name": name, "params": params})
+        _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "mixer_apply":
+        # load a preset: the desk glides there and it becomes the active
+        # song's mix (auto-save semantics)
+        sc = _mix_scene_by_id(str(data.get("id", "")))
+        if sc:
+            mixer.apply(sc.get("params") or {})
+            s = _active_song()
+            if s is not None:
+                s["mix"] = dict(sc.get("params") or {})
+            _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "mixer_name":
+        # rename an IN strip (user-owned labels, max 8 chars)
+        i = int(data.get("idx", -1))
+        nm = str(data.get("name", "")).strip()[:8]
+        if 0 <= i < len(state["mixer"]["ch_names"]) and nm:
+            state["mixer"]["ch_names"][i] = nm
+            _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "mixer_rename":
+        sc = _mix_scene_by_id(str(data.get("id", "")))
+        nm = str(data.get("name", "")).strip()[:32]
+        if sc and nm:
+            sc["name"] = nm
+            _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "mixer_delete":
+        sid = str(data.get("id", ""))
+        state["mixer"]["scenes"] = [s for s in state["mixer"]["scenes"]
+                                    if s.get("id") != sid]
+        _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "set_fixture_color":
+        # paint one light. color [r,g,b] sets it; null clears back to global.
+        i = int(data.get("idx", -1))
+        if 0 <= i < 64:
+            sm = _clean_static_map(state["lighting"].get("static_map"))
+            while len(sm) <= i:
+                sm.append(None)
+            c = data.get("color")
+            sm[i] = [_clamp8(c[0]), _clamp8(c[1]), _clamp8(c[2])] if c else None
+            state["lighting"]["static_map"] = sm
+            # paints live on the static layer — switch there so it shows
+            if state["lighting"]["scene"] != "static":
+                _set_scene("static")
+            _update_dmx_from_lighting()
+            _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "set_position":
+        # fires continuously while a slider drags: render only — no save, no
+        # full-state broadcast (that rebuilt the slider mid-drag and killed
+        # the gesture). The release commits via set_patch, which persists.
+        i = int(data.get("idx", -1))
+        if 0 <= i < len(state["patch"]):
+            fx = state["patch"][i]
+            try:
+                fx["pan"] = max(0.0, min(255.0, float(data.get("pan", fx.get("pan", 128)))))
+                fx["tilt"] = max(0.0, min(255.0, float(data.get("tilt", fx.get("tilt", 128)))))
+            except (TypeError, ValueError):
+                pass
+            _update_dmx_from_lighting()
+
+    elif action == "save_profile":
+        name = str(data.get("name", "")).strip()[:16].upper()
+        codes = data.get("slots")
+        if isinstance(codes, str):
+            codes = [c.strip() for c in codes.split(",") if c.strip()]
+        ok = (name and name not in PROFILES and isinstance(codes, list)
+              and 1 <= len(codes) <= 32
+              and all(str(c).lower() in SLOT_CODES for c in codes))
+        if ok:
+            slots = {}
+            for off, c in enumerate(codes):
+                c = str(c).lower()
+                if c != "-" and c not in slots:    # first occurrence wins
+                    slots[c] = off
+            if slots:
+                state["profiles"][name] = {"width": len(codes), "slots": slots}
+                _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "delete_profile":
+        name = str(data.get("name", ""))
+        in_use = any(fx.get("profile") == name for fx in state["patch"])
+        if name in state["profiles"] and not in_use:
+            del state["profiles"][name]
+            _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "set_effect":
+        state["lighting"]["effect"] = _clean_effect(data)
         _update_dmx_from_lighting()
+        _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "save_look":
+        # Capture the live rendered output — whatever is on stage right now.
+        if not _last_fixtures:
+            _update_dmx_from_lighting()
+        # un-scale the grand master so a dimmed capture isn't baked into the look
+        gm = max(1, _clamp8(state["lighting"].get("master", 255)))
+        fixtures = [{"r": f["r"], "g": f["g"], "b": f["b"],
+                     "m": min(255, f["m"] * 255 // gm),
+                     "p": f.get("p", 128.0), "t": f.get("t", 128.0)}
+                    for f in _last_fixtures]
+        if fixtures:
+            name = (str(data.get("name", "")).strip()[:32]
+                    or "Look %d" % (len(state["looks"]) + 1))
+            state["looks"].append({"id": uuid.uuid4().hex[:8], "name": name,
+                                   "fixtures": fixtures,
+                                   "effect": dict(state["lighting"]["effect"])})
+            _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "rename_look":
+        lk = _look_by_id(str(data.get("id", "")))
+        nm = str(data.get("name", "")).strip()[:32]
+        if lk and nm:
+            lk["name"] = nm
+            _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "delete_look":
+        lid = str(data.get("id", ""))
+        state["looks"] = [l for l in state["looks"] if l.get("id") != lid]
+        if state["lighting"]["scene"] == "look:" + lid:
+            _set_scene("static", 0)        # deleted the active look → stay lit
+        _save_show()
         broadcast("state", _full_state())
 
     elif action == "set_patch":
         patch = data.get("patch", [])
-        # sanitise: clamp base into 1..512, validate profile
+        # sanitise: clamp base into 1..512, validate profile, keep positions
         clean = []
         for fx in patch:
             base = max(1, min(512, int(fx.get("base", 1))))
             prof = fx.get("profile", DEFAULT_PROFILE)
-            if prof not in PROFILES:
+            if prof not in _profiles_all():
                 prof = DEFAULT_PROFILE
-            clean.append({"base": base, "profile": prof})
+            try:
+                pan = max(0.0, min(255.0, float(fx.get("pan", 128))))
+                tilt = max(0.0, min(255.0, float(fx.get("tilt", 128))))
+            except (TypeError, ValueError):
+                pan, tilt = 128.0, 128.0
+            entry = {"base": base, "profile": prof, "pan": pan, "tilt": tilt}
+            for flag in ("inv_p", "inv_t", "swap"):    # mounting corrections
+                if fx.get(flag):
+                    entry[flag] = True
+            clean.append(entry)
         state["patch"] = clean
         state["lighting"]["num_fixtures"] = len(clean)
         _update_dmx_from_lighting()
@@ -835,7 +1223,7 @@ def handle_ws_message(payload: dict, ws):
     elif action == "auto_patch":
         n = max(1, min(64, int(data.get("count", state["lighting"]["num_fixtures"]))))
         prof = data.get("profile", DEFAULT_PROFILE)
-        if prof not in PROFILES:
+        if prof not in _profiles_all():
             prof = DEFAULT_PROFILE
         state["patch"] = _default_patch(n, prof)
         state["lighting"]["num_fixtures"] = n
@@ -904,10 +1292,19 @@ def _full_state():
         "click": state["click"],
         "audio": state["audio"],
         "lighting": state["lighting"],
+        "looks": state["looks"],
+        "mixer": dict(mixer.state(),
+                      scenes=[{"id": s["id"], "name": s["name"]}
+                              for s in state["mixer"]["scenes"]],
+                      # in-app names are user-owned (editable, ≤8 chars);
+                      # the desk's scribble strips no longer override them
+                      ch_names=list(state["mixer"]["ch_names"]),
+                      bus_names=list(state["mixer"]["bus_names"])),
         "patch": _active_patch(),
         "dmx_preview": state["dmx"][:32],  # first 32 channels for UI
         "output": output.state(),
-        "profiles": {k: v["width"] for k, v in PROFILES.items()},
+        "profiles": {k: {"width": v["width"], "pt": _profile_has_pt(v)}
+                     for k, v in _profiles_all().items()},
         "midi": midi.state(),
         "click_out": click_out.state(),
         "midi_clock": midi_clock.state(),
@@ -1002,12 +1399,13 @@ def click_thread():
                     cur = None
                     for L in lm:
                         if L["bar"] <= bar:
-                            cur = L["scene"]
+                            cur = L
                         else:
                             break
-                    if cur and cur != state["lighting"]["scene"]:
-                        state["lighting"]["scene"] = cur
-                        _update_dmx_from_lighting()
+                    if cur and cur["scene"] != state["lighting"]["scene"]:
+                        # fade is authored in beats — convert at the live tempo
+                        fade_beats = float(cur.get("fade", 0) or 0)
+                        _set_scene(cur["scene"], fade_beats * 60.0 / bpm)
                         broadcast("state", _full_state())
 
             broadcast("beat", {
@@ -1019,6 +1417,7 @@ def click_thread():
                 "length_bars": song["length_bars"],
             })
             click_out.tick(_beat_accent(beat, time_sig))
+            _tick_beat_clock(bpm)
 
             if state["lighting"]["scene"] == "chase":
                 _chase_pos += 1
@@ -1049,6 +1448,7 @@ def click_thread():
                 "accent": _beat_accent(beat, time_sig),
             })
             click_out.tick(_beat_accent(beat, time_sig))
+            _tick_beat_clock(bpm)
             if state["lighting"]["scene"] == "chase":
                 _chase_pos += 1
                 _update_dmx_from_lighting()
@@ -1146,6 +1546,206 @@ SCENES = ("reactive", "chase", "static", "off")
 _chase_pos = 0
 
 
+# ── Effects — tempo-synced modulators on top of the scene/look output ────────
+EFFECTS = ("none", "pulse", "wave", "strobe", "rainbow", "music", "flash",
+           "orbit", "sweep")   # orbit/sweep are MOVEMENT effects (pan/tilt)
+
+# "music" envelope: fast attack / slow release over the bass band, so any look
+# becomes audio-reactive in its own palette instead of the raw RGB spectrum map.
+_music_env = 0.0
+
+
+def _music_envelope():
+    global _music_env
+    bass = float(state["audio"]["energy"].get("bass", 0) or 0)
+    if bass >= _music_env:
+        _music_env = bass                      # instant attack
+    else:
+        _music_env = _music_env * 0.85 + bass * 0.15   # ~release over a few ticks
+    return max(0.0, min(1.0, _music_env))
+
+# Beat clock: ticked by the click thread on every beat; the effect phase
+# extrapolates between ticks (and free-runs at the last tempo when stopped,
+# so the stage keeps moving between songs).
+_beat_clock = {"t": 0.0, "beats": 0.0, "bpm": 120.0}
+
+
+def _tick_beat_clock(bpm):
+    _beat_clock["t"] = time.monotonic()
+    _beat_clock["beats"] += 1.0
+    _beat_clock["bpm"] = float(bpm)
+
+
+def _effect_phase():
+    """Continuous beat position. Integer values land exactly on click beats."""
+    now = time.monotonic()
+    if _beat_clock["t"] == 0.0:
+        return now * _beat_clock["bpm"] / 60.0      # never ticked yet: free-run
+    return _beat_clock["beats"] + (now - _beat_clock["t"]) * _beat_clock["bpm"] / 60.0
+
+
+def _clean_effect(e):
+    try:
+        et = str((e or {}).get("type", "none")).lower()
+        if et not in EFFECTS:
+            et = "none"
+        return {"type": et,
+                "rate": max(0.25, min(16.0, float((e or {}).get("rate", 1) or 1))),
+                "depth": max(0.0, min(1.0, float((e or {}).get("depth", 0.6))))}
+    except Exception:
+        return {"type": "none", "rate": 1.0, "depth": 0.6}
+
+
+def _hsv_to_rgb(h, s, v):
+    """h/s/v in 0..1 → r/g/b in 0..255."""
+    i = int(h * 6) % 6
+    f = h * 6 - int(h * 6)
+    p, q, t = v * (1 - s), v * (1 - f * s), v * (1 - (1 - f) * s)
+    r, g, b = ((v, t, p), (q, v, p), (p, v, t), (p, q, v), (t, p, v), (v, p, q))[i]
+    return int(r * 255), int(g * 255), int(b * 255)
+
+
+def _apply_effect(i, n, r, g, b, m, eff, phase):
+    """Modulate one fixture's post-fade output. phase is in beats."""
+    et = eff.get("type", "none")
+    if et == "none" or m == 0:               # no effect on blackout
+        return r, g, b, m
+    rate = max(0.25, min(16.0, float(eff.get("rate", 1) or 1)))
+    depth = max(0.0, min(1.0, float(eff.get("depth", 0.6))))
+    cyc = phase / rate                       # one cycle per `rate` beats
+    if et == "pulse":                        # dimmer breathes; peak ON the beat
+        k = 1.0 - depth * (0.5 - 0.5 * math.cos(2 * math.pi * cyc))
+        return r, g, b, int(m * k)
+    if et == "wave":                         # the pulse travels across the rig
+        k = 1.0 - depth * (0.5 - 0.5 * math.cos(2 * math.pi * (cyc - i / max(1, n))))
+        return r, g, b, int(m * k)
+    if et == "strobe":                       # short flash at each cycle start
+        if (cyc % 1.0) < 0.12:
+            return r, g, b, m
+        return r, g, b, int(m * (1.0 - depth))
+    if et == "rainbow":                      # hue rotation, spread over fixtures
+        hr, hg, hb = _hsv_to_rgb((cyc + i / max(1, n)) % 1.0, 1.0, 1.0)
+        return (int(r + (hr - r) * depth), int(g + (hg - g) * depth),
+                int(b + (hb - b) * depth), m)
+    if et == "music":                        # audio energy drives the dimmer
+        k = 1.0 - depth * (1.0 - _music_envelope())
+        return r, g, b, int(m * k)
+    if et == "flash":                        # punch on the beat, natural decay
+        k = (1.0 - depth) + depth * math.exp(-4.0 * (cyc % 1.0))
+        return r, g, b, int(m * k)
+    return r, g, b, m
+
+
+def _apply_move(i, n, eff, phase, pan, tilt):
+    """Movement effects: auto pan/tilt around the home position, tempo-synced
+    and phase-spread across the rig. Only meaningful on mover profiles."""
+    et = eff.get("type", "none")
+    if et not in ("orbit", "sweep"):
+        return pan, tilt
+    rate = max(0.25, min(16.0, float(eff.get("rate", 1) or 1)))
+    depth = max(0.0, min(1.0, float(eff.get("depth", 0.6))))
+    cyc = 2.0 * math.pi * (phase / rate)
+    off = i / max(1, n) * 2.0 * math.pi
+    cl = lambda v: max(0.0, min(255.0, v))
+    if et == "orbit":                        # circles around home
+        return (cl(pan + math.sin(cyc + off) * 110 * depth),
+                cl(tilt + math.cos(cyc + off) * 70 * depth))
+    if et == "sweep":                        # side-to-side pan wave
+        return cl(pan + math.sin(cyc + off) * 120 * depth), tilt
+    return pan, tilt
+
+
+# ── Looks — user-built named per-fixture states ──────────────────────────────
+def _look_by_id(lid):
+    for lk in state["looks"]:
+        if lk.get("id") == lid:
+            return lk
+    return None
+
+
+def _scene_ok(sc):
+    """A scene value is a builtin name or a look reference. Look existence is
+    checked at render time (lane entries may reference looks that arrive
+    later, e.g. on import) — a missing look renders as static, not blackout."""
+    return sc in SCENES or (isinstance(sc, str) and sc.startswith("look:"))
+
+
+def _clean_look(lk):
+    """Sanitise one look from disk/import; None if unusable."""
+    try:
+        lid = str(lk.get("id", ""))[:16]
+        fixtures = []
+        for f in (lk.get("fixtures") or [])[:64]:
+            fd = {"r": _clamp8(f.get("r", 0)), "g": _clamp8(f.get("g", 0)),
+                  "b": _clamp8(f.get("b", 0)), "m": _clamp8(f.get("m", 255))}
+            for src, dst in (("p", "p"), ("t", "t")):
+                if f.get(src) is not None:
+                    fd[dst] = max(0.0, min(255.0, float(f[src])))
+            fixtures.append(fd)
+        if not lid or not fixtures:
+            return None
+        out = {"id": lid, "name": (str(lk.get("name", "")).strip()[:32] or "Look"),
+               "fixtures": fixtures}
+        if lk.get("effect"):
+            out["effect"] = _clean_effect(lk["effect"])
+        return out
+    except Exception:
+        return None
+
+# ── Crossfades ────────────────────────────────────────────────────────────────
+# A scene change with fade > 0 captures the last *rendered* per-fixture output
+# and blends it into the live-rendered target on every render tick (the 20 Hz
+# audio loop is the heartbeat; output refresh is independent at up to 40 fps).
+# Snapshotting rendered values means chained fades depart from wherever the
+# previous fade actually was — never a visual jump.
+_fade = {"active": False, "from": [], "start": 0.0, "dur": 0.0}
+_last_fixtures = []
+
+
+def _set_scene(scene, fade=None):
+    """Switch the lighting scene with a crossfade in seconds.
+
+    fade=None uses the default from lighting state; fade=0 snaps (legacy
+    behaviour). Callers still broadcast state themselves.
+    """
+    if not _scene_ok(scene) or scene == state["lighting"]["scene"]:
+        return
+    if fade is None:
+        fade = state["lighting"].get("fade", 0.0)
+    try:
+        fade = max(0.0, min(60.0, float(fade)))
+    except (TypeError, ValueError):
+        fade = 0.0
+    if fade > 0 and _last_fixtures:
+        _fade.update({
+            "active": True,
+            "from": [(f["r"], f["g"], f["b"], f["m"],
+                      f.get("p", 128.0), f.get("t", 128.0)) for f in _last_fixtures],
+            "start": time.monotonic(),
+            "dur": fade,
+        })
+    else:
+        _fade["active"] = False
+    state["lighting"]["scene"] = scene
+    # A look carries its effect AND head positions: applying "Chorus blast"
+    # restores static-red + wave + where the heads point, as one thing.
+    # Positions are copied into the patch (the live truth) so the crossfade
+    # sweeps to them and the Position sliders stay in command afterwards.
+    if scene.startswith("look:"):
+        lk = _look_by_id(scene[5:])
+        if lk and lk.get("effect"):
+            state["lighting"]["effect"] = _clean_effect(lk["effect"])
+        if lk and lk.get("fixtures"):
+            lf = lk["fixtures"]
+            for i, fx in enumerate(state["patch"]):
+                f = lf[i % len(lf)]
+                if f.get("p") is not None:
+                    fx["pan"] = float(f["p"])
+                if f.get("t") is not None:
+                    fx["tilt"] = float(f["t"])
+    _update_dmx_from_lighting()
+
+
 def _clamp8(v):
     v = int(v)
     return 0 if v < 0 else 255 if v > 255 else v
@@ -1155,8 +1755,62 @@ def _fixture_color(i, n, scene, energy, color, brightness):
     """Return (r, g, b, master) for fixture i — colour 0-255 + master dimmer 0-255."""
     if scene == "off":
         return 0, 0, 0, 0
+    if isinstance(scene, str) and scene.startswith("look:"):
+        lk = _look_by_id(scene[5:])
+        if lk and lk.get("fixtures"):
+            f = lk["fixtures"][i % len(lk["fixtures"])]   # tile across larger rigs
+            return (_clamp8(f.get("r", 0)), _clamp8(f.get("g", 0)),
+                    _clamp8(f.get("b", 0)), _clamp8(f.get("m", 255)))
+        scene = "static"   # missing look → lights stay on, not blackout
     if scene == "static":
-        return _clamp8(color[0]), _clamp8(color[1]), _clamp8(color[2]), _clamp8(brightness)
+        c = _paint_color(i) or color
+        return _clamp8(c[0]), _clamp8(c[1]), _clamp8(c[2]), _clamp8(brightness)
+    return _fixture_color_dynamic(i, n, scene, energy, color, brightness)
+
+
+def _paint_color(i):
+    """Per-fixture painted colour, or None for the global colour."""
+    sm = state["lighting"].get("static_map") or []
+    if i < len(sm) and sm[i]:
+        return sm[i]
+    return None
+
+
+def _clean_static_map(sm):
+    out = []
+    for v in (sm or [])[:64]:
+        try:
+            out.append([_clamp8(v[0]), _clamp8(v[1]), _clamp8(v[2])] if v else None)
+        except (TypeError, ValueError, IndexError):
+            out.append(None)
+    return out
+
+
+def _fixture_pt(i, fx, scene):
+    """Pan/tilt for fixture i. The patch entry is the single live truth —
+    applying a look COPIES its stored positions into the patch (see
+    _set_scene), so the Position sliders always move the heads, and a look
+    restores its positions on apply rather than silently overriding."""
+    try:
+        return float(fx.get("pan", 128)), float(fx.get("tilt", 128))
+    except (TypeError, ValueError):
+        return 128.0, 128.0
+
+
+def _mount_pt(fx, pan, tilt):
+    """Physical mounting correction, applied only at DMX write time — looks,
+    fades and the UI all stay in logical space, so one upside-down or sideways
+    fixture never corrupts captured positions."""
+    if fx.get("swap"):
+        pan, tilt = tilt, pan
+    if fx.get("inv_p"):
+        pan = 255.0 - pan
+    if fx.get("inv_t"):
+        tilt = 255.0 - tilt
+    return pan, tilt
+
+
+def _fixture_color_dynamic(i, n, scene, energy, color, brightness):
     if scene == "reactive":
         bass = energy.get("bass", 0); mid = energy.get("mid", 0); high = energy.get("high", 0)
         # bass→red, mid→green, high→blue; the colour itself carries the pulse.
@@ -1165,24 +1819,31 @@ def _fixture_color(i, n, scene, energy, color, brightness):
     if scene == "chase":
         active = (i == (_chase_pos % max(1, n)))
         if active:
-            return _clamp8(color[0]), _clamp8(color[1]), _clamp8(color[2]), _clamp8(brightness)
+            c = _paint_color(i) or color   # painted lights chase in their own colour
+            return _clamp8(c[0]), _clamp8(c[1]), _clamp8(c[2]), _clamp8(brightness)
         return 0, 0, 0, 0
     return 0, 0, 0, 0
 
 
-def _write_fixture(dmx, base0, profile, r, g, b, master):
+def _write_fixture(dmx, base0, profile, r, g, b, master, pan=128.0, tilt=128.0):
     """Write one fixture into the 512-channel universe per its profile.
 
     Fixtures WITH a dimmer slot get raw colour + master on the dimmer.
     Fixtures WITHOUT one get colour pre-scaled by master (master baked in).
+    Pan/tilt arrive as floats (mid-fade positions are fractional) and are
+    rendered 16-bit: coarse on p/t, remainder on pf/tf where the profile has
+    fine channels — that's what makes slow look-to-look sweeps glide.
     """
-    prof = PROFILES.get(profile, PROFILES[DEFAULT_PROFILE])
+    prof = _profiles_all().get(profile, PROFILES[DEFAULT_PROFILE])
     slots = prof["slots"]
     if "d" in slots:
         er, eg, eb = r, g, b
     else:
         er, eg, eb = r * master // 255, g * master // 255, b * master // 255
-    vals = {"r": er, "g": eg, "b": eb, "w": min(er, eg, eb), "d": master}
+    p16 = int(round(max(0.0, min(255.0, float(pan))) * 257))
+    t16 = int(round(max(0.0, min(255.0, float(tilt))) * 257))
+    vals = {"r": er, "g": eg, "b": eb, "w": min(er, eg, eb), "d": master,
+            "p": p16 >> 8, "pf": p16 & 0xFF, "t": t16 >> 8, "tf": t16 & 0xFF}
     for slot, off in slots.items():
         idx = base0 + off
         if 0 <= idx < 512:
@@ -1190,20 +1851,57 @@ def _write_fixture(dmx, base0, profile, r, g, b, master):
 
 
 def _update_dmx_from_lighting():
+    global _last_fixtures
     L = state["lighting"]
     scene = L["scene"]; energy = state["audio"]["energy"]
     color = L["color"]; brightness = L["brightness"]
     patch = _active_patch()
     n = len(patch)
 
+    # Crossfade progress: smoothstep eases both ends; cleared once complete.
+    mix = None
+    if _fade["active"]:
+        t = (time.monotonic() - _fade["start"]) / max(0.001, _fade["dur"])
+        if t >= 1.0:
+            _fade["active"] = False
+        else:
+            mix = t * t * (3.0 - 2.0 * t)
+
+    eff = L.get("effect") or {}
+    phase = _effect_phase() if eff.get("type", "none") != "none" else 0.0
+    gm = _clamp8(L.get("master", 255))
+    if not L.get("on", True):
+        gm = 0      # master switch off → dark, config keeps rendering underneath
+
     dmx = [0] * 512
     fixtures = []
     for i, fx in enumerate(patch):
         r, g, b, master = _fixture_color(i, n, scene, energy, color, brightness)
-        fixtures.append({"r": r, "g": g, "b": b, "m": master})
+        pan, tilt = _fixture_pt(i, fx, scene)
+        if mix is not None:
+            fr = _fade["from"][i] if i < len(_fade["from"]) else (0, 0, 0, 0, 128.0, 128.0)
+            r = round(fr[0] + (r - fr[0]) * mix)
+            g = round(fr[1] + (g - fr[1]) * mix)
+            b = round(fr[2] + (b - fr[2]) * mix)
+            master = round(fr[3] + (master - fr[3]) * mix)
+            if len(fr) >= 6:                  # heads sweep through the crossfade
+                pan = fr[4] + (pan - fr[4]) * mix
+                tilt = fr[5] + (tilt - fr[5]) * mix
+        # effects ride on top of the (possibly mid-fade) output
+        r, g, b, master = _apply_effect(i, n, r, g, b, master, eff, phase)
+        pan, tilt = _apply_move(i, n, eff, phase, pan, tilt)
+        master = master * gm // 255            # grand master scales EVERYTHING
+        mp, mt = _mount_pt(fx, pan, tilt)    # physical correction at output only
+        # preview carries both: p/t logical (capture reads these), mp/mt as
+        # the fixture physically points — so mount flags are visible in sim
+        fixtures.append({"r": r, "g": g, "b": b, "m": master,
+                         "p": round(pan, 1), "t": round(tilt, 1),
+                         "mp": round(mp, 1), "mt": round(mt, 1)})
         base0 = int(fx.get("base", 1)) - 1   # 1-indexed address → 0-indexed slot
-        _write_fixture(dmx, base0, fx.get("profile", DEFAULT_PROFILE), r, g, b, master)
+        _write_fixture(dmx, base0, fx.get("profile", DEFAULT_PROFILE),
+                       r, g, b, master, mp, mt)
 
+    _last_fixtures = fixtures
     state["dmx"] = dmx   # atomic swap; the output refresh loop reads this
     # Preview: enough raw channels for the UI plus a tidy per-fixture summary.
     broadcast("dmx", {"channels": dmx[:max(32, n * 5)], "fixtures": fixtures})
@@ -1246,7 +1944,8 @@ def api_output_audio_devices():
         try:
             for i, d in enumerate(sd.query_devices()):
                 if d.get("max_output_channels", 0) > 0:
-                    devices.append({"idx": i, "name": d["name"], "default": i == default_out})
+                    devices.append({"idx": i, "name": d["name"], "default": i == default_out,
+                                    "channels": int(d.get("max_output_channels", 2))})
         except Exception:
             pass
         return jsonify({"devices": devices, "available": True})
@@ -1262,7 +1961,8 @@ def api_output_audio_devices():
         for i in range(pa.get_device_count()):
             d = pa.get_device_info_by_index(i)
             if d.get("maxOutputChannels", 0) > 0:
-                devices.append({"idx": i, "name": d["name"], "default": i == default_idx})
+                devices.append({"idx": i, "name": d["name"], "default": i == default_idx,
+                                "channels": int(d.get("maxOutputChannels", 2))})
     finally:
         pa.terminate()
     return jsonify({"devices": devices, "available": True})
@@ -1452,7 +2152,9 @@ def api_setlist_export():
             folder = Path.home()           # no Desktop? home dir works everywhere
         dest = folder / "Lime Studio set.limeshow"
         with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
-            z.writestr("setlist.json", json.dumps({"setlist": state["setlist"]}, indent=2))
+            z.writestr("setlist.json", json.dumps(
+                {"setlist": state["setlist"], "looks": state["looks"],
+                 "mixes": state["mixer"]["scenes"]}, indent=2))
             seen = set()
             for song in state["setlist"]:
                 for t in song.get("tracks", []) or []:
@@ -1505,9 +2207,26 @@ def api_setlist_import():
         state["setlist"] = [_migrate_song(s) for s in lst]
         state["active_song_idx"] = None
         state["click"]["pending_song"] = None
+        # merge bundled looks so lane look-refs survive; never clobber existing ids
+        have = {l["id"] for l in state["looks"]}
+        looks_added = 0
+        for lk in (d.get("looks") or []) if isinstance(d, dict) else []:
+            c = _clean_look(lk)
+            if c and c["id"] not in have:
+                state["looks"].append(c)
+                have.add(c["id"])
+                looks_added += 1
+        # bundled mixer scenes merge the same way — never clobber existing ids
+        havem = {s["id"] for s in state["mixer"]["scenes"]}
+        for mx in (d.get("mixes") or []) if isinstance(d, dict) else []:
+            c = _clean_mix_scene(mx)
+            if c and c["id"] not in havem:
+                state["mixer"]["scenes"].append(c)
+                havem.add(c["id"])
         _save_show()
         broadcast("state", _full_state())
-        return jsonify({"ok": True, "songs": len(lst), "tracks_copied": copied})
+        return jsonify({"ok": True, "songs": len(lst), "tracks_copied": copied,
+                        "looks_added": looks_added})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
 

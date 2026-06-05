@@ -270,7 +270,7 @@
   .song-title { font-size: 16px; font-weight: 600; margin-bottom: 3px; }
   .song-meta { display: flex; gap: 12px; font-size: 12px; color: var(--txt-dim); flex-wrap: wrap; }
   .song-meta .chip { font-family: var(--mono); }
-  .song-meta .chip b { color: var(--txt); font-weight: 600; }
+  .song-meta .chip b { color: var(--lime); font-weight: 600; }
   .scene-tag {
     text-transform: uppercase; font-size: 10px; letter-spacing: 1px; font-weight: 700;
     padding: 2px 7px; border-radius: 5px; background: var(--bg-3); color: var(--txt-dim);
@@ -280,6 +280,8 @@
   .scene-tag.static { color: var(--blue); }
   .scene-tag.off { color: var(--txt-faint); }
   .song-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .song-actions .icon-btn { border-color: rgba(182,255,58,.45); }
+  .song-actions .icon-btn:hover { border-color: var(--lime); color: var(--lime); background: rgba(182,255,58,.08); }
   .icon-btn {
     width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;
     background: var(--bg-3); border: 1px solid var(--line-2); color: var(--txt-dim);
@@ -354,18 +356,54 @@
   .cue-item .icon-btn { width: 30px; height: 30px; }
   .cue-play { color: var(--accent); }
 
-  /* ── Lighting view ─────────────────────────────────── */
-  .light-grid { display: grid; grid-template-columns: 1fr 320px; gap: 22px; align-items: start; }
-  @media (max-width: 820px) { .light-grid { grid-template-columns: 1fr; } }
+  /* ── Lighting view — full-width single-screen console ── */
+  #view-lighting { padding: 14px 16px; overflow: hidden; }
+  .light-console { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; }
 
   .stage {
     background: radial-gradient(ellipse at 50% -10%, #1a1f2e, var(--bg-2));
-    border: 1px solid var(--line); border-radius: 16px; padding: 30px 24px 36px;
-    min-height: 280px;
+    border: 1px solid var(--line); border-radius: 16px; padding: 16px 24px 22px;
+    flex: 0 0 44%; min-height: 0; display: flex; flex-direction: column;
   }
-  .stage-label { font-size: 11px; letter-spacing: 2px; color: var(--txt-faint); text-transform: uppercase; margin-bottom: 24px; }
-  .fixtures { display: flex; flex-wrap: wrap; gap: 22px; justify-content: center; align-items: flex-end; }
-  .fixture { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .stage-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; flex-shrink: 0; }
+  .stage-label { font-size: 11px; letter-spacing: 2px; color: var(--txt-faint); text-transform: uppercase; }
+  .fixtures {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-wrap: wrap; gap: 10px 22px;
+    justify-content: center; align-items: center; align-content: center;
+  }
+
+  .console-deck {
+    flex: 1 1 auto; min-height: 0;
+    display: grid; grid-template-columns: 1.15fr 1fr 1fr 1.25fr 1fr; gap: 14px;
+  }
+  .console-col {
+    display: flex; flex-direction: column; gap: 12px;
+    min-height: 0; overflow-y: auto;
+    scrollbar-width: none;                /* slide to scroll, no bars */
+  }
+  .console-col::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+  /* compact, quiet typography for the console sliders — small-caps labels,
+     lime mono values, breathing room above each track */
+  .console-deck .field { gap: 9px; }
+  .console-deck .field + .field { margin-top: 12px; }
+  .console-deck .field label {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--txt-faint);
+  }
+  .console-deck .mono-val { font-size: 11px; color: var(--lime); min-width: 34px; }
+  /* narrow windows: fall back to a scrolling 2-column layout */
+  @media (max-width: 1080px) {
+    #view-lighting { overflow-y: scroll; }
+    .light-console { height: auto; }
+    .stage { flex-basis: auto; min-height: 260px; }
+    .console-deck { grid-template-columns: 1fr 1fr; }
+  }
+  /* fixed flex-basis: the channel readout changes width as values change digits
+     (0 vs 255) — without a pinned column width, the centered row reflows and
+     the cans visibly shift on every DMX update. */
+  .fixture { display: flex; flex-direction: column; align-items: center; gap: 10px; flex: 0 0 96px; width: 96px; }
   .fixture .can {
     width: 62px; height: 62px; border-radius: 50%;
     background: #05070b; border: 2px solid var(--line-2);
@@ -373,14 +411,22 @@
   }
   .fixture .beam {
     position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
-    width: 0; height: 0; opacity: 0; transition: opacity .08s;
+    transform-origin: 50% 0;                    /* swings from the can mouth */
+    width: 0; height: 0; opacity: 0; transition: opacity .08s, transform .12s linear;
     border-left: 34px solid transparent; border-right: 34px solid transparent;
     border-top: 64px solid currentColor; filter: blur(3px);
   }
+  /* mover aim dot: where the head points inside its pan/tilt range */
+  .fixture .aim {
+    position: absolute; width: 7px; height: 7px; border-radius: 50%;
+    background: rgba(255,255,255,.9); box-shadow: 0 0 7px rgba(255,255,255,.7);
+    transform: translate(-50%,-50%); transition: left .12s linear, top .12s linear;
+    display: none; pointer-events: none;
+  }
+  .fixture.mover .aim { display: block; }
   .fixture .lbl { font-family: var(--mono); font-size: 11px; color: var(--txt-faint); }
-  .fixture .chans { font-family: var(--mono); font-size: 9px; color: var(--txt-faint); opacity: .7; }
+  .fixture .chans { font-family: var(--mono); font-size: 9px; color: var(--txt-faint); opacity: .7; white-space: nowrap; font-variant-numeric: tabular-nums; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
-  .light-panel { display: flex; flex-direction: column; gap: 18px; }
   .card {
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
   }
@@ -394,6 +440,20 @@
   .scene-btn .si { font-size: 18px; }
   .scene-btn.on { background: var(--lime); color: #0a0c10; border-color: var(--lime); }
   .scene-btn:hover:not(.on) { background: var(--line); color: var(--txt); }
+
+  /* ── Looks ── */
+  .look-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px;
+    background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 9px;
+    cursor: pointer; transition: border-color .12s, background .12s;
+  }
+  .look-row:hover { border-color: var(--line); }
+  .look-row.on { border-color: var(--lime); background: rgba(182,255,58,.06); }
+  .look-row.on .look-name { color: var(--lime); }
+  .look-sws { display: flex; gap: 3px; flex-shrink: 0; }
+  .look-sw { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.12); }
+  .look-name { flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .look-row .icon-btn { width: 26px; height: 26px; flex-shrink: 0; }
 
   .energy-bars { display: flex; flex-direction: column; gap: 11px; }
   .ebar { display: flex; align-items: center; gap: 10px; }
@@ -443,10 +503,142 @@
   .patch-row { display: flex; align-items: center; gap: 6px; }
   .patch-row .pnum { font-family: var(--mono); font-size: 11px; color: var(--txt-faint); width: 20px; text-align: center; flex-shrink: 0; }
   .patch-row .pswatch { width: 16px; height: 16px; border-radius: 4px; background: #05070b; border: 1px solid var(--line-2); flex-shrink: 0; }
-  .patch-row input.pbase { flex: 0 0 64px; font-family: var(--mono); text-align: center; padding: 7px; font-size: 13px; }
+  .patch-row .stepper { flex: 0 0 64px; }
+  .patch-row input.pbase { width: 100%; font-family: var(--mono); text-align: left; padding: 7px 20px 7px 8px; font-size: 13px; }
+  .patch-row .stepper .step-btns { right: 4px; gap: 1px; }
+  .patch-row .stepper .step-btns button { width: 13px; height: 9px; font-size: 5px; border-radius: 3px; }
   .patch-row select.pprof { flex: 1; padding: 7px; font-family: var(--mono); font-size: 12px; }
   .patch-row .prange { font-family: var(--mono); font-size: 10px; color: var(--txt-faint); flex: 0 0 52px; text-align: right; }
   .patch-row .icon-btn { width: 28px; height: 28px; flex-shrink: 0; }
+  .pos-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .pos-row .pnum { font-family: var(--mono); font-size: 11px; color: var(--txt-faint); width: 20px; text-align: center; flex-shrink: 0; }
+  .pos-row .pax { font-family: var(--mono); font-size: 9px; letter-spacing: 1px; color: var(--txt-faint); flex-shrink: 0; }
+  .pos-row input[type=range] { flex: 1; min-width: 0; }
+  .pos-row .pflag {
+    width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+    background: var(--bg-3); border: 1px solid var(--line-2); color: var(--txt-faint);
+    font-size: 12px; line-height: 1;
+  }
+  .pos-row .pflag.on { background: var(--lime); border-color: var(--lime); color: #0a0c10; }
+  .perf-cue.look { min-height: 40px; font-size: 12.5px; }
+
+  /* ── Mixer ── */
+  #view-mixer { padding: 0; overflow: hidden; }
+  .mx-body { display: flex; height: 100%; min-height: 0; }
+  .mixer-console { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 14px; min-height: 0; padding: 14px 16px; }
+  .mx-deck-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .mx-strips {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; gap: 10px; align-items: flex-start; justify-content: flex-start;
+    overflow-x: auto; scrollbar-width: none; padding-bottom: 4px;
+  }
+  .mx-strips::-webkit-scrollbar { display: none; }
+  .mx-strip {
+    flex: 0 0 72px; width: 72px; box-sizing: border-box;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 10px 6px; border-radius: 10px; background: var(--bg-3); border: 1px solid var(--line-2);
+  }
+  .mx-strip.master { border-color: rgba(182,255,58,.35); margin-left: auto; }
+  .mx-detail { display: flex; flex-direction: column; }
+  .mx-preset-row { display: flex; gap: 8px; margin-top: auto; padding-top: 14px; }
+  .mx-name {
+    font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--txt-dim); text-align: center; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mx-db { font-family: var(--mono); font-size: 10px; color: var(--lime); min-height: 13px; }
+  .mx-fader-box { flex: none; height: 180px; width: 100%; position: relative; display: flex; align-items: center; justify-content: center; }
+  input[type=range].mx-fader {
+    -webkit-appearance: slider-vertical; appearance: slider-vertical;
+    writing-mode: vertical-lr; direction: rtl;
+    width: 26px; height: 180px; background: transparent; position: relative; z-index: 1;
+  }
+  /* dB scale behind the fader */
+  .mx-scale { position: absolute; inset: 0; pointer-events: none; }
+  .mx-scale i { position: absolute; left: 16px; right: 16px; height: 1px; background: var(--line-2); }
+  .mx-scale i.zero { background: rgba(182,255,58,.45); }
+  .mx-scale b {
+    position: absolute; left: 0; transform: translateY(-50%);
+    font-family: var(--mono); font-size: 7px; font-weight: 400; color: var(--txt-faint);
+  }
+  .mx-mute {
+    width: 40px; height: 22px; border-radius: 6px; font-size: 9px; font-weight: 700;
+    letter-spacing: .06em; background: var(--bg-2); border: 1px solid var(--line-2); color: var(--txt-faint);
+  }
+  .mx-mute.muted { background: var(--red); border-color: var(--red); color: #fff; }
+  .mx-strip.sel { border-color: var(--lime); box-shadow: 0 0 10px rgba(182,255,58,.12); }
+  .mx-name { cursor: pointer; }
+  .mx-name:hover { color: var(--lime); }
+  .mx-deck-row { flex: 1 1 auto; min-height: 0; display: flex; gap: 16px; }
+  /* bus tabs: one flush rectangular strip; only the last tab keeps a curved
+     bottom-right corner; + sits beside it */
+  .mx-conn-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .mx-busrow { display: flex; align-items: center; margin-bottom: 2px; overflow-x: auto; scrollbar-width: none; }
+  .mx-busrow::-webkit-scrollbar { display: none; }
+  .mx-outs-lbl { margin: 0 10px 0 0; flex-shrink: 0; }
+  #mx-bus { flex-wrap: nowrap; gap: 0; }
+  #mx-bus button { border-radius: 0; white-space: nowrap; }
+  #mx-bus button + button { border-left-width: 0; }
+  .mx-busrow .out-led { align-self: center; }
+  .mx-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+  .mx-detail {
+    flex: 0 0 252px; min-height: 0; overflow-y: auto; scrollbar-width: none;
+    border-left: 1px solid var(--line); padding-left: 16px;
+  }
+  .mx-detail::-webkit-scrollbar { display: none; }
+  .mx-det-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--txt-faint); }
+  .mx-knobs { display: flex; gap: 14px; justify-content: space-between; }
+  .mx-knob { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 1; }
+  .mx-knob .kn {
+    width: 48px; height: 48px; border-radius: 50%; position: relative; cursor: ns-resize;
+    background: radial-gradient(circle at 50% 35%, var(--bg-3), var(--bg-2));
+    border: 1px solid var(--line-2); box-shadow: inset 0 2px 5px rgba(0,0,0,.45);
+    touch-action: none;
+  }
+  .mx-knob .kn-ind {
+    position: absolute; left: 50%; top: 50%; width: 2px; height: 19px;
+    margin-left: -1px; transform-origin: 50% 0%; background: var(--lime);
+    border-radius: 2px; box-shadow: 0 0 6px rgba(182,255,58,.5);
+  }
+  .mx-knob .kn-val { font-family: var(--mono); font-size: 10px; color: var(--lime); min-height: 12px; }
+  .mx-knob .kn-lbl { font-size: 9.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--txt-faint); text-align: center; }
+  #mx-eq-on.off { background: var(--bg-2); border-color: var(--line-2); color: var(--txt-faint); }
+  #mx-eq-on.live { background: rgba(182,255,58,.16); border-color: rgba(182,255,58,.5); color: var(--lime); }
+  .mx-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 7px; padding-top: 10px; }
+  .mx-nowbar {
+    padding: 10px 14px; border-radius: 10px;
+    background: var(--bg-3); border: 1px solid var(--line-2);
+    font-size: 12.5px; color: var(--txt-dim); display: flex; align-items: center; gap: 9px;
+  }
+  .mx-nowbar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 8px rgba(182,255,58,.6); flex-shrink: 0; }
+  .mx-nowbar .dot.idle { background: var(--txt-faint); box-shadow: none; }
+  .mx-nowbar b { color: var(--lime); }
+  .mx-scene-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 6px;
+    background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 9px;
+  }
+  .mx-scene-row .nm { flex: 1; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mx-scene-row .icon-btn { width: 26px; height: 26px; flex-shrink: 0; }
+
+  .paint-pop {
+    position: fixed; z-index: 320; width: 220px;
+    background: var(--panel); border: 1px solid var(--line-2); border-radius: 12px;
+    padding: 12px 14px; box-shadow: 0 14px 44px rgba(0,0,0,.6);
+  }
+
+  /* ── Lighting guide tour ── */
+  .tour-hi { outline: 2px solid var(--lime); outline-offset: 2px; box-shadow: 0 0 26px rgba(182,255,58,.28); position: relative; z-index: 5; }
+  .tour-panel {
+    position: fixed; z-index: 300; width: 340px;
+    background: var(--panel); border: 1px solid var(--lime); border-radius: 12px;
+    padding: 14px 16px; box-shadow: 0 14px 44px rgba(0,0,0,.65), 0 0 22px rgba(182,255,58,.12);
+  }
+  .tour-panel .tour-title { font-weight: 700; color: var(--lime); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .tour-panel .tour-n { color: var(--txt-faint); font-size: 11px; font-weight: 400; font-family: var(--mono); }
+  .tour-panel .tour-body { font-size: 13px; line-height: 1.55; color: var(--txt-dim); margin-bottom: 12px; }
+  .tour-panel .tour-body b { color: var(--txt); }
+  .tour-panel .tour-row { display: flex; gap: 8px; }
+  .tour-panel .tour-row .spacer { flex: 1; }
 
   /* ── Performance Mode ──────────────────────────────── */
   #view-perf { padding: 0; background: var(--bg); }
@@ -456,7 +648,7 @@
   .perf-top { flex: 1 1 auto; display: flex; flex-direction: column; padding: 16px 26px; min-height: 0; }
   .perf-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
   .perf-now { min-width: 0; }
-  .perf-now .kicker { font-size: 11px; letter-spacing: 2px; color: var(--txt-faint); text-transform: uppercase; margin-bottom: 4px; }
+  .perf-now .kicker { font-size: 11px; letter-spacing: 2px; color: var(--lime); text-transform: uppercase; margin-bottom: 4px; }
   .perf-now .title {
     font-size: clamp(20px, 2.8vw, 34px); font-weight: 800; line-height: 1.05; letter-spacing: -0.5px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -496,16 +688,19 @@
     background: var(--accent); color: #0a0c10; transform: scale(.96);
     box-shadow: 0 0 20px rgba(255,122,26,.55), inset 0 1px 0 rgba(255,255,255,.25);
   }
-  .perf-cue.blackout {
+  .perf-cue.power { justify-content: center; align-items: center; }
+  .perf-cue.power .ico { width: 20px; height: 20px; margin-right: 0; }
+  .perf-cue.power.is-on {            /* lights running → red kill switch */
     background: linear-gradient(180deg, #332022, #261518);
-    border-color: rgba(255,77,77,.28); color: var(--red);
+    border-color: rgba(255,77,77,.45); color: var(--red);
+    box-shadow: 0 0 14px rgba(255,77,77,.18);
   }
-  .perf-cue.blackout:active { background: var(--red); color: #fff; box-shadow: 0 0 20px rgba(255,77,77,.6); }
-  .perf-cue.lights {
+  .perf-cue.power.is-on:active { background: var(--red); color: #fff; box-shadow: 0 0 20px rgba(255,77,77,.6); }
+  .perf-cue.power.is-off {           /* stage dark → lime bring-up switch */
     background: linear-gradient(180deg, #243321, #1a2618);
-    border-color: rgba(182,255,58,.35); color: var(--lime);
+    border-color: rgba(182,255,58,.45); color: var(--lime);
   }
-  .perf-cue.lights:active { background: var(--lime); color: #0a0c10; box-shadow: 0 0 20px rgba(182,255,58,.6); }
+  .perf-cue.power.is-off:active { background: var(--lime); color: #0a0c10; box-shadow: 0 0 20px rgba(182,255,58,.6); }
   .perf-cue .ico { width: 14px; height: 14px; margin-right: 8px; flex-shrink: 0; }
 
   .perf-strip {
@@ -1179,6 +1374,7 @@
   <nav>
     <button class="tab active" data-view="setlist">Setlist</button>
     <button class="tab" data-view="lighting">Lighting</button>
+    <button class="tab" data-view="mixer">Mixer</button>
     <button class="tab" data-view="perf">Performance</button>
   </nav>
 
@@ -1206,16 +1402,20 @@
 
     <!-- Lighting -->
     <section class="view" id="view-lighting">
-      <div class="view-inner">
-        <h2 class="view-title">Lighting Simulator</h2>
-        <div class="view-sub">Live DMX preview · 4 channels per fixture (R · G · B · Dimmer)</div>
-        <div class="light-grid">
-          <div class="stage">
-            <div class="stage-label">Stage — live output</div>
-            <div class="fixtures" id="fixtures"></div>
+      <div class="light-console">
+        <div class="stage">
+          <div class="stage-head">
+            <span class="stage-label">Stage — live output</span>
+            <span style="display:flex; align-items:center; gap:12px;">
+              <span class="stage-label" id="stage-hint">beams show pan · length shows tilt · double-click any slider to reset</span>
+              <button class="btn ghost sm" id="light-guide" title="A guided walkthrough — every control explained and demonstrated live on the stage">Guide</button>
+            </span>
           </div>
-          <div class="light-panel">
-            <div class="card">
+          <div class="fixtures" id="fixtures"></div>
+        </div>
+        <div class="console-deck">
+          <div class="console-col">
+            <div class="card" id="card-scene">
               <h4>Scene</h4>
               <div class="scene-grid" id="scene-grid">
                 <button class="scene-btn" data-scene="reactive"><span class="si" data-ic="activity"></span>Reactive</button>
@@ -1223,21 +1423,54 @@
                 <button class="scene-btn" data-scene="static"><span class="si" data-ic="square"></span>Static</button>
                 <button class="scene-btn" data-scene="off"><span class="si" data-ic="power"></span>Off</button>
               </div>
+              <div class="looks-box" id="looks-box">
+                <div class="row-between" style="margin:14px 0 8px;">
+                  <h4 style="margin:0;">Looks</h4>
+                  <button class="btn sm" id="look-capture" title="Snapshot the exact per-fixture state on stage right now into a named, reusable look">Capture</button>
+                </div>
+                <div id="looks-list"></div>
+                <span class="hint">Dial the stage in, hit Capture — that exact state becomes a look. Apply it here, in the song lighting lane, or from MIDI.</span>
+              </div>
               <div style="margin-top:12px; display:none;" id="chase-ctl">
                 <button class="btn sm" id="chase-advance" style="width:100%" data-ic="ffwd"><span>Advance chase</span></button>
               </div>
             </div>
+          </div>
 
-            <div class="card">
-              <h4>Audio energy</h4>
-              <div class="energy-bars">
-                <div class="ebar bass"><span class="name">Bass</span><div class="track"><div class="fill" id="e-bass"></div></div></div>
-                <div class="ebar mid"><span class="name">Mid</span><div class="track"><div class="fill" id="e-mid"></div></div></div>
-                <div class="ebar high"><span class="name">High</span><div class="track"><div class="fill" id="e-high"></div></div></div>
+          <div class="console-col">
+            <div class="card" id="card-effect">
+              <h4>Effect</h4>
+              <div class="scene-grid" id="fx-grid">
+                <button class="scene-btn" data-fx="none">None</button>
+                <button class="scene-btn" data-fx="pulse">Pulse</button>
+                <button class="scene-btn" data-fx="wave">Wave</button>
+                <button class="scene-btn" data-fx="strobe">Strobe</button>
+                <button class="scene-btn" data-fx="rainbow">Rainbow</button>
+                <button class="scene-btn" data-fx="music" title="Live audio energy drives the dimmer — any look becomes reactive in its own colours">Music</button>
+                <button class="scene-btn" data-fx="flash" title="Brightness punches on the click's beat and decays — no mic needed">Flash</button>
+                <button class="scene-btn" data-fx="orbit" title="Moving heads circle their home position — tempo-synced, spread across the rig">Orbit</button>
+                <button class="scene-btn" data-fx="sweep" title="Moving heads pan side-to-side around home — tempo-synced wave">Sweep</button>
               </div>
+              <div class="field" style="margin-top:12px;">
+                <label>Rate · beats per cycle</label>
+                <div class="seg" id="fx-rate">
+                  <button data-rate="0.5">½</button>
+                  <button data-rate="1">1</button>
+                  <button data-rate="2">2</button>
+                  <button data-rate="4">4</button>
+                  <button data-rate="8">8</button>
+                </div>
+              </div>
+              <div class="field">
+                <div class="row-between"><label>Depth</label><span class="mono-val" id="fx-depth-val">60%</span></div>
+                <input type="range" id="fx-depth" min="0" max="100" value="60">
+              </div>
+              <span class="hint">Tempo-synced movement on top of the scene or look — pulses land on the click's beats and free-run at the last tempo between songs. Capture saves the effect into the look.</span>
             </div>
+          </div>
 
-            <div class="card">
+          <div class="console-col">
+            <div class="card" id="card-color">
               <h4>Color &amp; master</h4>
               <div class="row-between" style="margin-bottom:14px;">
                 <span class="hint">Static / Chase color</span>
@@ -1247,9 +1480,56 @@
                 <div class="row-between"><label>Master brightness</label><span class="mono-val" id="bright-val">255</span></div>
                 <input type="range" id="brightness" min="0" max="255" value="255">
               </div>
+              <div class="field">
+                <div class="row-between"><label>Scene fade</label><span class="mono-val" id="fade-val">0.5s</span></div>
+                <input type="range" id="fade-time" min="0" max="10" step="0.1" value="0.5">
+              </div>
+              <div class="field">
+                <div class="row-between"><label>Grand master</label><span class="mono-val" id="gm-val">100%</span></div>
+                <input type="range" id="grand-master" min="0" max="255" value="255" title="Output-level dimmer — scales everything, looks included">
+              </div>
             </div>
 
-            <div class="card">
+            <div class="card" id="card-energy">
+              <h4>Audio energy</h4>
+              <div class="energy-bars">
+                <div class="ebar bass"><span class="name">Bass</span><div class="track"><div class="fill" id="e-bass"></div></div></div>
+                <div class="ebar mid"><span class="name">Mid</span><div class="track"><div class="fill" id="e-mid"></div></div></div>
+                <div class="ebar high"><span class="name">High</span><div class="track"><div class="fill" id="e-high"></div></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="console-col">
+            <div class="card" id="card-patch">
+              <div class="row-between" style="margin-bottom:10px;">
+                <h4 style="margin:0;">Patch</h4>
+                <span class="hint" id="patch-summary"></span>
+              </div>
+              <div class="patch-quick">
+                <div class="count-pills" id="count-pills">
+                  <button data-n="2">2</button><button data-n="4">4</button>
+                  <button data-n="6">6</button><button data-n="8">8</button>
+                </div>
+                <select id="patch-default-profile" title="Profile for auto-patch"></select>
+              </div>
+              <div class="patch-list" id="patch-list"></div>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <button class="btn sm ghost" id="patch-add" style="flex:1;">+ Add fixture</button>
+                <button class="btn sm ghost" id="profile-add" style="flex:1;" title="Describe any fixture's channel layout — the venue's patch sheet tells you the order">+ Profile</button>
+              </div>
+              <div id="pos-box" style="display:none; margin-top:14px;">
+                <div class="row-between" style="margin-bottom:8px;">
+                  <h4 style="margin:0;">Position</h4>
+                  <span class="hint">moving heads · saved into looks</span>
+                </div>
+                <div id="pos-list"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="console-col">
+            <div class="card" id="card-output">
               <div class="row-between" style="margin-bottom:12px;">
                 <h4 style="margin:0;">DMX Output</h4>
                 <span class="out-led" id="out-led"><span class="led"></span><span id="out-led-txt">sim</span></span>
@@ -1292,23 +1572,52 @@
               <button class="btn sm" id="out-connect" style="width:100%; display:none;">Connect</button>
               <div class="out-status" id="out-status">Simulator — no hardware output</div>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-            <div class="card">
-              <div class="row-between" style="margin-bottom:10px;">
-                <h4 style="margin:0;">Patch</h4>
-                <span class="hint" id="patch-summary"></span>
+    <!-- Mixer -->
+    <section class="view" id="view-mixer">
+      <div class="mx-body">
+        <aside class="perf-set" id="mx-set"></aside>
+        <div class="mixer-console">
+        <div class="card mx-deck-card">
+          <div class="mx-deck-row">
+            <div class="mx-left">
+              <div class="mx-conn-row">
+                <span class="pad-label" style="margin:0;">XR18</span>
+                <span style="flex:1;"></span>
+                <span class="out-led" id="mx-led-wrap"><span class="led" id="mx-led"></span><span id="mx-led-txt">sim</span></span>
+                <button class="btn sm ghost" id="mx-connect" title="Link to the XR18 — every console move auto-saves into the playing song's mix">Connect</button>
               </div>
-              <div class="patch-quick">
-                <div class="count-pills" id="count-pills">
-                  <button data-n="2">2</button><button data-n="4">4</button>
-                  <button data-n="6">6</button><button data-n="8">8</button>
+              <div class="mx-busrow">
+                <span class="pad-label mx-outs-lbl">Outs</span>
+                <div class="seg" id="mx-bus"></div>
+              </div>
+              <div class="pad-label" style="margin:10px 0 6px;">Ins</div>
+              <div class="mx-strips" id="mx-strips"></div>
+              <div class="mx-bottom">
+                <div class="mx-nowbar" id="mx-nowbar"></div>
+                <div class="pad-label" style="margin:2px 0 0;">Presets — tap to apply · right-click to delete</div>
+                <div class="pad-row" id="mx-preset-row"></div>
+              </div>
+            </div>
+            <div class="mx-detail" id="mx-detail">
+              <div class="row-between" style="margin-bottom:8px;">
+                <h4 style="margin:0;" id="mx-det-name">Main LR</h4>
+              </div>
+              <div class="mx-knobs" id="mx-knobs"></div>
+              <div id="mx-eq-box" style="margin-top:12px;">
+                <div class="row-between" style="margin-bottom:6px;">
+                  <label class="mx-det-lbl">EQ · drag dots or band faders</label>
+                  <button class="mx-mute" id="mx-eq-on" style="width:52px;">EQ ON</button>
                 </div>
-                <select id="patch-default-profile" title="Profile for auto-patch"></select>
+                <svg id="mx-eq" style="width:100%; height:84px; background:var(--bg-2); border-radius:8px; border:1px solid var(--line-2); touch-action:none;"></svg>
               </div>
-              <div class="patch-list" id="patch-list"></div>
-              <button class="btn sm ghost" id="patch-add" style="width:100%; margin-top:8px;">+ Add fixture</button>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </section>
@@ -1446,7 +1755,11 @@
       <label>Click output — in-ear monitor feed</label>
       <select id="click-out-dev"><option value="">Same as everything (default output)</option></select>
     </div>
-    <div class="hint" id="click-out-hint" style="margin-bottom:14px;">Pick your interface's IEM output and the click is rendered straight to it on the server — backing tracks and spoken cues stay on the default output for front of house.</div>
+    <div class="field" id="click-out-ch-box" style="display:none;">
+      <label>Click channel on that device</label>
+      <select id="click-out-ch"></select>
+    </div>
+    <div class="hint" id="click-out-hint" style="margin-bottom:14px;">Pick your interface's IEM output and the click is rendered straight to it on the server — backing tracks and spoken cues stay on the default output for front of house. On a multi-out interface (like the XR18 over USB), pick a channel so the click rides its own desk channel while tracks keep 1/2.</div>
     <div class="tp-row" style="justify-content:flex-end;"><button class="btn primary sm" id="out-close">Done</button></div>
   </div>
 </div>
@@ -1653,13 +1966,16 @@ let S = {
   active_song_idx: null,
   click: { running: false, bpm: 120, time_sig: 4, beat: 0 },
   audio: { running: false, energy: { bass: 0, mid: 0, high: 0 }, bpm_detected: null, bpm_confidence: 0, autofollow: false },
-  lighting: { scene: "reactive", color: [255, 80, 0], brightness: 255, num_fixtures: 4 },
+  lighting: { scene: "reactive", color: [255, 80, 0], brightness: 255, num_fixtures: 4, fade: 0.5,
+              effect: { type: "none", rate: 1, depth: 0.6 }, master: 255, on: true, static_map: [] },
+  looks: [],
   dmx_preview: new Array(32).fill(0),
   patch: [],
   pos: null,      // live song position {bar, beat, section, len} from beat events
   fixtures: [],   // per-fixture preview {r,g,b,m} from the server (or local sim)
   output: { mode: "sim", connected: true, status: "Simulator", error: null, fps: 40, port: "", host: "2.0.0.1", universe: 0, has_serial: false },
-  profiles: { RGB: 3, RGBD: 4, RGBW: 4, RGBWD: 5, DIM: 1 },
+  profiles: { RGB: {width:3}, RGBD: {width:4}, RGBW: {width:4}, RGBWD: {width:5}, DIM: {width:1},
+              "MH-PTRGBD": {width:6, pt:true}, "MH16-PTRGBD": {width:8, pt:true} },
   midi: { connected: false, port: "", error: null, learning: null, mapping: [], last: null, has_midi: false },
 };
 let availablePorts = [];
@@ -1833,6 +2149,10 @@ function handleServerEvent(event, data) {
       if (data.fixtures) S.fixtures = data.fixtures;
       renderFixtures();
       renderPerfStrip();
+      break;
+    case "mixer_levels":
+      M = data.cache || {};
+      if (currentView === "mixer") { renderMixerStrips(false); renderMxDetail(); }
       break;
     case "cue":
       speakCue(data.text);
@@ -2216,7 +2536,7 @@ function activateSong(idx) {
     migrateSong(song);
     S.click.bpm = song.bpm || 120;
     S.click.time_sig = song.time_sig || 4;
-    S.lighting.scene = song.scene || "reactive";
+    // lighting deliberately untouched — the master switch + lane rule the stage
   }
   syncTransport();
   renderAll();
@@ -2244,7 +2564,7 @@ function renderSetlist() {
       `<div class="song-main">` +
         `<div class="song-title">${escapeHtml(song.title || "Untitled")}</div>` +
         `<div class="song-meta">` +
-          `<span class="chip"><b>${tempoLabel(song)}</b></span>` +
+          `<span class="chip"><b>${tempoLabel(song).replace(/ bpm$/, "")}</b> bpm</span>` +
           `<span class="chip">${sigLbl(song.time_sig || 4)}</span>` +
           `<span class="chip">${song.length_bars || 32} bars</span>` +
           `<span class="chip">key <b>${escapeHtml(song.key || "—")}</b></span>` +
@@ -2365,10 +2685,52 @@ function setLighting(patch) {
   if (!send("set_lighting", patch)) localRecomputeDMX();
   renderLightingControls();
 }
-function setScene(scene) {
+// ── Per-fixture paint: click a light (stage can or patch swatch) to give it
+//    its own colour. Paints live on the Static layer; Capture bakes them
+//    into looks — this is how multicolour states are authored.
+function paintFixture(i, ev) {
+  document.querySelectorAll(".paint-pop").forEach(e => e.remove());
+  const sm = S.lighting.static_map || [];
+  const cur = sm[i] || S.lighting.color || [255, 80, 0];
+  const p = el("div", "paint-pop");
+  p.innerHTML =
+    `<div class="tour-title" style="font-size:13px;">Light ${i + 1}</div>` +
+    `<input type="color" value="${rgbToHex(cur)}" style="width:100%; height:34px; margin:6px 0 8px;">` +
+    `<div class="tour-row">` +
+    `<button class="btn ghost sm" data-p="global" title="Forget this light's own colour — follow the global Static/Chase colour">Use global</button>` +
+    `<span class="spacer"></span><button class="btn primary sm" data-p="done">Done</button></div>`;
+  document.body.appendChild(p);
+  const x = Math.max(12, Math.min(window.innerWidth - 232, ev.clientX - 110));
+  const y = Math.max(12, Math.min(window.innerHeight - (p.offsetHeight || 130) - 12, ev.clientY + 14));
+  p.style.left = x + "px"; p.style.top = y + "px";
+  const send1 = (color) => {
+    if (!S.lighting.static_map) S.lighting.static_map = [];
+    while (S.lighting.static_map.length <= i) S.lighting.static_map.push(null);
+    S.lighting.static_map[i] = color;
+    S.lighting.scene = "static";
+    if (!send("set_fixture_color", { idx: i, color })) localRecomputeDMX();
+    renderLightingControls();
+  };
+  p.querySelector("input").oninput = (e) => send1(hexToRgb(e.target.value));
+  p.querySelector('[data-p="global"]').onclick = () => { send1(null); p.remove(); };
+  p.querySelector('[data-p="done"]').onclick = () => p.remove();
+  setTimeout(() => document.addEventListener("pointerdown", function close(e) {
+    if (!p.contains(e.target)) { p.remove(); document.removeEventListener("pointerdown", close); }
+  }), 0);
+}
+
+function setEffect(patch) {
+  S.lighting.effect = Object.assign({ type: "none", rate: 1, depth: 0.6 },
+                                    S.lighting.effect || {}, patch);
+  if (!send("set_effect", S.lighting.effect)) toast("Effects need the backend running");
+  renderLightingControls();
+}
+function setScene(scene, fade) {
   S.lighting.scene = scene;
-  // server: set_lighting recomputes; set_scene only flips the flag.
-  if (!send("set_lighting", { scene })) localRecomputeDMX();
+  // server crossfades scene changes; fade (seconds) overrides the default,
+  // fade=0 snaps. Omitted → the default fade from the Lighting view.
+  const msg = fade == null ? { scene } : { scene, fade };
+  if (!send("set_scene", msg)) localRecomputeDMX();
   renderLightingControls();
   renderAll();
 }
@@ -2376,17 +2738,25 @@ function setScene(scene) {
 // Local per-fixture compute mirrors server _fixture_color for offline use.
 // (Hardware output needs the server; this only feeds the on-screen preview.)
 function localRecomputeDMX() {
-  const L = S.lighting, E = S.audio.energy, c = L.color, br = L.brightness;
+  const L = S.lighting, E = S.audio.energy, c = L.color;
+  const br = L.on === false ? 0 : L.brightness;   // master switch kills output
   const n = S.patch.length || L.num_fixtures;
   const clamp8 = (v) => Math.max(0, Math.min(255, Math.round(v)));
   const fixtures = [];
   for (let i = 0; i < n; i++) {
     let r=0,g=0,b=0,m=0;
-    if (L.scene === "static") { r=clamp8(c[0]); g=clamp8(c[1]); b=clamp8(c[2]); m=br; }
+    const pc = (L.static_map && L.static_map[i]) || c;   // per-fixture paint
+    if (L.scene === "static") { r=clamp8(pc[0]); g=clamp8(pc[1]); b=clamp8(pc[2]); m=br; }
     else if (L.scene === "reactive") {
       r=clamp8(E.bass*255*1.2); g=clamp8(E.mid*180); b=clamp8(E.high*255); m=br;
     } else if (L.scene === "chase") {
       if (i === (localChasePos % n)) { r=clamp8(c[0]); g=clamp8(c[1]); b=clamp8(c[2]); m=br; }
+    } else if (isLookRef(L.scene)) {
+      const lk = lookById(L.scene);
+      if (lk && lk.fixtures && lk.fixtures.length) {
+        const f = lk.fixtures[i % lk.fixtures.length];
+        r=clamp8(f.r); g=clamp8(f.g); b=clamp8(f.b); m=clamp8(f.m==null?255:f.m);
+      } else { r=clamp8(c[0]); g=clamp8(c[1]); b=clamp8(c[2]); m=br; }   // missing look → static
     } // off → zeros
     fixtures.push({ r, g, b, m });
   }
@@ -2474,9 +2844,13 @@ function renderFixtures() {
     wrap.innerHTML = "";
     for (let i = 0; i < n; i++) {
       const f = el("div", "fixture");
-      f.innerHTML = `<div class="can"><div class="beam"></div></div>` +
+      f.innerHTML = `<div class="can"><div class="beam"></div><div class="aim"></div></div>` +
                     `<div class="lbl">FIX ${i+1}</div>` +
                     `<div class="chans" data-chans></div>`;
+      const cv = f.querySelector(".can");
+      cv.style.cursor = "pointer";
+      cv.title = "Click to paint this light its own colour";
+      cv.onclick = (e) => paintFixture(i, e);
       wrap.appendChild(f);
     }
   }
@@ -2490,8 +2864,27 @@ function renderFixtures() {
     can.style.borderColor = d.intensity > 0.02 ? d.col : "var(--line-2)";
     beam.style.color = d.col;
     beam.style.opacity = d.intensity > 0.05 ? Math.min(0.55, d.intensity*0.7) : 0;
+    // movers: the beam swings with pan and stretches with tilt; the aim dot
+    // mirrors the head's position inside its range
+    const mover = S.patch[i] && profileHasPT(S.patch[i].profile) && fl[i].p != null;
+    fx.classList.toggle("mover", !!mover);
+    if (mover) {
+      // prefer the PHYSICAL angles (mount flags applied) — what the real
+      // fixture does, so ⇄ ↔ ↕ toggles are visible in the simulator
+      const p = (fl[i].mp != null ? fl[i].mp : fl[i].p);
+      const t = (fl[i].mt != null ? fl[i].mt : (fl[i].t != null ? fl[i].t : 128));
+      const ang = (p - 128) / 128 * 55;                 // ±55° swing
+      const len = 0.55 + t / 255 * 0.9;                 // tilt → throw length
+      beam.style.transform = `translateX(-50%) rotate(${ang}deg) scaleY(${len})`;
+      const aim = fx.querySelector(".aim");
+      aim.style.left = (50 + (p - 128) / 255 * 66) + "%";
+      aim.style.top = (50 + (t - 128) / 255 * 66) + "%";
+    } else {
+      beam.style.transform = "translateX(-50%)";
+    }
     const base = S.patch[i] ? S.patch[i].base : (i*4+1);
-    fx.querySelector("[data-chans]").textContent = `@${base} · ${d.raw[0]} ${d.raw[1]} ${d.raw[2]}`;
+    const pt = mover ? ` · ${Math.round(fl[i].p)}/${Math.round(fl[i].t)}` : "";
+    fx.querySelector("[data-chans]").textContent = `@${base} · ${d.raw[0]} ${d.raw[1]} ${d.raw[2]}${pt}`;
   }
 }
 
@@ -2517,12 +2910,62 @@ function renderEnergy() {
   $("e-high").style.width = (S.audio.energy.high*100).toFixed(0) + "%";
 }
 
+function renderLooks() {
+  const box = $("looks-list"); if (!box) return;
+  box.innerHTML = "";
+  (S.looks || []).forEach(lk => {
+    const ref = "look:" + lk.id;
+    const row = el("div", "look-row" + (S.lighting.scene === ref ? " on" : ""));
+    row.title = "Apply “" + lk.name + "” (uses the Scene fade)";
+    const sws = el("div", "look-sws");
+    (lk.fixtures || []).slice(0, 10).forEach(f => {
+      const k = (f.m == null ? 255 : f.m) / 255;
+      const d = el("span", "look-sw");
+      d.style.background = `rgb(${Math.round(f.r*k)},${Math.round(f.g*k)},${Math.round(f.b*k)})`;
+      sws.appendChild(d);
+    });
+    row.appendChild(sws);
+    row.appendChild(el("span", "look-name", escapeHtml(lk.name)));
+    const ren = el("button", "icon-btn", `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3l4 4L8 20l-5 1 1-5L17 3z"/></svg>`);
+    ren.title = "Rename";
+    ren.onclick = (e) => {
+      e.stopPropagation();
+      const nm = prompt("Rename look", lk.name);
+      if (nm && nm.trim()) { lk.name = nm.trim().slice(0, 32); send("rename_look", { id: lk.id, name: lk.name }); renderLooks(); }
+    };
+    const del = el("button", "icon-btn", `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7h12M9 7V5h6v2M8 7l1 12h6l1-12"/></svg>`);
+    del.title = "Delete";
+    del.onclick = (e) => {
+      e.stopPropagation();
+      S.looks = S.looks.filter(x => x.id !== lk.id);
+      if (!send("delete_look", { id: lk.id })) renderLooks();
+    };
+    row.appendChild(ren); row.appendChild(del);
+    row.onclick = () => setScene(ref);
+    box.appendChild(row);
+  });
+}
+
 function renderLightingControls() {
   document.querySelectorAll("#scene-grid .scene-btn").forEach(b =>
     b.classList.toggle("on", b.dataset.scene === S.lighting.scene));
+  renderLooks();
   $("chase-ctl").style.display = S.lighting.scene === "chase" ? "block" : "none";
+  const eff = S.lighting.effect || { type: "none", rate: 1, depth: 0.6 };
+  document.querySelectorAll("#fx-grid .scene-btn").forEach(b =>
+    b.classList.toggle("on", b.dataset.fx === eff.type));
+  document.querySelectorAll("#fx-rate button").forEach(b =>
+    b.classList.toggle("on", parseFloat(b.dataset.rate) === eff.rate));
+  $("fx-depth").value = Math.round((eff.depth != null ? eff.depth : 0.6) * 100);
+  $("fx-depth-val").textContent = Math.round((eff.depth != null ? eff.depth : 0.6) * 100) + "%";
   $("brightness").value = S.lighting.brightness;
   $("bright-val").textContent = S.lighting.brightness;
+  const fd = S.lighting.fade != null ? S.lighting.fade : 0.5;
+  $("fade-time").value = fd;
+  $("fade-val").textContent = fd + "s";
+  const gm = S.lighting.master != null ? S.lighting.master : 255;
+  $("grand-master").value = gm;
+  $("gm-val").textContent = Math.round(gm / 255 * 100) + "%";
   $("color-pick").value = rgbToHex(S.lighting.color);
   const count = S.patch.length || S.lighting.num_fixtures;
   document.querySelectorAll("#count-pills button").forEach(b =>
@@ -2585,8 +3028,12 @@ function renderPortSelect() {
 }
 
 // ── Patch editor ────────────────────────────────────────────────────────────
-function patchProfiles() { return Object.keys(S.profiles || { RGBD: 4 }); }
-function profileWidth(p) { return (S.profiles && S.profiles[p]) || 4; }
+function patchProfiles() { return Object.keys(S.profiles || { RGBD: { width: 4 } }); }
+function profileWidth(p) {
+  const v = S.profiles && S.profiles[p];
+  return (v && v.width) || (typeof v === "number" ? v : 4);
+}
+function profileHasPT(p) { const v = S.profiles && S.profiles[p]; return !!(v && v.pt); }
 
 function renderPatchEditor() {
   // default-profile dropdown
@@ -2605,21 +3052,262 @@ function renderPatchEditor() {
     const row = el("div", "patch-row");
     row.innerHTML =
       `<span class="pnum">${i+1}</span>` +
-      `<span class="pswatch" style="background:${d.col}"></span>` +
-      `<input class="pbase" type="number" min="1" max="512" value="${fx.base}" title="DMX base address">` +
+      `<span class="pswatch" style="background:${d.col}; cursor:pointer;" title="This light's live output — click to paint it its own colour"></span>` +
+      `<div class="stepper"><input class="pbase" type="number" min="1" max="512" value="${fx.base}" title="DMX base address">` +
+        `<div class="step-btns"><button type="button" tabindex="-1" data-st="1" title="+1">&#9650;</button>` +
+        `<button type="button" tabindex="-1" data-st="-1" title="−1">&#9660;</button></div></div>` +
       `<select class="pprof" title="Fixture profile"></select>` +
       `<span class="prange">${fx.base}–${end}</span>` +
       `<button class="icon-btn" title="Remove">${ic("x")}</button>`;
     const profSel = row.querySelector(".pprof");
     patchProfiles().forEach(p => { const o = el("option"); o.value = o.textContent = p; if (p===fx.profile) o.selected = true; profSel.appendChild(o); });
+    row.querySelector(".pswatch").onclick = (e) => paintFixture(i, e);
     const baseInp = row.querySelector(".pbase");
-    baseInp.onchange = () => { const v = clamp(parseInt(baseInp.value,10)||1,1,512); S.patch[i].base = v; commitPatch(); };
-    profSel.onchange = () => { S.patch[i].profile = profSel.value; commitPatch(); };
-    row.querySelector("button").onclick = () => { S.patch.splice(i,1); commitPatch(); };
+    baseInp.onchange = () => {
+      const old = snapPatch();
+      S.patch[i].base = clamp(parseInt(baseInp.value,10)||1,1,512);
+      reflowPatch(i, old); commitPatch();
+    };
+    row.querySelectorAll(".step-btns button").forEach(sb => sb.onclick = () => {
+      const old = snapPatch();
+      S.patch[i].base = clamp((parseInt(baseInp.value,10)||1) + parseInt(sb.dataset.st,10), 1, 512);
+      reflowPatch(i, old); commitPatch();
+    });
+    profSel.onchange = () => {
+      const old = snapPatch();
+      S.patch[i].profile = profSel.value;
+      reflowPatch(i, old); commitPatch();
+    };
+    row.querySelector(".icon-btn").onclick = () => { S.patch.splice(i,1); commitPatch(); };
     list.appendChild(row);
   });
   const used = patch.reduce((a, fx) => Math.max(a, fx.base + profileWidth(fx.profile) - 1), 0);
   $("patch-summary").textContent = patch.length ? `${patch.length} fixtures · ch 1–${used}` : "no fixtures";
+  renderPositions();
+}
+
+// Per-fixture pan/tilt for fixtures whose profile moves. The sliders are the
+// LIVE head position (applying a look writes into them). Rows are rebuilt
+// only when the rig structure changes; otherwise values sync in place and a
+// slider that's mid-drag is never touched — rebuilding during a drag is what
+// kills the gesture.
+function renderPositions() {
+  const box = $("pos-box"), list = $("pos-list");
+  if (!box) return;
+  const movers = S.patch.map((fx, i) => ({ fx, i })).filter(x => profileHasPT(x.fx.profile));
+  box.style.display = movers.length ? "block" : "none";
+  if (!movers.length) { list.innerHTML = ""; list.dataset.key = ""; return; }
+  const key = movers.map(({ fx, i }) =>
+    i + (fx.swap ? "s" : "") + (fx.inv_p ? "p" : "") + (fx.inv_t ? "t" : "")).join(",");
+  if (list.dataset.key !== key) {
+    list.dataset.key = key;
+    list.innerHTML = "";
+    movers.forEach(({ fx, i }) => {
+      const row = el("div", "pos-row");
+      row.innerHTML =
+        `<span class="pnum">${i + 1}</span>` +
+        `<span class="pax">PAN</span><input type="range" class="ppan" min="0" max="255" value="${Math.round(fx.pan != null ? fx.pan : 128)}">` +
+        `<span class="pax">TILT</span><input type="range" class="ptilt" min="0" max="255" value="${Math.round(fx.tilt != null ? fx.tilt : 128)}">`;
+      const pan = row.querySelector(".ppan"), tilt = row.querySelector(".ptilt");
+      [pan, tilt].forEach(sl => {
+        sl.onpointerdown = () => { sl._drag = true; };
+        sl.onpointerup = sl.onpointercancel = () => { sl._drag = false; };
+        sl.ondblclick = () => { sl.value = 128; push(); commitPatch(); };   // double-click → centre
+      });
+      const push = () => {
+        S.patch[i].pan = parseInt(pan.value, 10);
+        S.patch[i].tilt = parseInt(tilt.value, 10);
+        send("set_position", { idx: i, pan: S.patch[i].pan, tilt: S.patch[i].tilt });
+      };
+      pan.oninput = push; tilt.oninput = push;
+      pan.onchange = tilt.onchange = () => { push(); commitPatch(); };   // release → persist
+      // mounting corrections — applied at DMX output only, looks stay logical
+      [["swap", "⇄", "Swap pan/tilt axes (fixture mounted sideways)"],
+       ["inv_p", "↔", "Invert pan"],
+       ["inv_t", "↕", "Invert tilt"]].forEach(([flag, sym, tip]) => {
+        const t = el("button", "pflag" + (fx[flag] ? " on" : ""), sym);
+        t.title = tip;
+        t.onclick = () => { S.patch[i][flag] = !S.patch[i][flag]; commitPatch(); };
+        row.appendChild(t);
+      });
+      list.appendChild(row);
+    });
+    return;
+  }
+  // structure unchanged → sync values in place (e.g. a look moved the heads)
+  movers.forEach(({ fx }, r) => {
+    const row = list.children[r]; if (!row) return;
+    const pan = row.querySelector(".ppan"), tilt = row.querySelector(".ptilt");
+    if (pan && !pan._drag) pan.value = Math.round(fx.pan != null ? fx.pan : 128);
+    if (tilt && !tilt._drag) tilt.value = Math.round(fx.tilt != null ? fx.tilt : 128);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Lighting guide tour — every control explained AND demonstrated live.
+//  State is snapshotted on start and fully restored when the tour ends.
+// ════════════════════════════════════════════════════════════════════════════
+let _tour = null;
+const LIGHT_TOUR = [
+  { t: ".stage", title: "The stage",
+    body: "Every circle is one real light, exactly as patched. The glow is its live colour and intensity; the cone below is its beam. <b>Moving heads</b> also get a white aim dot — left/right mirrors pan, up/down mirrors tilt — and their beam swings with pan and stretches with tilt. Under each can: its DMX address and live R·G·B values." },
+  { t: "#card-scene", title: "Scenes",
+    body: "A scene decides who picks the colours. <b>Reactive</b> listens to the music (bass→red, mids→green, highs→blue). <b>Chase</b> lights one fixture at a time, stepping on every beat. <b>Static</b> holds your chosen colour. <b>Off</b> is dark. Watch the stage: static → chase → reactive.",
+    demo: () => {
+      setLighting({ color: [255, 80, 0] });
+      setScene("static", 0);
+      _tour.timers.push(setTimeout(() => setScene("chase", 0), 1800));
+      _tour.timers.push(setTimeout(() => setScene("reactive", 0), 3600));
+    } },
+  { t: "#card-scene .looks-box", title: "Looks — your own scenes",
+    body: "Dial the stage into anything you like — scene, colours, effect, head positions — then hit <b>Capture</b> and name it. That exact state becomes a look you can apply here, drop into a song's lighting lane with a fade, tap live in the Performance view, or fire from a MIDI pedal. Looks travel with your .limeshow set." },
+  { t: "#card-effect", title: "Effects",
+    body: "Movement layered on top of any scene or look, locked to the click's tempo. <b>Pulse</b> breathes on the beat · <b>Wave</b> sends the pulse across the rig · <b>Strobe</b> flashes · <b>Rainbow</b> cycles hue · <b>Music</b> follows the live bass · <b>Flash</b> punches every beat · <b>Orbit</b> and <b>Sweep</b> move the heads by themselves around their home position. <b>Rate</b> is beats per cycle, <b>Depth</b> is how hard it hits. Watch: pulse → wave → rainbow.",
+    demo: () => {
+      setLighting({ color: [180, 60, 255] });
+      setScene("static", 0);
+      setEffect({ type: "pulse", rate: 1, depth: 0.85 });
+      _tour.timers.push(setTimeout(() => setEffect({ type: "wave", rate: 2, depth: 1 }), 2400));
+      _tour.timers.push(setTimeout(() => setEffect({ type: "rainbow", rate: 8, depth: 1 }), 4800));
+    } },
+  { t: "#card-color", title: "Color & master",
+    body: "<b>Colour</b> feeds the Static and Chase scenes. <b>Master brightness</b> scales the built-in scenes. <b>Scene fade</b> is the crossfade time every scene/look change uses — 0 snaps like a cue, 2s glides like a ballad. <b>Grand master</b> is the output-level dimmer: it scales <i>everything</i>, looks included — watch the whole stage dip and recover.",
+    demo: () => {
+      setEffect({ type: "none", rate: 1, depth: 0.6 });
+      setScene("static", 0); setLighting({ color: [255, 80, 0] });
+      let v = 255, dir = -1;
+      const iv = setInterval(() => {
+        v += dir * 14;
+        if (v <= 60) dir = 1;
+        if (v >= 255) { v = 255; clearInterval(iv); }
+        S.lighting.master = v;
+        send("set_lighting", { master: v });
+        renderLightingControls();
+      }, 70);
+      _tour.timers.push(iv);
+    } },
+  { t: "#card-energy", title: "Audio energy",
+    body: "The live audio analysis, split into bass / mid / high — this is exactly what the <b>Reactive</b> scene and the <b>Music</b> effect read. No mic configured? The built-in simulator feeds it so you can build looks anywhere. Stage is on Reactive right now — match the bars to the lights.",
+    demo: () => { setEffect({ type: "none", rate: 1, depth: 0.6 }); setScene("reactive", 0); } },
+  { t: "#card-patch", title: "Patch — mirror of the real rig",
+    body: "Each row is one physical light: its DMX <b>start address</b> (set on the fixture's own display) and its <b>profile</b> (what each channel means — RGBD = red, green, blue, dimmer). The 2/4/6/8 pills auto-lay a tidy rig; <b>+ Profile</b> lets you describe any rented fixture in seconds from the venue's patch sheet. Get address + profile right and what you see here is what the room does." },
+  { t: "#pos-box", title: "Position — moving heads",
+    when: () => S.patch.some(fx => profileHasPT(fx.profile)),
+    body: "Live pan/tilt per moving head — <b>double-click a slider to centre it</b>. Positions are captured into looks, and because look changes crossfade, switching looks sweeps the heads smoothly. The ⇄ ↔ ↕ toggles fix fixtures mounted sideways or upside-down without touching your looks. Watch fixture 1 paint a figure-eight.",
+    demo: () => {
+      const i = S.patch.findIndex(fx => profileHasPT(fx.profile));
+      if (i < 0) return;
+      let ph = 0;
+      const iv = setInterval(() => {
+        ph += 0.09;
+        const pan = Math.round(128 + Math.sin(ph) * 100);
+        const tilt = Math.round(128 + Math.sin(ph * 2) * 70);
+        S.patch[i].pan = pan; S.patch[i].tilt = tilt;
+        send("set_position", { idx: i, pan, tilt });
+        renderPositions();
+      }, 60);
+      _tour.timers.push(iv);
+    } },
+  { t: "#card-patch", title: "Position — moving heads",
+    when: () => !S.patch.some(fx => profileHasPT(fx.profile)),
+    body: "Patch a fixture with a moving-head profile (<b>MH-PTRGBD</b> or 16-bit <b>MH16-PTRGBD</b>) and a <b>Position</b> panel appears here with live pan/tilt sliders — double-click centres them. Head positions get captured into looks, so switching looks sweeps the heads between aimed spots automatically." },
+  { t: "#card-output", title: "DMX Output",
+    body: "Where the numbers go. <b>Simulator</b>: on-screen only — build the whole show with zero gear. <b>ENTTEC</b>: the ~$100 USB→XLR dongle, pick its serial port. <b>Art-Net</b>: DMX over the network — just the node's IP. The stream refreshes ~40×/sec continuously, and disconnecting always sends one blackout frame so fixtures never latch on." },
+  { t: ".stage", title: "Putting on the show",
+    body: "This console is the <i>sound-check</i> surface. During the show: the song editor's <b>lighting lane</b> changes scenes/looks on exact bars with fades in beats; the Performance view has a <b>Looks</b> row for live punches and the round <b>power button</b> — the mains switch that blacks out everything instantly while the automation keeps running underneath. Your settings are restored… now." },
+];
+
+function startLightTour() {
+  if (_tour) endLightTour();
+  _tour = {
+    timers: [],
+    snap: {
+      scene: S.lighting.scene,
+      color: (S.lighting.color || [255, 80, 0]).slice(),
+      brightness: S.lighting.brightness,
+      fade: S.lighting.fade,
+      master: S.lighting.master,
+      effect: Object.assign({}, S.lighting.effect || { type: "none", rate: 1, depth: 0.6 }),
+      pos: S.patch.map(f => ({ pan: f.pan, tilt: f.tilt })),
+    },
+  };
+  // NB: ids here must not collide with the welcome tour's #tour-next etc.,
+  // and buttons are wired via panel.querySelector, never getElementById.
+  document.querySelectorAll(".tour-panel").forEach(e => e.remove());
+  const p = el("div", "tour-panel"); p.id = "lt-panel";
+  document.body.appendChild(p);
+  ltStep(0);
+}
+function ltClearTimers() { if (_tour) { _tour.timers.forEach(t => { clearTimeout(t); clearInterval(t); }); _tour.timers = []; } }
+function ltStep(i) {
+  if (!_tour) return;
+  if (currentView !== "lighting") return endLightTour();
+  ltClearTimers();
+  document.querySelectorAll(".tour-hi").forEach(e => e.classList.remove("tour-hi"));
+  const steps = LIGHT_TOUR.filter(s => !s.when || s.when());
+  if (i >= steps.length) return endLightTour();
+  _tour.i = i;
+  const st = steps[i];
+  const target = document.querySelector(st.t);
+  if (target) { target.classList.add("tour-hi"); target.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  const p = $("lt-panel"); if (!p) return;
+  p.innerHTML =
+    `<div class="tour-title">${st.title} <span class="tour-n">${i + 1} / ${steps.length}</span></div>` +
+    `<div class="tour-body">${st.body}</div>` +
+    `<div class="tour-row">` +
+    (i > 0 ? `<button class="btn ghost sm" data-t="back">Back</button>` : "") +
+    `<span class="spacer"></span>` +
+    `<button class="btn ghost sm" data-t="end">End</button>` +
+    `<button class="btn primary sm" data-t="next">${i === steps.length - 1 ? "Finish" : "Next"}</button></div>`;
+  positionTourPanel(target);
+  p.querySelector('[data-t="next"]').onclick = () => ltStep(i + 1);
+  const tb = p.querySelector('[data-t="back"]'); if (tb) tb.onclick = () => ltStep(i - 1);
+  p.querySelector('[data-t="end"]').onclick = endLightTour;
+  if (st.demo) st.demo();
+}
+function positionTourPanel(target) {
+  const p = $("lt-panel"); if (!p) return;
+  const w = 340;
+  let x = 20, y = 20;
+  if (target) {
+    const r = target.getBoundingClientRect();
+    x = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2));
+    const ph = p.offsetHeight || 200;
+    y = r.bottom + 10;
+    if (y + ph > window.innerHeight - 10) y = Math.max(10, r.top - ph - 10);
+  }
+  p.style.left = x + "px"; p.style.top = y + "px";
+}
+function endLightTour() {
+  if (!_tour) return;
+  ltClearTimers();
+  document.querySelectorAll(".tour-hi").forEach(e => e.classList.remove("tour-hi"));
+  document.querySelectorAll(".tour-panel").forEach(e => e.remove());
+  const s = _tour.snap; _tour = null;
+  // put everything back exactly as it was
+  setLighting({ color: s.color, brightness: s.brightness, fade: s.fade, master: s.master });
+  setEffect(s.effect);
+  setScene(s.scene, 0);
+  s.pos.forEach((pp, i) => {
+    if (S.patch[i] && pp.pan != null) {
+      S.patch[i].pan = pp.pan; S.patch[i].tilt = pp.tilt;
+      send("set_position", { idx: i, pan: pp.pan, tilt: pp.tilt });
+    }
+  });
+  renderPatchEditor();
+  renderLightingControls();
+}
+
+// Editing one fixture pushes the addresses of the fixtures after it — but
+// only those that were laid back-to-back before the edit. Deliberate gaps
+// (1, 101, 201…) are left alone.
+function snapPatch() { return S.patch.map(fx => ({ base: fx.base, profile: fx.profile })); }
+function reflowPatch(i, old) {
+  for (let j = i + 1; j < S.patch.length; j++) {
+    const contiguous = old[j].base === old[j-1].base + profileWidth(old[j-1].profile);
+    if (!contiguous) break;
+    S.patch[j].base = clamp(S.patch[j-1].base + profileWidth(S.patch[j-1].profile), 1, 512);
+  }
 }
 
 function commitPatch() {
@@ -2657,7 +3345,6 @@ function renderPerfHeader() {
     (song ? `<span style="color:var(--txt-faint)">End of set</span>` : "");
 }
 // Standard band calls — always on the pad, spoken (tempo-synced) on the next "1"
-let _preBlackoutScene = null;   // scene to restore when un-blacking out
 const PERF_CALLS = [
   ["Count in", "count in"],          // smart: expands per current time signature
   ["Intro", "Intro"],
@@ -2691,18 +3378,44 @@ function renderPerfCues() {
     '<div class="pad-label">Calls — spoken on the next 1</div>');
   const row2 = el("div", "pad-row calls");
   PERF_CALLS.forEach(([lab, text]) => row2.appendChild(makePerfCue(lab, text)));
-  const lightsOff = S.lighting && S.lighting.scene === "off";
-  const bk = el("button", "perf-cue " + (lightsOff ? "lights" : "blackout"),
-    ic("power") + (lightsOff ? "Lights on" : "Blackout"));
-  bk.title = lightsOff ? "Bring the lights back (restores the previous scene)" : "Kill all lights instantly";
+  // Lights master switch — THE on/off for the stage. Scene/look/lane config
+  // keeps running underneath; this only opens or kills the output. Instant.
+  const isOn = !(S.lighting && S.lighting.on === false);
+  // icon only — the state change is announced by voice, not words
+  const bk = el("button", "perf-cue power " + (isOn ? "is-on" : "is-off"), ic("power"));
+  bk.style.gridColumn = "span 2";   // double-width switch
+  bk.title = isOn ? "Lights ON — running per configuration. Tap to black out."
+                  : "Lights OFF. Tap to bring the stage up.";
   bk.onclick = () => {
-    if (S.lighting.scene === "off") { setScene(_preBlackoutScene || "reactive"); toast("Lights on"); }
-    else { _preBlackoutScene = S.lighting.scene; setScene("off"); toast("Blackout"); }
+    S.lighting.on = !isOn;
+    if (!send("set_lighting", { on: S.lighting.on })) localRecomputeDMX();
+    speakNow(S.lighting.on ? "mains on" : "mains off");
     renderPerfCues();
   };
   row2.appendChild(bk);
   g2.appendChild(row2);
   box.appendChild(g2);
+
+  // Looks quick-switch — punch any captured look live, with the scene fade.
+  if (S.looks && S.looks.length) {
+    const g3 = el("div", "pad-group",
+      '<div class="pad-label">Looks — applied with the scene fade</div>');
+    const row3 = el("div", "pad-row");
+    S.looks.forEach(lk => {
+      const ref = "look:" + lk.id;
+      const on = S.lighting.scene === ref;
+      const c = lightColor(ref);
+      const b = el("button", "perf-cue look" + (on ? " on" : ""), escapeHtml(lk.name));
+      b.style.borderColor = `rgba(${c},${on ? .9 : .35})`;
+      b.style.color = `rgb(${c})`;
+      if (on) b.style.background = `rgba(${c},.12)`;
+      b.title = on ? "Active look" : `Crossfade to “${lk.name}”`;
+      b.onclick = () => { setScene(ref); renderPerfCues(); };
+      row3.appendChild(b);
+    });
+    g3.appendChild(row3);
+    box.appendChild(g3);
+  }
 }
 function makePerfCue(label, text) {
   const same = String(label).trim().toLowerCase() === String(text).trim().toLowerCase()
@@ -2717,6 +3430,301 @@ function makePerfCue(label, text) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  Mixer — XR18 remote: live strips (sends-on-faders) + per-song mix scenes
+// ════════════════════════════════════════════════════════════════════════════
+let M = {};        // mixer param cache (mirror of the desk / server sim)
+let mxBus = 0;     // 0 = Main (LR); 1..6 = bus views (IEMs + click)
+
+const mxPad = (n) => String(n).padStart(2, "0");
+function mxChAddr(c)  { return mxBus === 0 ? `/ch/${mxPad(c)}/mix/fader` : `/ch/${mxPad(c)}/mix/${mxPad(mxBus)}/level`; }
+function mxRtnAddr()  { return mxBus === 0 ? "/rtn/aux/mix/fader" : `/rtn/aux/mix/${mxPad(mxBus)}/level`; }
+function mxMastAddr() { return mxBus === 0 ? "/lr/mix/fader" : `/bus/${mxBus}/mix/fader`; }
+function faderDb(f) {
+  let d;
+  if (f >= 0.5) d = f * 40 - 30;
+  else if (f >= 0.25) d = f * 80 - 50;
+  else if (f >= 0.0625) d = f * 160 - 70;
+  else d = f * 480 - 90;
+  return d <= -89 ? "−∞" : (d > 0 ? "+" : "") + d.toFixed(1);
+}
+function mxSet(address, value) {
+  M[address] = value;
+  send("mixer_set", { address, value });
+}
+
+function renderMixer() {
+  const mx = S.mixer || {};
+  // connection (compact: LED + Connect in the bus row)
+  $("mx-led").className = "led" + (mx.connected ? " on" : "");
+  $("mx-led-txt").textContent = mx.connected ? "live" : "sim";
+  const lw = $("mx-led-wrap"); if (lw) lw.title = mx.status || "";
+  $("mx-connect").textContent = mx.connected ? "XR18 ✓" : "Connect";
+  // OUT selector — Main + the 5 IEM buses. Bus 6 (click) is configured from
+  // the header's Outputs button + Performance, not here.
+  const seg = $("mx-bus");
+  const busNames = mx.bus_names || ["Bus 1","Bus 2","Bus 3","Bus 4","Bus 5","Bus 6"];
+  const labels = ["Main"].concat(busNames.slice(0, 5));
+  if (seg.children.length !== labels.length) {
+    seg.innerHTML = "";
+    labels.forEach((nm, i) => {
+      const b = el("button", null, escapeHtml(nm)); b.dataset.bus = i;
+      b.onclick = () => { mxBus = i; renderMixer(); };
+      seg.appendChild(b);
+    });
+  } else {
+    labels.forEach((nm, i) => { seg.children[i].innerHTML = escapeHtml(nm); });
+  }
+  seg.querySelectorAll("button").forEach(b => b.classList.toggle("on", parseInt(b.dataset.bus, 10) === mxBus));
+  // bottom status: where every console move lands
+  const nb = $("mx-nowbar");
+  if (nb) {
+    const song = (S.active_song_idx != null) ? S.setlist[S.active_song_idx] : null;
+    nb.innerHTML = song
+      ? `<span class="dot"></span><span>Mix → <b>${escapeHtml(song.title || "Untitled")}</b> — every move auto-saves into this song and recalls when it loads.</span>`
+      : `<span class="dot idle"></span><span><b style="color:var(--txt)">Free mix</b> — moves are live on the desk but belong to no song. Shape something, save it as a preset.</span>`;
+  }
+  // presets as pads — tap to apply (becomes the playing song's mix)
+  const pr = $("mx-preset-row");
+  if (pr) {
+    pr.innerHTML = "";
+    (mx.scenes || []).forEach(sc => {
+      const b = el("button", "perf-cue look", escapeHtml(sc.name));
+      b.title = "Apply “" + sc.name + "” — fader glide" +
+                (S.active_song_idx != null ? "; becomes the playing song's mix" : " (free mix)");
+      b.onclick = () => { send("mixer_apply", { id: sc.id }); toast("Mix → " + sc.name); };
+      b.oncontextmenu = (e) => {
+        e.preventDefault();
+        if (confirm("Delete preset “" + sc.name + "”?")) send("mixer_delete", { id: sc.id });
+      };
+      pr.appendChild(b);
+    });
+    const sv = el("button", "perf-cue look", "+ Save preset");
+    sv.style.color = "var(--txt-dim)";
+    sv.title = "Save the current mix (whatever the desk sounds like now) as a reusable preset";
+    sv.onclick = () => {
+      const nm = prompt("Preset name", "Preset " + ((mx.scenes || []).length + 1));
+      if (nm == null) return;
+      if (!send("mixer_capture", { name: nm.trim() })) toast("Presets need the backend running");
+    };
+    pr.appendChild(sv);
+  }
+  renderMixerStrips(true);
+  renderMxDetail();
+}
+
+// ── Channel detail: gain / pan / reverb / EQ for the selected strip ─────────
+let mxSel = "lr";   // 1..N = channel, "rtn" = tracks, "lr" = main — always one selected
+const mxGainAddr = () => `/headamp/${mxPad(mxSel)}/gain`;
+const mxPanAddr  = () => mxSel === "rtn" ? "/rtn/aux/mix/pan" : `/ch/${mxPad(mxSel)}/mix/pan`;
+const mxRevAddr  = () => mxSel === "rtn" ? "/rtn/aux/mix/07/level" : `/ch/${mxPad(mxSel)}/mix/07/level`;
+const mxEqAddr   = (b, p) => mxSel === "lr" ? `/lr/eq/${b}/${p}` : `/ch/${mxPad(mxSel)}/eq/${b}/${p}`;
+const mxEqOnAddr = () => mxSel === "lr" ? "/lr/eq/on" : `/ch/${mxPad(mxSel)}/eq/on`;
+const mxEqBands  = () => mxSel === "lr" ? 6 : 4;     // the LR bus has a 6-band EQ
+const mval = (a, d) => (M[a] != null ? M[a] : d);
+const gainDb = (v) => ((-12 + 72 * v) >= 0 ? "+" : "") + (-12 + 72 * v).toFixed(1) + " dB";
+const panLbl = (v) => { const p = Math.round((v - 0.5) * 200); return p === 0 ? "C" : (p < 0 ? "L" + (-p) : "R" + p); };
+const eqHz = (v) => { const hz = 20 * Math.pow(1000, v); return hz >= 1000 ? (hz / 1000).toFixed(1) + "k" : Math.round(hz) + ""; };
+
+// rotary knob: drag up/down to turn, double-click to reset (when given one)
+function makeKnob(label, opts) {
+  const k = el("div", "mx-knob");
+  k.innerHTML = `<div class="kn"><div class="kn-ind"></div></div>` +
+                `<div class="kn-val"></div><div class="kn-lbl">${label}</div>`;
+  const kn = k.querySelector(".kn");
+  k._paint = (v) => {
+    kn.querySelector(".kn-ind").style.transform = `rotate(${(-135 + v * 270).toFixed(1)}deg)`;
+    k.querySelector(".kn-val").textContent = opts.fmt(v);
+  };
+  kn.title = opts.title || "";
+  kn.onpointerdown = (e) => { e.preventDefault(); kn._y = e.clientY; kn._v = opts.get(); try { kn.setPointerCapture(e.pointerId); } catch (err) {} };
+  kn.onpointermove = (e) => {
+    if (kn._y == null) return;
+    const v = Math.max(0, Math.min(1, kn._v + (kn._y - e.clientY) / 150));
+    opts.set(v); k._paint(v);
+  };
+  kn.onpointerup = kn.onpointercancel = () => { kn._y = null; };
+  if (opts.def != null) kn.ondblclick = () => { opts.set(opts.def); k._paint(opts.def); };
+  k._dragging = () => kn._y != null;
+  return k;
+}
+
+let _mxKnobs = null;
+function ensureMxKnobs() {
+  if (_mxKnobs) return _mxKnobs;
+  const box = $("mx-knobs"); if (!box) return null;
+  _mxKnobs = {
+    gain: makeKnob("Gain", { get: () => mval(mxGainAddr(), 0.3), set: (v) => mxSet(mxGainAddr(), v),
+                             fmt: gainDb, title: "Preamp — live only, never recalled by scenes" }),
+    pan:  makeKnob("Pan",  { get: () => mval(mxPanAddr(), 0.5), set: (v) => mxSet(mxPanAddr(), v),
+                             fmt: panLbl, def: 0.5, title: "Double-click to centre" }),
+    rev:  makeKnob("Reverb", { get: () => mval(mxRevAddr(), 0), set: (v) => mxSet(mxRevAddr(), v),
+                               fmt: (v) => Math.round(v * 100) + "%", def: 0, title: "FX1 send — double-click for dry" }),
+  };
+  box.appendChild(_mxKnobs.gain); box.appendChild(_mxKnobs.pan); box.appendChild(_mxKnobs.rev);
+  return _mxKnobs;
+}
+
+function renderMxDetail() {
+  const box = $("mx-detail"); if (!box) return;
+  if (mxSel == null) mxSel = "lr";          // the panel is always populated
+  const kn = ensureMxKnobs(); if (!kn) return;
+  const chs = (S.mixer && S.mixer.ch_names) || [];
+  const isCh = mxSel !== "rtn" && mxSel !== "lr";
+  $("mx-det-name").textContent =
+    mxSel === "lr" ? "Main LR" : isCh ? (chs[mxSel - 1] || "Ch " + mxSel) : "Tracks · Click (USB)";
+  kn.gain.style.display = isCh ? "" : "none";
+  kn.pan.style.display = mxSel === "lr" ? "none" : "";
+  kn.rev.style.display = mxSel === "lr" ? "none" : "";
+  $("mx-eq-box").style.display = mxSel === "rtn" ? "none" : "";
+  if (isCh && !kn.gain._dragging()) kn.gain._paint(mval(mxGainAddr(), 0.3));
+  if (mxSel !== "lr") {
+    if (!kn.pan._dragging()) kn.pan._paint(mval(mxPanAddr(), 0.5));
+    if (!kn.rev._dragging()) kn.rev._paint(mval(mxRevAddr(), 0));
+  }
+  if (mxSel !== "rtn") {
+    const on = mval(mxEqOnAddr(), 1);
+    $("mx-eq-on").className = "mx-mute " + (on ? "live" : "off");
+    $("mx-eq-on").textContent = on ? "EQ ON" : "EQ OFF";
+    renderMxEq();
+  }
+}
+
+const eqFDef = (b) => (mxSel === "lr"
+  ? { 1: 0.08, 2: 0.26, 3: 0.42, 4: 0.58, 5: 0.74, 6: 0.9 }
+  : { 1: 0.12, 2: 0.4, 3: 0.6, 4: 0.85 })[b] || 0.5;
+// frequency gridlines: v = log1000(hz/20) — dense scale, every line labelled
+const EQ_GRID = [[50, "50"], [100, "100"], [200, "200"], [500, "500"],
+                 [1000, "1k"], [2000, "2k"], [5000, "5k"], [10000, "10k"]];
+function renderMxEq() {
+  const svg = $("mx-eq");
+  if (!svg || mxSel == null || mxSel === "rtn" || svg._drag) return;
+  const W = svg.clientWidth || 220, H = 84;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  let html = "";
+  EQ_GRID.forEach(([hz, lb], gi) => {
+    const x = (Math.log(hz / 20) / Math.log(1000)) * W;
+    const major = hz === 100 || hz === 1000 || hz === 10000;
+    html += `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${H}" stroke="rgba(255,255,255,${major ? ".1" : ".05"})"/>`;
+    html += `<text x="${(x + 2).toFixed(1)}" y="${H - 3}" fill="rgba(255,255,255,${major ? ".3" : ".18"})" font-size="7" font-family="monospace">${lb}</text>`;
+  });
+  // ±6 dB guides + 0 dB midline
+  [[0.7, .05], [0.5, .12], [0.3, .05]].forEach(([fy, op]) => {
+    html += `<line x1="0" y1="${(H * fy).toFixed(1)}" x2="${W}" y2="${(H * fy).toFixed(1)}" stroke="rgba(255,255,255,${op})"/>`;
+  });
+  const pts = [];
+  for (let b = 1; b <= mxEqBands(); b++) {
+    const f = mval(mxEqAddr(b, "f"), eqFDef(b)), g = mval(mxEqAddr(b, "g"), 0.5);
+    pts.push({ b, x: f * W, y: H / 2 - (g - 0.5) * (H - 16) });
+  }
+  let d = `M 0 ${H / 2}`;
+  pts.slice().sort((a, b) => a.x - b.x).forEach(p => { d += ` L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`; });
+  d += ` L ${W} ${H / 2}`;
+  html += `<path d="${d}" fill="none" stroke="var(--lime)" stroke-width="1.5" opacity=".75"/>`;
+  pts.forEach(p => {
+    html += `<circle data-band="${p.b}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6.5" ` +
+            `fill="rgba(182,255,58,.22)" stroke="var(--lime)" stroke-width="1.5" style="cursor:grab"/>`;
+  });
+  svg.innerHTML = html;
+  svg.querySelectorAll("circle").forEach(c => {
+    c.onpointerdown = (e) => {
+      e.preventDefault();
+      svg._drag = parseInt(c.dataset.band, 10);
+      try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+    };
+  });
+  svg.onpointermove = (e) => {
+    if (!svg._drag) return;
+    const rc = svg.getBoundingClientRect();
+    const fv = Math.max(0, Math.min(1, (e.clientX - rc.left) / rc.width));
+    const gv = Math.max(0, Math.min(1, 0.5 + (H / 2 - (e.clientY - rc.top) * (H / rc.height)) / (H - 16)));
+    mxSet(mxEqAddr(svg._drag, "f"), fv);
+    mxSet(mxEqAddr(svg._drag, "g"), gv);
+    const band = svg._drag; svg._drag = 0; renderMxEq(); svg._drag = band;
+  };
+  svg.onpointerup = svg.onpointercancel = () => { svg._drag = 0; renderMxEq(); };
+}
+
+// console-style dB markers behind each fader (inverse of the X Air taper)
+function dbToFader(db) {
+  if (db >= -10) return (db + 30) / 40;
+  if (db >= -30) return (db + 50) / 80;
+  if (db >= -60) return (db + 70) / 160;
+  return (db + 90) / 480;
+}
+function faderScaleHtml() {
+  const marks = [[10, "+10"], [5, ""], [0, "0"], [-5, ""], [-10, "-10"],
+                 [-20, "-20"], [-30, "-30"], [-45, ""], [-60, "-60"]];
+  return '<div class="mx-scale">' + marks.map(([db, lb]) => {
+    const top = ((1 - dbToFader(db)) * 100).toFixed(2) + "%";
+    return `<i class="${db === 0 ? "zero" : ""}" style="top:${top}"></i>` +
+           (lb ? `<b style="top:${top}">${lb}</b>` : "");
+  }).join("") + "</div>";
+}
+
+function renderMixerStrips(rebuild) {
+  const mx = S.mixer || {};
+  const wrap = $("mx-strips"); if (!wrap) return;
+  const chs = mx.ch_names || [];
+  const busNames = mx.bus_names || [];
+  const defs = chs.map((nm, i) => ({ name: nm, addr: mxChAddr(i + 1), mute: `/ch/${mxPad(i + 1)}/mix/on`, ch: i }))
+    .concat([{ name: "Tracks", addr: mxRtnAddr(), mute: "/rtn/aux/mix/on" },
+             { name: mxBus === 0 ? "Main Out" : ((busNames[mxBus - 1] || "Bus") + " Out"),
+               addr: mxMastAddr(), mute: mxBus === 0 ? "/lr/mix/on" : null, master: true }]);
+  const key = mxBus + "|" + defs.length;
+  if (rebuild && wrap.dataset.key !== key) {
+    wrap.dataset.key = key;
+    wrap.innerHTML = "";
+    defs.forEach((d, di) => {
+      const st = el("div", "mx-strip" + (d.master ? " master" : ""));
+      st.dataset.sel = d.master ? (mxBus === 0 ? "lr" : "")
+                                : (di < chs.length ? String(di + 1) : "rtn");
+      st.innerHTML =
+        `<div class="mx-name" title="${escapeAttr(d.name)} — click for gain · pan · reverb · EQ${d.ch != null ? " · double-click to rename" : ""}">${escapeHtml(String(d.name).slice(0, 8))}</div>` +
+        `<div class="mx-db" data-db></div>` +
+        `<div class="mx-fader-box">${faderScaleHtml()}<input type="range" class="mx-fader" min="0" max="1" step="0.001" data-addr="${escapeAttr(d.addr)}"></div>` +
+        (d.mute ? `<button class="mx-mute" data-mute="${escapeAttr(d.mute)}">MUTE</button>` : `<div style="height:22px"></div>`);
+      const f = st.querySelector(".mx-fader");
+      f.onpointerdown = () => { f._drag = true; };
+      f.onpointerup = f.onpointercancel = () => { f._drag = false; };
+      f.oninput = () => {
+        mxSet(f.dataset.addr, parseFloat(f.value));
+        st.querySelector("[data-db]").textContent = faderDb(parseFloat(f.value));
+      };
+      f.ondblclick = () => { f.value = 0.75; f.oninput(); };   // unity-ish reset
+      const mb = st.querySelector(".mx-mute");
+      if (mb) mb.onclick = () => {
+        const on = (M[mb.dataset.mute] != null ? M[mb.dataset.mute] : 1) ? 0 : 1;
+        M[mb.dataset.mute] = on;
+        send("mixer_set", { address: mb.dataset.mute, value: on });
+        mb.classList.toggle("muted", !on);
+      };
+      if (st.dataset.sel) st.querySelector(".mx-name").onclick = () => {
+        const s = st.dataset.sel;
+        mxSel = (s === "rtn" || s === "lr") ? s : parseInt(s, 10);
+        renderMixerStrips(false); renderMxDetail();
+      };
+      if (d.ch != null) st.querySelector(".mx-name").ondblclick = () => {
+        const nm = prompt("Rename IN " + (d.ch + 1) + " (max 8 letters)", chs[d.ch] || "");
+        if (nm && nm.trim()) send("mixer_name", { idx: d.ch, name: nm.trim().slice(0, 8) });
+      };
+      wrap.appendChild(st);
+    });
+  }
+  // value sync (skip any fader mid-drag)
+  wrap.querySelectorAll(".mx-strip").forEach(st => {
+    const f = st.querySelector(".mx-fader");
+    const v = M[f.dataset.addr] != null ? M[f.dataset.addr] : 0.75;
+    if (!f._drag) f.value = v;
+    st.querySelector("[data-db]").textContent = faderDb(parseFloat(f._drag ? f.value : v));
+    const mb = st.querySelector(".mx-mute");
+    if (mb) mb.classList.toggle("muted", !(M[mb.dataset.mute] != null ? M[mb.dataset.mute] : 1));
+    st.classList.toggle("sel", !!st.dataset.sel &&
+      ((st.dataset.sel === "rtn" || st.dataset.sel === "lr")
+        ? mxSel === st.dataset.sel : mxSel === parseInt(st.dataset.sel, 10)));
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  View switching
 // ════════════════════════════════════════════════════════════════════════════
 function switchView(name) {
@@ -2724,12 +3732,14 @@ function switchView(name) {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === name));
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   $("view-" + name).classList.add("active");
+  if (name === "mixer") send("mixer_query", {});   // pull current desk levels
   renderAll();
 }
 
 function renderAll() {
   if (currentView === "setlist") renderSetlist();
   if (currentView === "lighting") { renderLightingControls(); renderFixtures(); renderEnergy(); }
+  if (currentView === "mixer") { renderMixer(); renderSetRail($("mx-set")); }
   if (currentView === "perf") { renderPerfHeader(); renderPerfSetlist(); renderPerfTimeline(); renderPerfCues(); renderPerfStrip(); }
   syncTransportLight();
 }
@@ -2823,10 +3833,14 @@ function wire() {
   $("out-btn").onclick = openOutModal;
   $("out-close").onclick = () => $("out-modal").classList.remove("open");
   $("out-modal").addEventListener("click", (e) => { if (e.target === $("out-modal")) $("out-modal").classList.remove("open"); });
-  $("click-out-dev").onchange = () => {
+  const pushClickOut = () => {
     const v = $("click-out-dev").value;
-    send("set_click_output", { device: v === "" ? null : parseInt(v, 10) });
+    const ch = $("click-out-ch").value;
+    send("set_click_output", { device: v === "" ? null : parseInt(v, 10),
+                               channel: ch === "" ? null : parseInt(ch, 10) });
   };
+  $("click-out-dev").onchange = () => { fillClickChannels(); pushClickOut(); };
+  $("click-out-ch").onchange = pushClickOut;
   $("tempo-chip").onclick = applyDetectedTempo;
   $("autofollow").onclick = toggleAutofollow;
 
@@ -2907,10 +3921,50 @@ function wire() {
 
   // lighting
   document.querySelectorAll("#scene-grid .scene-btn").forEach(b => b.onclick = () => setScene(b.dataset.scene));
+  $("look-capture").onclick = () => {
+    const nm = prompt("Name this look", "Look " + ((S.looks || []).length + 1));
+    if (nm == null) return;
+    if (!send("save_look", { name: nm.trim() })) toast("Looks need the backend running");
+  };
   $("chase-advance").onclick = advanceChase;
+  document.querySelectorAll("#fx-grid .scene-btn").forEach(b => b.onclick = () => setEffect({ type: b.dataset.fx }));
+  document.querySelectorAll("#fx-rate button").forEach(b => b.onclick = () => setEffect({ rate: parseFloat(b.dataset.rate) }));
+  $("fx-depth").oninput = (e) => { $("fx-depth-val").textContent = e.target.value + "%"; setEffect({ depth: parseInt(e.target.value, 10) / 100 }); };
   $("brightness").oninput = (e) => { S.lighting.brightness = parseInt(e.target.value,10); $("bright-val").textContent = e.target.value; setLighting({ brightness: S.lighting.brightness }); };
+  $("fade-time").oninput = (e) => { S.lighting.fade = parseFloat(e.target.value); $("fade-val").textContent = e.target.value + "s"; setLighting({ fade: S.lighting.fade }); };
+  $("grand-master").oninput = (e) => { S.lighting.master = parseInt(e.target.value, 10); $("gm-val").textContent = Math.round(S.lighting.master / 255 * 100) + "%"; setLighting({ master: S.lighting.master }); };
+  $("light-guide").onclick = startLightTour;
+
+  // mixer
+  $("mx-connect").onclick = () => {
+    const host = prompt("XR18 IP address\n(AP mode: 192.168.1.1 · otherwise check your router / X Air Edit)",
+                        (S.mixer && S.mixer.host) || "192.168.1.1");
+    if (host == null) return;
+    if (!send("mixer_connect", { host: host.trim() })) toast("The mixer link needs the backend running");
+  };
+  $("mx-eq-on").onclick = () => {
+    if (mxSel == null || mxSel === "rtn") return;
+    const on = mval(mxEqOnAddr(), 1) ? 0 : 1;
+    mxSet(mxEqOnAddr(), on);
+    renderMxDetail();
+  };
+  // double-click any lighting slider → reset to its default
+  [["brightness", 255], ["fade-time", 0.5], ["grand-master", 255], ["fx-depth", 60], ["out-fps", 40]].forEach(([id, v]) => {
+    const e = $(id); if (!e) return;
+    e.ondblclick = () => { e.value = v; e.dispatchEvent(new Event("input", { bubbles: true })); };
+  });
   $("color-pick").oninput = (e) => setLighting({ color: hexToRgb(e.target.value) });
   document.querySelectorAll("#count-pills button").forEach(b => b.onclick = () => autoPatch(parseInt(b.dataset.n,10)));
+  $("profile-add").onclick = () => {
+    const name = prompt("Profile name (e.g. the fixture model)", "");
+    if (!name || !name.trim()) return;
+    const slots = prompt(
+      "Channel layout, one code per channel in order, comma-separated:\n" +
+      "r g b = colour · w = white · d = dimmer · p t = pan/tilt · pf tf = fine · - = skip",
+      "p,t,r,g,b,d");
+    if (!slots) return;
+    if (!send("save_profile", { name: name.trim(), slots: slots })) toast("Profiles need the backend running");
+  };
 
   // patch
   $("patch-add").onclick = () => {
@@ -2948,17 +4002,34 @@ function wire() {
 }
 
 // ── Audio capture toggle (server-driven; UI reflects state) ─────────────────
+let _outDevices = [];
+function fillClickChannels() {
+  const dv = $("click-out-dev").value;
+  const box = $("click-out-ch-box"), chSel = $("click-out-ch");
+  const dev = _outDevices.find(d => String(d.idx) === dv);
+  // a channel choice only makes sense on a multi-out interface
+  if (!dev || (dev.channels || 2) <= 2) { box.style.display = "none"; chSel.innerHTML = ""; return; }
+  box.style.display = "";
+  chSel.innerHTML = '<option value="">Channel 1 (default)</option>';
+  for (let c = 2; c <= dev.channels; c++) {
+    const o = el("option"); o.value = c; o.textContent = "Channel " + c;
+    chSel.appendChild(o);
+  }
+  chSel.value = (S.click_out && S.click_out.channel != null) ? String(S.click_out.channel) : "";
+}
 function openOutModal() {
   const sel = $("click-out-dev");
   fetch("/api/output/audio-devices").then(r => r.json()).then(d => {
+    _outDevices = d.devices || [];
     sel.innerHTML = '<option value="">Same as everything (default output)</option>';
-    (d.devices || []).forEach(dev => {
+    _outDevices.forEach(dev => {
       const o = el("option");
       o.value = dev.idx;
-      o.textContent = dev.name + (dev.default ? "  ·  system default" : "");
+      o.textContent = dev.name + " · " + (dev.channels || 2) + " out" + (dev.default ? " · system default" : "");
       sel.appendChild(o);
     });
     sel.value = (S.click_out && S.click_out.device != null) ? String(S.click_out.device) : "";
+    fillClickChannels();
     const hint = $("click-out-hint");
     if (!d.available)
       hint.textContent = "Audio backend not installed on the server — see requirements-optional.txt (pip install pyaudio).";
@@ -3134,7 +4205,11 @@ function renderMidiList() {
       actCell.appendChild(inp);
     } else if (spec.param === "scene") {
       const ssel = el("select", "pparam");
-      spec.options.forEach(o => { const op = el("option"); op.value = op.textContent = o; if (o===act.scene) op.selected = true; ssel.appendChild(op); });
+      const opts = spec.options.concat((S.looks || []).map(lk => "look:" + lk.id));
+      opts.forEach(o => {
+        const op = el("option"); op.value = o; op.textContent = sceneLabel(o);
+        if (o === act.scene) op.selected = true; ssel.appendChild(op);
+      });
       ssel.onchange = () => { b.action = { type: "scene", scene: ssel.value }; commitMidi(); };
       actCell.appendChild(ssel);
     }
@@ -3210,6 +4285,24 @@ function beatAccent(beat, sig) {
 const sigLbl = (s) => SIG_LABEL[s] || (s + "/4");
 const SEC_COLORS = ["182,255,58", "255,122,26", "77,155,255", "58,209,122", "212,83,126", "199,255,102"];
 const LIGHT_COLORS = { reactive: "192,140,255", chase: "255,110,199", static: "94,222,212", off: "120,126,140" };
+const isLookRef = (sc) => typeof sc === "string" && sc.indexOf("look:") === 0;
+const lookById = (sc) => (S.looks || []).find(x => "look:" + x.id === sc);
+function sceneLabel(sc) {
+  if (isLookRef(sc)) { const lk = lookById(sc); return lk ? lk.name : "look"; }
+  return sc;
+}
+function lightColor(sc) {
+  if (LIGHT_COLORS[sc]) return LIGHT_COLORS[sc];
+  const lk = isLookRef(sc) && lookById(sc);
+  if (lk && lk.fixtures && lk.fixtures.length) {
+    let r = 0, g = 0, b = 0;
+    lk.fixtures.forEach(f => { const k = (f.m == null ? 255 : f.m) / 255; r += f.r * k; g += f.g * k; b += f.b * k; });
+    const n = lk.fixtures.length;
+    r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n);
+    if (r + g + b > 40) return r + "," + g + "," + b;   // too dark to read → fallback
+  }
+  return "192,140,255";
+}
 
 function migrateSong(song) {
   if (!song || typeof song !== "object") return song;
@@ -3218,13 +4311,16 @@ function migrateSong(song) {
   song.tempo_map.sort((a, b) => (a.bar || 1) - (b.bar || 1));
   song.tempo_map[0].bar = 1;
   song.light_map = (song.light_map || [])
-    .filter(l => SCENES.includes(l.scene))
-    .map(l => ({ bar: Math.max(1, parseInt(l.bar, 10) || 1), scene: l.scene }))
+    .filter(l => SCENES.includes(l.scene) || isLookRef(l.scene))
+    .map(l => ({ bar: Math.max(1, parseInt(l.bar, 10) || 1), scene: l.scene,
+                 fade: Math.max(0, Math.min(64, parseFloat(l.fade) || 0)) }))
     .sort((a, b) => a.bar - b.bar);
   song.sections = song.sections || [];
   song.cues = (song.cues || []).map(c => Object.assign({ bar: 1 }, c));
   song.length_bars = clamp(parseInt(song.length_bars, 10) || 32, 1, 999);
   song.tracks = (song.tracks || []).map(t => Object.assign({ bar: 1, gain: 1 }, t));
+  // mix: per-song XR18 params, owned and auto-saved by the server — pass through
+  if (song.mix == null) song.mix = {};
   song.bpm = song.tempo_map[0].bpm;
   song.time_sig = song.tempo_map[0].time_sig;
   return song;
@@ -3315,12 +4411,12 @@ function renderTimeline(song, mount, opts) {
   });
   (song.light_map || []).forEach((L, i, lms) => {
     const endBar = lms[i + 1] ? lms[i + 1].bar : bars + 1;   // scene holds until the next change
-    const c = LIGHT_COLORS[L.scene] || "192,140,255";
+    const c = lightColor(L.scene);
     const d = el("div", "tl-sec tl-lightseg");
     d.style.left = ((L.bar - 1) * BW + 1) + "px";
     d.style.width = Math.max(18, (endBar - L.bar) * BW - 3) + "px";
     d.style.background = `rgba(${c},.13)`; d.style.borderColor = `rgba(${c},.38)`; d.style.color = `rgb(${c})`;
-    const lbl = el("span", "lbl", escapeHtml(L.scene));
+    const lbl = el("span", "lbl", escapeHtml(sceneLabel(L.scene) + (L.fade ? " ≈" + L.fade : "")));
     if (opts.onMarker) lbl.onclick = (e) => { e.stopPropagation(); opts.onMarker("light", L, e); };
     d.appendChild(lbl);
     laneL.appendChild(d);
@@ -3449,12 +4545,12 @@ function renderTimelineWrapped(song, mount, opts) {
       const segEnd = (lms[i + 1] ? lms[i + 1].bar : bars + 1) - 1;   // scene holds until the next change
       const a = Math.max(L.bar, start), z = Math.min(segEnd, end);
       if (a > z) return;
-      const c = LIGHT_COLORS[L.scene] || "192,140,255";
+      const c = lightColor(L.scene);
       const d = el("div", "tl-sec tl-lightseg");
       d.style.left = ((a - start) * BW + 1) + "px";
       d.style.width = Math.max(18, (z - a + 1) * BW - 3) + "px";
       d.style.background = `rgba(${c},.13)`; d.style.borderColor = `rgba(${c},.38)`; d.style.color = `rgb(${c})`;
-      const lbl = el("span", "lbl", escapeHtml(L.scene));
+      const lbl = el("span", "lbl", escapeHtml(sceneLabel(L.scene) + (L.fade ? " ≈" + L.fade : "")));
       if (opts.onMarker) lbl.onclick = (e) => { e.stopPropagation(); opts.onMarker("light", L, e); };
       d.appendChild(lbl);
       laneL.appendChild(d);
@@ -3690,6 +4786,8 @@ function buildEdSideControls(legendEl, song) {
   inp.onchange = commitLen;
   lenBox.querySelector("#ed-len-up").onclick = () => { inp.value = clamp((parseInt(inp.value, 10) || 32) + 1, 1, 999); commitLen(); };
   lenBox.querySelector("#ed-len-dn").onclick = () => { inp.value = clamp((parseInt(inp.value, 10) || 32) - 1, 1, 999); commitLen(); };
+
+  // (the song's mixer state saves itself — see the Mixer tab; no picker needed)
   // drag up/down to scrub (typing still works)
   inp.style.cursor = "ns-resize";
   let sy = 0, sv = 0, down = false, scrub = false;
@@ -3876,15 +4974,22 @@ function tlPopLight(bar) {
   $("tl-pop").innerHTML =
     `<div class="tp-title">Lighting · bar ${bar}</div>
      <div class="field"><label>Scene from this bar onward</label><div class="chips" id="tp-scenes"></div></div>
+     <div class="field"><label>Fade in (beats)</label><input type="number" id="tp-fade" min="0" max="64" step="0.5" value="${ex && ex.fade ? ex.fade : 0}"></div>
+     <div class="hint" style="margin:-2px 0 8px">0 snaps on the bar's 1. 4 = a one-bar crossfade in 4/4 — it scales with the live tempo.</div>
      <div class="tp-row">` +
      (ex ? `<button class="btn danger sm" id="tp-del">Remove</button>` : "") +
      `<button class="btn ghost sm" id="tp-x">Cancel</button></div>`;
   tlPopShow();
-  SCENES.forEach(sc => {
-    const b = el("button", (ex && ex.scene === sc) ? "on" : null, sc.charAt(0).toUpperCase() + sc.slice(1));
-    b.onclick = () => { upsertMarker(song.light_map, bar, { scene: sc }); commitSong(); tlPopHide(); };
+  const fadeVal = () => Math.max(0, Math.min(64, parseFloat($("tp-fade").value) || 0));
+  const addChip = (value, label) => {
+    const b = el("button", (ex && ex.scene === value) ? "on" : null, label);
+    if (isLookRef(value)) { const c = lightColor(value); b.style.borderColor = `rgba(${c},.5)`; b.style.color = `rgb(${c})`; }
+    b.onclick = () => { upsertMarker(song.light_map, bar, { scene: value, fade: fadeVal() }); commitSong(); tlPopHide(); };
     $("tp-scenes").appendChild(b);
-  });
+  };
+  SCENES.forEach(sc => addChip(sc, sc.charAt(0).toUpperCase() + sc.slice(1)));
+  (S.looks || []).forEach(lk => addChip("look:" + lk.id, lk.name));
+  if (ex) $("tp-fade").onchange = () => { ex.fade = fadeVal(); commitSong(); };
   const del = $("tp-del"); if (del) del.onclick = () => { removeMarker(song.light_map, bar); commitSong(); tlPopHide(); };
   $("tp-x").onclick = tlPopHide;
 }
@@ -3954,7 +5059,14 @@ function wireEditor() {
 //  Performance — split view + live playhead
 // ════════════════════════════════════════════════════════════════════════════
 function renderPerfSetlist() {
-  const box = $("perf-set"); box.innerHTML = "";
+  renderSetRail($("perf-set"));
+  renderSetRail($("mx-set"));     // the Mixer tab carries the same rail
+}
+// One setlist rail, identical everywhere it appears (Performance, Mixer):
+// same rows, same drag-reorder, same quantized song switching.
+function renderSetRail(box) {
+  if (!box) return;
+  box.innerHTML = "";
   box.appendChild(el("div", "ps-head", "Setlist"));
   if (!S.setlist.length) box.appendChild(el("div", "hint", "No songs yet — add some in the Setlist tab."));
   S.setlist.forEach((song, i) => {
@@ -4106,7 +5218,7 @@ const HELP_DOTS = [
 const CARD_TIPS = {
   "Scene":          "<b>Reactive</b> follows the music, <b>Chase</b> steps one fixture per beat, <b>Static</b> holds a colour, <b>Off</b> blacks out.",
   "Audio energy":   "Live bass / mid / high levels from the mic. These drive the Reactive scene's colours.",
-  "Color & master": "Colour for Static and Chase scenes; the master slider scales overall brightness.",
+  "Color & master": "Colour for Static and Chase scenes; the master slider scales overall brightness. Scene fade crossfades every scene change over the set time (manual buttons, song scenes, MIDI) — the lighting lane sets its own per-change fades in beats, and Blackout always snaps.",
   "DMX Output":     "Send light to real gear: <b>ENTTEC</b> USB dongle or <b>Art-Net</b> over the network. Everything works in <b>Simulator</b> until you connect.",
   "Patch":          "Tell Lime Studio where each fixture lives — its DMX start address and channel layout. Use the count pills for a quick default.",
 };

@@ -32,6 +32,399 @@ fymuse/limestudio/
 
 ## Recent change history
 
+**Mixer presets → controller pads + free-mix mode (mirrors Performance).**
+Bottom section of the Mixer deck is now `.mx-bottom`: the nowbar status +
+"Presets" `.pad-row` of `.perf-cue.look` pad buttons — tap applies
+(mixer_apply: glides the desk; becomes the playing song's mix, or live-only
+in free mix), right-click+confirm deletes, trailing "+ Save preset" pad
+captures the current desk state. Detail-column Save/Load buttons and the
+openPresetPop popover REMOVED (pads replace both). Free-mix mode = the
+shared rail's metronome button (activateSong(null), same as Performance):
+nowbar shows "Free mix — moves are live on the desk but belong to no song".
+Workflow: free-mix → save preset → load song → tap pad → tweak → owned by
+the song. ALSO this session (see entries above): dB fader markers, 180px
+faders, dense labelled EQ grid, Connect row above Outs, OUTS/INS captions,
+Click out tab removed, ≤8-char editable IN names (mixer_name), uniform 72px
+strips, 7th channel Back Vox, ClickOutput per-channel routing (Routing v2
+v1: click on its own USB channel; channel picker in Outputs modal).
+
+
+
+**Routing v2 v1 — click on its own output channel.** ClickOutput.start(device,
+channel): 1-based channel opens the stream with that many channels and
+`_render()` interleaves the mono click into the LAST opened channel only
+(zeros elsewhere — other apps' audio on the same CoreAudio device, i.e. the
+browser's tracks on 1/2, mixes cleanly underneath). Verified: 4ch render,
+ch 1-3 silent, click on 4; mono path unchanged. WS set_click_output gains
+`channel`; persisted as click_out_channel; /api/output/audio-devices now
+reports `channels` per device; Outputs modal shows a channel select for
+multi-out devices (>2 outs) with device labels "name · N out". XR18-over-USB
+recipe: tracks→USB 1/2 (default), click→USB ch N, set an XR18 channel's
+input source to USB N → separate Tracks and Click IN strips with independent
+per-ear sends. NOT hardware-tested (channel mapping order on CoreAudio).
+
+
+
+**Mixer console polish round (user-driven).** (1) dB scale markers behind
+every fader (`faderScaleHtml` + `dbToFader` inverse taper; ticks at
++10/+5/0/−5/−10/−20/−30/−45/−60, 0 dB line lime-tinted). (2) Faders 180px.
+(3) EQ grid denser for ALL strips: every gridline labelled
+(50/100/200/500/1k/2k/5k/10k, majors brighter) + ±6 dB horizontal guides;
+channel EQs remain 4-band (X Air hardware), LR 6-band. (4) Bottom space →
+`.mx-nowbar`: lime dot + "Mix → <song> — every move auto-saves into this
+song" / idle grey "no song — moves live but unsaved". (5) Earlier same
+session: Connect row above Outs; OUTS/INS captions; Click removed from out
+tabs (bus 6 still captured silently — click-in-ears = the Tracks IN's send
+per IEM bus, per-ear click explained); strips uniform 72px,
+align-items:flex-start (no stretch); names ≤8 chars, dblclick-rename via WS
+`mixer_name` (user-owned, desk scribble names no longer override
+_full_state); master strip labelled "Main Out"/"<bus> Out"; 7th channel
+"Back Vox" (mixer.channels follows ch_names length, old saved shows
+auto-extend). NEXT AGREED: split click vs tracks onto separate USB returns =
+Routing v2 (per-channel output routing laptop-side + extra XR18 return
+strip).
+
+
+
+**Mixer round 3 — auto-saved per-song mixes (capture workflow removed) + UI.**
+User: no Capture step; the playing song OWNS the desk. New model: `song.mix`
+is now a PARAMS DICT (was scene-id string; _migrate_song resolves legacy ids
+via presets — mixer presets load before setlist in _load_show for this).
+Mechanics: `mixer.snapshot()` (instant cache read, no query),
+`_store_active_mix()` (skipped while `mixer.gliding` so a recall can't
+half-save) called on song switch-away (both activation paths) AND at the top
+of `_save_show`; first activation of a song with empty mix ADOPTS the current
+desk state; `mixer_set` write-through puts each app-side move into the active
+song's mix (managed set only — gain still can't land in a song); switching
+back glides the desk to the song's stored mix. Old scenes are now PRESETS:
+"Save preset"/"Load preset" buttons pinned at the BOTTOM of the right detail
+column (margin-top:auto), load = paint-pop popover (click applies → becomes
+the playing song's mix, x deletes). Mix picker removed from the song editor;
+client migrate passes song.mix dicts through untouched. UI: mx-top cards
+GONE — connect is now a small button + LED in the bus row (prompt() takes the
+IP, button shows "XR18 ✓" when live, status in the LED tooltip); + button
+removed; bus tabs all rectangular (no last-child radius); strips
+justify-content:flex-start with master margin-left:auto so switching
+Main↔IEM views shifts nothing. Verified: first-activation adoption, tweak →
+switch → return round-trip (A 0.9 / B 0.2 both kept, desk glides back),
+legacy id migration, gain stripped. Round-trip note: desk-side (/xremote)
+tweaks are captured at switch-away/save time via snapshot.
+
+
+
+**Mixer detail → right-hand knob column (user layout request).** Deck card is
+now `.mx-deck-row`: strips (with bus seg) flex-left, `.mx-detail` 252px right
+column (border-left, hidden scroll) shown when a strip name is selected.
+Detail = three rotary knobs (`makeKnob`: drag-up/down ±150px = full turn,
+indicator −135°..+135°, dbl-click reset where safe — pan→centre, reverb→dry,
+gain has NO reset) for Gain/Pan/Reverb + compact EQ (72px graph, drag dots)
+with four per-band gain mini-faders below (graphic-EQ style, dbl-click→0dB,
+labels show each band's live centre frequency, synced bidirectionally with
+the graph). Old grid detail panel + detSlider wiring removed; knobs built
+once (`ensureMxKnobs`), painted with drag-skip like everything else.
+
+
+
+**Mixer console round 2 — gain/pan/reverb/EQ + setlist rail.** (1) The same
+setlist rail as Performance now lives in the Mixer tab (`renderSetRail(box)`
+extracted from renderPerfSetlist, renders into #perf-set AND #mx-set; .mx-body
+flex row mirrors .perf-body; one component, can't drift). (2) Channel detail
+panel: click a strip's NAME → panel under the strips with Gain (headamp,
+-12..+60 dB readout), Pan (L/C/R, dbl-click centres), Reverb send (FX1 = send
+07, dbl-click dry), and a draggable 4-band EQ graph (SVG, log 20Hz–20k ×
+±15 dB, grid at 100/1k/10k, drag dots set /eq/B/f+/g, EQ ON/OFF toggle,
+pointer-capture, drag-safe redraw). Selected strip lime-bordered; works for
+ch 1-6 + Tracks(USB rtn: pan+reverb only). (3) SCOPE SPLIT (the important
+design): `managed_addresses` (scene capture) grew pan + FX1 send + eq
+on/f/g/q per channel + rtn pan/fx1 → 156 params; `control_addresses` =
+managed + `/headamp/NN/gain` — GAIN IS LIVE-ONLY, editable in the console but
+never captured/recalled (verified: capture excludes headamp, _clean_mix_scene
+strips it) — pro recall-safe semantics: a song change can never re-gain a hot
+mic. mixer_set/query validate against the control set; typed sim defaults
+(pan .5, eq f per band .12/.4/.6/.85, g/q .5, gain .3 ≈+9dB, fx1 0 dry).
+Hardware-untested addresses to verify on the real XR18: /headamp/NN/gain
+indexing, /ch/NN/eq/B/{f,g,q}, FX1 send as /mix/07/level, /rtn/aux pan.
+
+
+
+**Mixer tab — XR18 remote with per-song mix recall (NEW SUBSYSTEM).** Band has
+an XR18 (6 inputs: LeadVox/LeadGtr/Bass/Keys/Drums/RhythmGtr; buses 1-5 =
+member IEMs, bus 6 = click). Lime Studio drives it over OSC/UDP 10024 like X
+Air Edit does — NO audio through the laptop. New `mixer_osc.py`: hand-rolled
+OSC codec (build/parse, f/i/s, pure + unit-tested), `XR18Link` (rx thread →
+param cache, /xinfo + /xremote keepalive every 8s, connected flag times out
+20s, reads scribble names /ch/NN|/bus/N/config/name). RECALL-SAFE BY
+CONSTRUCTION: managed set = ch 1-6 fader/mute/6 sends + USB rtn + LR + bus
+masters (64 params) — gain/EQ/comp/FX never written; _clean_mix_scene strips
+foreign addresses on load/import. Sim mode: cache IS the desk when offline —
+whole feature works at home. Scenes: `state["mixer"].scenes
+[{id,name,params}]`; WS mixer_connect/set/query/capture/apply/rename/delete
+(set = no broadcast, drag-safe; query → mixer_levels event). apply() glides
+floats smoothstep over 0.8s (cancellable generation counter), mutes snap.
+Songs: `song.mix` = scene id (migrated both sides), `_recall_song_mix` in
+BOTH activation paths; Mix select in the editor info block
+(buildEdSideControls g3). Client: Mixer tab (4th nav tab) — connection card
+(IP+Connect+LED), Mix scenes card (Capture/recall/rename/delete), strips deck
+with sends-on-faders bus selector (Main/IEM names/Click from desk or
+defaults): vertical faders (slider-vertical + writing-mode fallback), dB
+readout (X32 piecewise map, fader_to_db unit-tested 0.75→0dB), MUTE (Main
+view only; bus views = send levels, faders dbl-click → 0.75 unity), per-strip
+Tracks·Click (USB rtn) + master strip. M cache + drag-skip sync like the
+position sliders. Persistence in show.json (host auto-reconnects on load);
+scenes travel in .limeshow ("mixes", merge by id). Verified: codec round-trip,
+64-param managed set (no gains), sim capture→apply glide (mid 0.31), song
+activation recall 0.3→0.8. NOT tested against the real XR18 — band must
+verify: OSC addresses on hardware (esp. /ch/NN/mix/MM/level send format),
+glide feel, /xremote behaviour with X Air Edit open simultaneously.
+
+
+
+**Movement effects (orbit/sweep) + mount flags visible in sim.** User expected
+the ⇄ ↔ ↕ toggles to create motion — they're mounting corrections and were
+invisible in the simulator (output-only). Fixed two ways: (1) EFFECTS +=
+`orbit` (heads circle home, sin/cos at ±110/±70 × depth, phase-spread i/n
+across the rig) and `sweep` (pan-only side-to-side ±120 × depth) —
+`_apply_move(i,n,eff,phase,pan,tilt)` runs after fade blending, before mount
+transform; tempo-synced via the same beat clock, validated by _clean_effect,
+stored in looks like any effect. Movement shows in the preview since fixtures
+p/t now carry the post-move values. (2) Preview broadcasts now include
+`mp`/`mt` (mount-transformed physical angles) alongside logical `p`/`t`;
+renderFixtures beams/aim prefer mp/mt — so toggling ⇄ ↔ ↕ visibly flips the
+beam in sim, while capture (save_look) keeps reading logical p/t (mount never
+bakes into looks). Effect grid gains Orbit + Sweep buttons (titled "moving
+heads"); guide Effects step mentions them. Verified: orbit moves over time +
+spreads phases, sweep pans with tilt pinned at home, inv_p mirrors mp only.
+
+
+
+**Per-fixture paint + patch address reflow (user questions round).** (1) The
+unexplained patch swatch = the fixture's live output; now titled and
+CLICKABLE — clicking a stage can or patch swatch opens `.paint-pop` (color
+input live-updates, "Use global" clears, outside-click closes). Paints live
+in `lighting.static_map` ([r,g,b]|null per fixture, `_clean_static_map`
+sanitises at every door, persisted): Static renders painted colours
+(`_paint_color(i)` || global), Chase's active fixture uses its paint too;
+painting auto-switches to the static scene so it's visible; WS
+`set_fixture_color {idx, color|null}`. Capture bakes paints into looks (they
+read rendered output) — THIS is the answer to "how do I configure colours
+beyond one": paint lights → Capture → look. Reactive/rainbow stay
+algorithmic. Local-mode render handles static_map. (2) Patch reflow: editing
+a fixture's base/profile re-flows the fixtures AFTER it back-to-back
+(snapPatch/reflowPatch), but only those that were contiguous before the edit
+— deliberate gaps (1, 101, 201) untouched. Verified: paint renders per
+fixture, painted chase, capture bake, garbage clamp.
+
+
+
+**Slider dbl-click resets + interactive lighting guide.** (1) Double-click
+resets: pan/tilt sliders → 128 (centre, in renderPositions, commits), and
+generically brightness→255, fade→0.5, grand-master→255, fx-depth→60,
+out-fps→40 (value set + dispatched `input` event so existing handlers run);
+stage hint mentions it. (2) "Guide" button in the stage head →
+`startLightTour()`: an 11-step guided tour (`LIGHT_TOUR`) that highlights
+each console card (`.tour-hi` lime outline, scrollIntoView) with a floating
+`.tour-panel` (Back/Next/End, step counter, auto-positions below/above the
+target) and LIVE-DEMOS each parameter on the stage: scenes cycle
+static→chase→reactive, effects cycle pulse→wave→rainbow, grand master dips
+60% and recovers, reactive runs during the energy step, a mover paints a
+figure-eight during the position step (conditional `when:` steps — alt text
+step when no movers patched). Lighting state (scene/color/brightness/fade/
+master/effect/per-fixture p/t) snapshotted on start, fully restored on
+End/Finish; tour self-ends if the view changes; demo timers cleared per step.
+NOT eyeballed — needs an eye test (panel placement over the 5-col deck).
+
+
+
+**Position slider fix (two compounding bugs).** (1) `set_position` saved +
+broadcast FULL STATE on every drag tick → renderAll → renderPatchEditor →
+renderPositions rebuilt `#pos-list` innerHTML mid-drag, killing the gesture
+(slider "didn't work"). Now: set_position only updates + renders DMX (no
+save/broadcast); slider `onchange` (release) → commitPatch persists.
+renderPositions rebuilds only when a structure key (mover indices + mount
+flags) changes; otherwise syncs values in place and never touches a slider
+whose `_drag` flag is set (pointerdown/up/cancel). (2) Look position override
+inverted: `_fixture_pt` no longer reads looks; `_set_scene` COPIES an applied
+look's p/t into the patch entries — the patch is the single live truth, so
+sliders always move the heads (even with a look active) and a look restores
+its positions on apply (crossfade sweeps to them). Verified: look apply
+writes patch 200/60, slider mid-look moves head immediately, re-apply
+restores 200.
+
+
+
+**Lighting view → full-width single-screen console.** `view-inner` wrapper +
+title/sub removed; new `.light-console` (full width, `#view-lighting
+{overflow:hidden}` so the page never scrolls). Stage on top (flex-basis 44%,
+fixtures vertically centred, head row = label + "beams show pan · length
+shows tilt" hint). Below: `.console-deck`, a 5-column grid of `.console-col`s
+(each scrolls internally, hover-only thumb): Scene+Looks+chase | Effect |
+Color&master+Audio energy | Patch+Position | DMX Output. ≤1080px falls back
+to 2 columns + page scroll. Movement viz in renderFixtures: movers get
+`.mover` class — beam swings ±55° with pan (transform-origin at the can
+mouth), scaleY 0.55–1.45 with tilt (throw length), plus a white `.aim` dot
+positioned inside the can mirroring p/t in range; both transition .12s linear
+so 20 Hz updates read as motion. All 32 lighting element ids verified unique
+post-restructure; div balance checked. NOT eyeballed — needs an eye test for
+column widths at the band laptop's resolution.
+
+
+
+**Lights master switch (user-driven redesign of blackout).** `lighting.on`
+(bool, default True, persisted): False renders gm=0 — stage dark while
+scene/look/lane config keeps running underneath; True restores instantly.
+Song activation NO LONGER touches lighting (removed `_set_scene(song.scene)`
+from `_activate_song`/`_switch_pending` + the client local-mode equivalent;
+song.scene field now vestigial) — picking a song mid-blackout stays dark. The
+perf pad's Blackout/Lights-on word-button is replaced by an icon-only power
+button (`.perf-cue.power`, centered icon, no words, `grid-column-end: -1` so
+it fills the rest of the calls row): lime glow = ON, red = OFF, instant both
+ways; `_preBlackoutScene` machinery deleted. MIDI "blackout" action now
+toggles the master instead of forcing scene=off. set_lighting sanitises `on`
+to bool; localRecomputeDMX zeroes brightness when off. Headless-verified:
+off→m0 with scene intact, on→instant restore, activation mid-blackout leaves
+both flags, MIDI toggle round-trip. Old setlist tab title lime reverted to
+white earlier same session (bpm/key values stay lime).
+
+
+
+**Lighting v2 round 6 (FINAL) — mount flags + live look control. The lighting
+v2 arc is code-complete.** (1) Mounting corrections: patch entries can carry
+`swap`/`inv_p`/`inv_t` booleans (set_patch keeps truthy only); `_mount_pt(fx,
+pan, tilt)` applies swap-then-invert at DMX WRITE TIME ONLY — looks, fades,
+preview and set_position all stay in logical space, so an upside-down mover
+never corrupts captured positions (verified: logical 100/200 with swap+inv_p →
+wire 55/100, preview stays 100/200). Toggle buttons (⇄ ↔ ↕, `.pflag`) on each
+Position row. (2) MIDI: the "Set scene" action's dropdown now lists looks
+(label = look name, value = look:<id>); server path already validated via
+_set_scene — verified end-to-end. (3) Performance view: "Looks" pad row under
+the calls (`.perf-cue.look`, 40px, tinted per look via lightColor, active look
+highlighted) — tap to crossfade live; blackout-restore works with look refs
+(string `_preBlackoutScene`). Full lighting v2 stack: crossfades → looks →
+effects (7 incl music/flash) → movers 16-bit + custom profiles → grand master
+→ mount flags + MIDI/perf live control. ALL of it headless-verified only —
+the entire arc still needs its first eye/ear test on the Mac + rig, then
+`build.sh --public` + `package-for-band.sh` (dist on disk long predates this).
+
+**Lighting v2 round 5 — musical reactivity v2 + grand master.** Two new effect
+types (EFFECTS += music, flash): `music` drives the dimmer from a smoothed
+bass envelope (`_music_envelope()`: instant attack, ~0.85/tick release on
+`_music_env`) — any look becomes audio-reactive IN ITS OWN PALETTE, fixing the
+old reactive scene's bass→red literalism; `flash` punches master to full on
+the click beat and decays `exp(-4·frac)` over the cycle (rate=4 → punch each
+4-beat cycle; needs no mic). Both validated by `_clean_effect`, composable
+with looks/lane like the others. `lighting.master` (grand master, 0–255,
+default 255): output-level scaler applied AFTER effects in the render — the
+only dimmer that also scales looks' captured m values; sanitised in
+set_lighting, persisted in the show.json key list, slider with % readout in
+Color & master. save_look UN-SCALES the grand master from captured m (gm-dimmed
+capture isn't baked into the look; verified m100@gm128 → stored ≈200). UI:
+Music + Flash buttons in the Effect grid with title hints. Headless-verified:
+music attack 255/release 216→184, flash 255/34/5 across a cycle, GM scales a
+look m200→100 @50%. NOT ear/eye-tested: music envelope feel vs real kick drums
+(retune 0.85 release if floaty), flash decay curve on stage.
+
+**Lighting v2 round 4 — moving heads + user fixture profiles.** Pan/tilt are
+first-class: slot codes grew `p/t/pf/tf`, builtin profiles `MH-PTRGBD` (6ch)
+and `MH16-PTRGBD` (8ch, 16-bit movement). Patch entries carry `pan`/`tilt`
+floats 0–255 (home position, default 128; sanitised in set_patch, set by WS
+`set_position {idx,pan,tilt}`, Position slider rows appear in the Patch card
+when any fixture's profile moves). Render: `_fixture_pt()` resolves position
+(look override → patch home), tuples are 6-wide through the crossfade
+(`_fade["from"]` includes p/t with a 4-tuple guard) so look→look switches
+SWEEP heads smoothly; `_write_fixture` renders floats 16-bit (v*257 → coarse
+p/t + fine pf/tf — mid-fade fractions land on the fine channel). Effects
+modulate colour/master only, never position. Looks store p/t per fixture
+(save_look, _clean_look optional pass-through; old looks without p/t leave
+heads at patch home). User profiles ("fixture library"): `state["profiles"]
+{NAME: {width, slots}}`, WS `save_profile {name, slots:"p,t,r,g,b,d"}` (comma
+codes, `-` skips, first occurrence wins, ≤32ch, builtins unshadowable),
+`delete_profile` (blocked while in use), persisted + sanitised on load,
+`_profiles_all()` everywhere a profile is resolved. `_full_state.profiles` is
+now `{name: {width, pt}}` — client `profileWidth()` handles both shapes,
+`profileHasPT()` gates the Position UI, "+ Profile" button prompts
+name+layout, fixture chans line appends `pan/tilt` for movers.
+`_fixture_color` split: builtin dynamic scenes live in
+`_fixture_color_dynamic`. Headless-verified: 16-bit output (pan100→100/100),
+mid-sweep pan 160 on a 1s look fade, custom "d,-,r,g,b" profile renders,
+builtin shadow blocked. NOT hardware-tested — needs a real mover: pan/tilt
+direction sense, 16-bit fine smoothness, whether fixture profiles need
+invert/swap flags per fixture.
+
+**Lighting v2 round 3 — tempo-synced effects engine.** Modulators ride on top
+of the scene/look output, locked to the click. `lighting.effect {type, rate
+(beats/cycle 0.25–16), depth (0–1)}`; types: pulse (dimmer cosine, PEAKS on the
+beat), wave (pulse phase-spread `i/n` across the rig), strobe (12%-duty flash
+at cycle start, dims by depth between), rainbow (HSV hue rotation spread over
+fixtures, blends into base colour by depth, master untouched). Beat clock:
+`_tick_beat_clock(bpm)` called beside click_out.tick in BOTH click_thread
+branches; `_effect_phase()` extrapolates between ticks and free-runs at the
+last tempo when stopped (stage keeps moving between songs); integer phase ==
+on-beat. Applied in `_update_dmx_from_lighting` AFTER the crossfade blend
+(effects continue through fades), skipped entirely on m==0 (no strobe on
+blackout). `_clean_effect` sanitises at every door (set_effect WS,
+set_lighting, _load_show); persisted in show.json lighting key list. Looks
+integration: save_look stores `effect` alongside fixtures, `_set_scene` on a
+look ref restores its effect (pre-effect looks leave the current effect
+alone), `_clean_look` sanitises it, travels in .limeshow. Client: Effect card
+above Color & master (type grid None/Pulse/Wave/Strobe/Rainbow, rate seg
+½/1/2/4/8 beats, depth slider %), `setEffect()` → WS `set_effect`,
+renderLightingControls syncs, S.lighting.effect default. Headless-verified:
+phase ~1.5 half a beat after tick @120, pulse peak 255/trough 50 @depth .8,
+wave spread [255,127,0,127], strobe on/off, rainbow per-fixture hues, look
+round-trips effect, garbage clamps. NOT eyeballed/ear-tested — fixture preview
+should visibly pulse at 20 Hz; strobe timing resolution is render-rate-bound
+(~50 ms), fine for stage pars, revisit if a true strobe fixture joins.
+
+**Lighting v2 round 2 — looks/palettes.** User-built named lighting states join
+the 4 builtin scenes. `state["looks"]` `[{id (uuid8), name ≤32, fixtures
+[{r,g,b,m}]}]`, referenced anywhere a scene goes as `"look:<id>"`. Capture
+model (the killer UX): WS `save_look {name}` snapshots `_last_fixtures` — the
+exact rendered output on stage, including a frozen mid-reactive moment; also
+`rename_look {id,name}`, `delete_look {id}` (deleting the ACTIVE look →
+`_set_scene("static", 0)` so lights stay on). Render: `_fixture_color` gained a
+look branch — fixtures tile (`i % len`) across bigger rigs; missing look
+renders STATIC fallback, never blackout. `_scene_ok()` replaces the `in SCENES`
+check in `_set_scene` (look existence deliberately not checked at
+migrate/set time — lane entries may reference looks that arrive later via
+import). Crossfades work look↔look/scene automatically (midpoint blend
+verified {r125,b130}). Persistence: looks in show.json + bundled into
+`.limeshow` setlist.json; import MERGES by id (never clobbers), reports
+`looks_added`. Client: Looks sub-card in the Scene card (Capture button →
+prompt name; rows = swatch strip + name + rename/delete icon-btns, click
+applies with the default fade, lime highlight when active), lane popover chips
+now include looks (tinted via avg look colour), `sceneLabel()`/`lightColor()`
+helpers replace raw LIGHT_COLORS lookups in both timeline renderers (label
+shows look NAME), client migrate accepts `look:` refs, local-mode render has
+the look branch too. `S.looks` default + Object.assign sync. Headless-verified:
+capture→tiled apply (3-fixture look on 5-fixture rig), look→look fade,
+missing-look fallback, migration keeps refs/drops junk, _clean_look clamps.
+NOT eyeballed in the running app — needs an eye test: Looks card layout in the
+Scene card, popover chip colours, prompt() UX acceptable for naming.
+
+**Lighting v2 round 1 — scene crossfades (fades + cue-engine groundwork).**
+Every scene change now crossfades instead of snapping. New `_set_scene(scene,
+fade)` in server.py is THE entry point for all scene changes (song activation,
+pending switch, MIDI blackout/scene, WS set_scene/set_lighting, lighting lane);
+it captures `_last_fixtures` (the last *rendered* per-fixture r/g/b/m) into
+`_fade {active, from, start, dur}` and `_update_dmx_from_lighting()` blends
+snapshot→live-rendered target with smoothstep easing on every render tick —
+the existing 20 Hz audio_sim/live loop is the heartbeat, so no new thread.
+Chained fades depart from the blended value (verified: reversal mid-fade, 56→56,
+no jump). Default fade: `lighting.fade` seconds (0.5 default, clamp 0–30,
+persisted in show.json, "Scene fade" slider in Color & master card). Per-change:
+WS `set_scene {scene, fade?}` seconds (client `setScene(scene, fade)` switched
+from set_lighting to set_scene). Lighting-lane entries gained `fade` in BEATS
+(`light_map [{bar, scene, fade}]`, migrated/clamped 0–64 both sides, popover
+number field + hint, chips show "scene ≈N"), converted beats→seconds at the
+live bpm when the click thread fires them, so ramps scale with tempo maps.
+Blackout stays instant everywhere (perf pad sends fade 0, MIDI blackout
+fade=0.0) — panic button semantics. Headless-verified: 1 s static-red→off fade
+monotonic 255→132@0.49s→0, fade flag clears, garbage fade values clamp,
+migration round-trip. NOT eyeballed on real fixtures yet — needs a look at
+20 Hz fade smoothness on LED pars (DMX out repeats frames at 40 fps between
+render ticks; bump the heartbeat if steps are visible on slow fades). Local
+(offline) preview mode still snaps — server-rendered fades only.
+
 **v1 feature-complete — all changes verified on the user's Mac.** Shay confirmed hands-on testing passed for everything shipped to date: beat-locked voice count-ins, backing-track alignment + seek joins, click→IEM routing (sounddevice), MIDI clock out, show recording, odd-meter accents, .limeshow bundles, and all UI rounds (brand, control pad, metronome panel with tap-the-dial, lighting lane, editor info block, REC pill). Earlier "NOT verified audibly/visually (headless sandbox)" caveats in this file are hereby RESOLVED. Open items are improvements only, to land over time: production hardening (WSGI server, soak test, crash recovery — top pick before a paying gig), tempo ramps, editor undo, deeper lighting (fixture libraries/cue stacks). Ableton Link remains not-planned. Next concrete action when desired: rebuild + ship to the band (`bash build.sh --public` → `bash package-for-band.sh`; dist on disk predates recent features until then).
 
 **Batch: odd meters + bundled set export + show recording.** (1) Meters: SIG_LABEL gains 5/4 & 7/8 (all three sig pickers updated); `beatAccent`/`_beat_accent` (client+server, identical) give 5/4=3+2, 6/8=two dotted pulses, 7/8=2+2+3 via secondary accents; click voices now 3-level (1000 Hz strong / 890 Hz group / 800 Hz soft-gain tick) in playClick, schedClickAt, ClickOutput (new _w_mid), beat messages carry `accent`, beat dots show `.mid` accents; accent tables unit-tested. (2) Setlist export is now a `.limeshow` bundle (zip: setlist.json + tracks/<id> for every referenced backing track) written to Desktop; new `POST /api/setlist/import` accepts the bundle (track ids validated, existing files not overwritten) or legacy plain JSON; client imports via FormData with offline JSON fallback; round-trip verified byte-identical, garbage rejected 400. (3) ShowRecorder: REC pill under the perf transport → default input to `~/.limestudio/recordings/show <timestamp>.wav` (44.1k int16, ≤2 ch; sounddevice preferred, pyaudio fallback, graceful without either); WS record_start/stop, `recorder` in state, pulsing red dot + local mm:ss while recording, error toast once. Verified with stubbed stream (0.98 s WAV, correct header). Hardware ear-tests still pending on the Mac.

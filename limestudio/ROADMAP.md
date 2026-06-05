@@ -38,6 +38,16 @@ real show. Ableton Live was the original reference for the gap list.
   cues, song editor with lane legend + per-beat grid, MIDI pedal triggers
   with Learn, BPM detect/follow, brand identity, packaged Mac app.
 
+## Shipped since ✅
+
+- **Lighting v2** — crossfades, looks, effects (9 types incl. movement),
+  moving heads (16-bit) + custom profiles, grand master, mount flags, paint,
+  mains switch, console UI + guided tour.
+- **Mixer (XR18 remote)** — per-song mix scenes over OSC: capture the desk,
+  assign to songs, auto-recall with fader glides on song load. Recall-safe
+  (faders/mutes/IEM sends only). Works in sim without the desk.
+  NEEDS first hardware test against the real XR18.
+
 ## Improvements (over time, in priority order)
 
 1. **Production hardening** — the only remaining show-stopper class of risk:
@@ -50,8 +60,24 @@ real show. Ableton Live was the original reference for the gap list.
 4. **Editor undo/history** — auto-save makes this more important, not less.
 5. **Free-mode click pre-scheduling** — the song-mode click is sample-locked;
    the free metronome still plays per-event (fine in practice, tidy to unify).
-6. **Lighting depth** — fixture libraries, cue stacks, chases with curves.
-   Only matters if the rig outgrows 4-scene + per-bar automation.
+6. **Lighting depth** — IN PROGRESS (promoted: lighting is the current focus).
+   ✅ Scene crossfades everywhere (default fade in seconds, per-lane-entry
+   fades in beats, blackout stays instant). ✅ Looks/palettes — capture the
+   live stage state into named per-fixture looks ("look:<id>" works anywhere a
+   scene name goes: manual, lane, MIDI; bundled in .limeshow). ✅ Effects
+   engine — pulse/wave/strobe/rainbow layered on any scene or look, rate in
+   beats locked to the click (free-runs between songs), captured into looks.
+   ✅ Moving heads + fixture profiles — pan/tilt with 16-bit fine, per-fixture
+   home positions, looks store positions and crossfades sweep heads between
+   them; user-defined channel layouts (+ Profile) cover rented/venue gear.
+   ✅ Musical reactivity v2 — Music effect (audio envelope drives any look's
+   dimmer, palette-true) + Flash (beat-locked punch, no mic needed) + grand
+   master (output-level fader that also dims looks).
+   ✅ Mount flags (pan/tilt invert + axis swap, output-only so looks stay
+   clean) · ✅ looks firable from MIDI pedals · ✅ Looks quick-switch row in
+   the Performance view. Cue stacks intentionally skipped — the lighting lane
+   IS the cue stack, musically. **Lighting v2: CODE-COMPLETE.** Next action:
+   eye/ear test on the rig, then rebuild + ship to the band.
 
 ## Not planned
 

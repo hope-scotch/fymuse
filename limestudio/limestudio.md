@@ -177,8 +177,21 @@ fymuse/limestudio/
 | `click_stop`    | `{}`                                      | Stop click track                   |
 | `update_click`  | `{bpm, time_sig}`                         | Update BPM/time sig while running  |
 | `trigger_cue`   | `{text: "3, 2, 1, Go!"}`                  | Speak a cue via TTS                |
-| `set_lighting`  | `{scene, color, brightness, num_fixtures}`| Update lighting settings           |
-| `set_scene`     | `{scene}`                                 | Switch lighting scene              |
+| `set_lighting`  | `{scene, color, brightness, num_fixtures, fade}` | Update lighting settings (`fade` = default scene crossfade, seconds) |
+| `set_scene`     | `{scene, fade?}`                          | Switch scene; optional `fade` (s) overrides the default, 0 snaps |
+| `set_effect`    | `{type, rate, depth}`                     | Effect: none/pulse/wave/strobe/rainbow/music/flash; rate in beats/cycle, depth 0–1 |
+| `set_position`  | `{idx, pan, tilt}`                        | Set a fixture's home pan/tilt (0–255) |
+| `mixer_connect` | `{host}`                                  | Link to an XR18 over OSC (empty host disconnects) |
+| `mixer_set`     | `{address, value}`                        | One live mixer param (recall-safe set only) |
+| `mixer_query`   | `{}`                                      | → `mixer_levels` event with the param cache |
+| `mixer_capture` | `{name}`                                  | Snapshot the desk as a named mix scene |
+| `mixer_apply`   | `{id}`                                    | Recall a mix scene (fader glide)   |
+| `mixer_rename`  | `{id, name}` / `mixer_delete` `{id}`      | Manage mix scenes                  |
+| `save_profile`  | `{name, slots}`                           | Define a fixture layout: comma codes r,g,b,w,d,p,t,pf,tf,- |
+| `delete_profile`| `{name}`                                  | Remove a user profile (blocked while patched) |
+| `save_look`     | `{name}`                                  | Capture the live rendered fixture state (incl. effect) as a named look |
+| `rename_look`   | `{id, name}`                              | Rename a look                      |
+| `delete_look`   | `{id}`                                    | Delete a look (active → falls back to static) |
 | `set_patch`     | `{patch: [{base, profile}, ...]}`         | Replace the fixture patch          |
 | `auto_patch`    | `{count, profile}`                        | Auto-lay N fixtures from address 1 |
 | `list_ports`    | `{}`                                      | Request serial ports (→ `ports` event) |
@@ -269,6 +282,65 @@ Default mapping: notes 60/62/64/65 → cues 1–4, 36 → click toggle, 37 → b
 | `chase`    | One fixture lit at a time, rotates on `chase/advance`  |
 | `static`   | Solid color at set brightness                          |
 | `off`      | Blackout                                               |
+
+**Looks (user palettes):** `state.looks` = `[{id, name, fixtures: [{r,g,b,m}]}]`.
+A look is captured from the live render (Capture in the Lighting view) and is
+valid anywhere a scene name goes — as the string `look:<id>` — in `set_scene`,
+the song lighting lane, and MIDI scene actions. Looks tile across rigs with
+more fixtures than the capture; a missing look renders as static (lights stay
+on). Looks persist in show.json and travel inside `.limeshow` bundles
+(imports merge by id, never overwrite).
+
+**Mixer (XR18):** Lime Studio remote-controls a Behringer XR18 over OSC (UDP
+10024) — no audio passes through the laptop. Scenes capture faders, mutes,
+the 6 bus sends (IEM mixes), pan, the FX1 reverb send and the 4-band channel
+EQ; **preamp gain is live-only** — editable in the console's channel detail
+panel (click a strip name: gain/pan/reverb/EQ graph) but never captured or
+recalled, so a song change can't push a hot mic into feedback. Workflow:
+dial the desk in → **Capture** in the Mixer tab → assign the mix in the song
+editor (`song.mix`) → activation recalls it with a smoothstep fader glide
+(~0.8 s). With no desk connected everything runs against a simulator. Scenes
+persist in show.json and travel in `.limeshow` bundles. The Mixer tab is also
+a live surface: sends-on-faders strips per bus (Main + IEM 1-5 + Click).
+
+**Mounting corrections:** patch entries may set `swap` (pan↔tilt axes),
+`inv_p`, `inv_t` — applied only when writing DMX, so looks/fades/UI stay in
+logical space. Toggles live on the Position rows. Looks can be fired live
+from the Performance view's Looks row or any MIDI binding's "Set scene".
+
+**Moving heads:** profiles may include `p/t` (pan/tilt) and `pf/tf` (16-bit
+fine) slots — builtins `MH-PTRGBD` and `MH16-PTRGBD`, or define any layout
+with `save_profile`. Each patched fixture has a home pan/tilt (Position
+sliders); looks store positions per fixture, and because scene changes
+crossfade, switching looks sweeps heads smoothly (fractional mid-fade
+positions render on the fine channels). Effects never modulate position.
+
+**Effects:** `lighting.effect {type, rate, depth}` modulates the rendered
+output per fixture, synced to the click via a beat clock (integer phase = on
+the beat; free-runs at the last tempo when stopped). `pulse` breathes the
+dimmer (peaks on the beat), `wave` spreads the pulse across the rig, `strobe`
+flashes at each cycle start, `rainbow` rotates hue across fixtures, `music`
+drives the dimmer from a smoothed live-audio bass envelope (palette-true
+reactivity for any look), `flash` punches brightness on the beat with a
+natural decay (no mic required). Effects apply after crossfade blending and
+never on blackout. A look stores its effect; applying the look restores both.
+
+**Grand master:** `lighting.master` (0–255) scales the final output of
+everything — including looks' captured intensities — after effects. Capturing
+a look under a dimmed grand master stores un-dimmed values.
+
+**Lights master switch:** `lighting.on` (bool). False = stage dark (output
+zeroed) while the scene/look/lane configuration keeps running underneath;
+True = instant restore. The perf view's icon-only power button and the MIDI
+`blackout` action toggle it. Activating a song never touches lighting.
+
+**Crossfades:** every scene change blends from the last rendered fixture values
+into the live-rendered target (smoothstep easing) over a fade time — the
+default lives in `lighting.fade` (seconds, Lighting view "Scene fade" slider),
+`set_scene` takes a per-change override, and lighting-lane entries carry
+`fade` in **beats** (`light_map: [{bar, scene, fade}]`, converted at the live
+tempo when fired). Blackout (perf pad, MIDI) always snaps. Chained fades
+depart from the blended mid-fade value — no jumps.
 
 ---
 
