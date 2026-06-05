@@ -38,8 +38,9 @@ bands, audibly looser than Ableton's hardware-clock grid.
 - ✅ MIDI clock out (24 ppq) following the live tempo (tempo map included),
   Start/Stop with the transport — Clock out picker in the MIDI dialog,
   port persisted. Verified 47.94 Hz @120 bpm, ~2.8 ms pulse jitter.
-- Remaining: Ableton Link session support (open protocol, needs a
-  LinkKit binding).
+- Ableton Link: NOT PLANNED — Lime Studio is the only software on stage
+  (band decision); hardware syncs via MIDI clock. Revisit only if a
+  Link-enabled app ever joins the rig.
 
 ---
 
