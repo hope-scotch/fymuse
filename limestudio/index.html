@@ -517,14 +517,7 @@
     border: 1px solid var(--line-2); transition: box-shadow .06s, background .06s;
   }
   .perf-bpm { display: flex; align-items: center; gap: 18px; }
-  .pt-stack { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-  .perf-rec {
-    height: 24px; min-width: 24px; padding: 0 7px; border-radius: 999px;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    background: var(--glass); border: 1px solid var(--line-2); cursor: pointer;
-    transition: border-color .15s, box-shadow .2s;
-  }
-  .perf-rec .rdot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); opacity: .7; }
+  .perf-rec .rdot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); opacity: .7; flex-shrink: 0; }
   .perf-rec .rt { font-family: var(--mono); font-size: 10.5px; color: var(--red); display: none; }
   .perf-rec:hover { border-color: rgba(255,77,77,.5); }
   .perf-rec.on { border-color: var(--red); box-shadow: 0 0 12px rgba(255,77,77,.35); }
@@ -1165,6 +1158,7 @@
     <div class="hsep"></div>
     <button class="pill" id="audio-toggle" data-ic="mic"><span class="lbl">Audio</span></button>
     <button class="pill" id="out-btn" data-ic="phones" title="Route the click to a separate output — e.g. the drummer's in-ears"><span class="lbl">Outputs</span></button>
+    <button class="pill perf-rec" id="perf-rec" title="Record the room (default mic) to a WAV in ~/.limestudio/recordings"><span class="rdot"></span><span class="lbl">Rec</span><span class="rt" id="rec-time"></span></button>
     <button class="pill detect" id="tempo-chip" title="Tap to set the click to the detected tempo" style="display:none;"></button>
     <button class="pill" id="autofollow" title="Auto-follow the detected tempo" style="display:none;" data-ic="follow"><span class="lbl">Follow</span></button>
     <button class="pill midi" id="midi-btn" title="MIDI cue triggers"><span class="mled"></span><span data-ic="midi"></span><span class="lbl">MIDI</span></button>
@@ -1323,12 +1317,9 @@
                 <div class="next" id="perf-next"></div>
               </div>
               <div class="perf-bpm">
-                <div class="pt-stack">
-                  <button class="perf-transport" id="perf-transport" title="Stop / resume the performance (Space)">
-                    <svg id="perf-transport-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                  </button>
-                  <button class="perf-rec" id="perf-rec" title="Record the room (default mic) to a WAV in ~/.limestudio/recordings"><span class="rdot"></span><span class="rt" id="rec-time"></span></button>
-                </div>
+                <button class="perf-transport" id="perf-transport" title="Stop / resume the performance (Space)">
+                  <svg id="perf-transport-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </button>
                 <div class="pb-col">
                   <div class="num" id="perf-bpm">—</div>
                   <div class="unit">BPM</div>
