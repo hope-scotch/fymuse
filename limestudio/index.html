@@ -517,10 +517,12 @@
     border: 1px solid var(--line-2); transition: box-shadow .06s, background .06s;
   }
   .perf-bpm { display: flex; align-items: center; gap: 18px; }
-  .perf-rec .rdot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); opacity: .7; flex-shrink: 0; }
+  .perf-rec { border-color: rgba(255,77,77,.4); }
+  .perf-rec .lbl { color: var(--red); font-weight: 700; font-size: 11px; letter-spacing: .09em; }
+  .perf-rec .rdot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); opacity: .85; flex-shrink: 0; }
   .perf-rec .rt { font-family: var(--mono); font-size: 10.5px; color: var(--red); display: none; }
-  .perf-rec:hover { border-color: rgba(255,77,77,.5); }
-  .perf-rec.on { border-color: var(--red); box-shadow: 0 0 12px rgba(255,77,77,.35); }
+  .perf-rec:hover { border-color: var(--red); background: rgba(255,77,77,.08); }
+  .perf-rec.on { border-color: var(--red); background: rgba(255,77,77,.12); box-shadow: 0 0 12px rgba(255,77,77,.35); }
   .perf-rec.on .rdot { opacity: 1; animation: recPulse 1.2s ease-in-out infinite; }
   .perf-rec.on .rt { display: inline; }
   @keyframes recPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(.6); } }
@@ -911,6 +913,12 @@
     transition: left .06s linear, top .06s linear;
   }
   .bpm-dial.active .dot { background: var(--lime-2); box-shadow: var(--glow-md); }
+  .bpm-center .circ { transition: background .16s, transform .12s, box-shadow .16s; }
+  .bpm-dial.tapped .bpm-center .circ {
+    background: rgba(182,255,58,.3); transform: scale(.95);
+    box-shadow: 0 0 30px rgba(182,255,58,.55);
+  }
+  .bpm-dial.tapped .arc { stroke: var(--lime-2); filter: drop-shadow(0 0 12px rgba(182,255,58,.9)); }
 
   /* editable BPM number */
   .bpm-box input.val {
@@ -1150,6 +1158,8 @@
       </div>
     </div>
     <div class="hsep"></div>
+    <button class="pill perf-rec" id="perf-rec" title="Record the room (default mic) to a WAV in ~/.limestudio/recordings"><span class="rdot"></span><span class="lbl">REC</span><span class="rt" id="rec-time"></span></button>
+    <div class="hsep"></div>
 
     <div class="beat-dots" id="beat-dots"></div>
 
@@ -1158,7 +1168,6 @@
     <div class="hsep"></div>
     <button class="pill" id="audio-toggle" data-ic="mic"><span class="lbl">Audio</span></button>
     <button class="pill" id="out-btn" data-ic="phones" title="Route the click to a separate output — e.g. the drummer's in-ears"><span class="lbl">Outputs</span></button>
-    <button class="pill perf-rec" id="perf-rec" title="Record the room (default mic) to a WAV in ~/.limestudio/recordings"><span class="rdot"></span><span class="lbl">Rec</span><span class="rt" id="rec-time"></span></button>
     <button class="pill detect" id="tempo-chip" title="Tap to set the click to the detected tempo" style="display:none;"></button>
     <button class="pill" id="autofollow" title="Auto-follow the detected tempo" style="display:none;" data-ic="follow"><span class="lbl">Follow</span></button>
     <button class="pill midi" id="midi-btn" title="MIDI cue triggers"><span class="mled"></span><span data-ic="midi"></span><span class="lbl">MIDI</span></button>
@@ -1328,7 +1337,7 @@
               </div>
             </div>
             <div class="perf-free" id="perf-freebox">
-              <div class="bpm-dial big" id="bpm-dial" title="Drag in any direction (or scroll) to set the tempo · hold Shift for fine control · double-click resets to 120">
+              <div class="bpm-dial big" id="bpm-dial" title="Drag in any direction (or scroll) to set the tempo · hold Shift for fine control · tap the dial repeatedly to tap a tempo">
                 <svg viewBox="0 0 48 48" aria-hidden="true">
                   <circle class="track" cx="24" cy="24" r="19"/>
                   <circle class="arc" id="bpm-arc" cx="24" cy="24" r="19"/>
@@ -1351,7 +1360,7 @@
                   <button data-sig="6">6/8</button>
                   <button data-sig="7">7/8</button>
                 </div>
-                <button class="pill tap" id="tap-tempo">Tap</button>
+                <div class="f-lbl" style="margin-top:6px; max-width:170px; line-height:1.5;">Tap the dial in time to set a tempo</div>
               </div>
             </div>
             <div class="perf-tl" id="perf-tl"></div>
@@ -1574,7 +1583,7 @@
   <p><b style="color:var(--lime)">Performance</b> — the big, glanceable view for during the show: song title, giant BPM, beat dots, and one-tap cue buttons.</p>
 
   <h4>The click track</h4>
-  <p>The metronome lives in <b>Performance</b>: tap the <b>metronome button</b> at the bottom of the setlist for a big dial you can drag (or scroll; hold Shift for fine control), set a time signature, or hit <b>Tap</b> and tap along. The big round button starts and stops it. Turn on <b>Audio</b> and Lime Studio listens to the room and shows a detected BPM you can apply — or let <b>Follow</b> chase it live.</p>
+  <p>The metronome lives in <b>Performance</b>: tap the <b>metronome button</b> at the bottom of the setlist for a big dial you can drag (or scroll; hold Shift for fine control), set a time signature, or just <b>tap the dial itself</b> in time — it glows with each tap and locks onto your tempo. The big round button starts and stops it. Turn on <b>Audio</b> and Lime Studio listens to the room and shows a detected BPM you can apply — or let <b>Follow</b> chase it live.</p>
 
   <h4>Keyboard shortcuts</h4>
   <div class="krow"><span>Start / stop click</span><kbd>Space</kbd></div>
@@ -2126,12 +2135,21 @@ function setBpmLive(bpm) {
   const now = performance.now();   // throttle WS traffic while dragging
   if (now - _dialSendT > 90) { _dialSendT = now; send("update_click", { bpm: S.click.bpm, time_sig: S.click.time_sig }); }
 }
+function flashDialTap() {
+  const d = $("bpm-dial"); if (!d) return;
+  d.classList.remove("tapped");
+  void d.offsetWidth;                       // restart the pulse on rapid taps
+  d.classList.add("tapped");
+  clearTimeout(flashDialTap._t);
+  flashDialTap._t = setTimeout(() => d.classList.remove("tapped"), 170);
+}
 function wireBpmDial() {
   const dial = $("bpm-dial");
-  let dragX = 0, dragY = 0, dragBpm = 0, dragging = false;
+  const tapper = makeTapper((bpm) => setBpm(bpm));
+  let dragX = 0, dragY = 0, dragBpm = 0, dragging = false, moved = false;
   dial.addEventListener("pointerdown", (e) => {
     if (tempoLocked()) { lockToast(); return; }
-    dragging = true; dragX = e.clientX; dragY = e.clientY; dragBpm = S.click.bpm;
+    dragging = true; moved = false; dragX = e.clientX; dragY = e.clientY; dragBpm = S.click.bpm;
     dial.setPointerCapture(e.pointerId); dial.classList.add("active");
     e.preventDefault();
   });
@@ -2139,15 +2157,21 @@ function wireBpmDial() {
     if (!dragging) return;
     // up OR right = faster; down OR left = slower — whichever way the hand moves
     const delta = (dragY - e.clientY) + (e.clientX - dragX);
+    if (!moved && Math.abs(delta) < 5) return;      // might still be a tap
+    moved = true;
     const perPx = e.shiftKey ? 0.15 : 0.9;          // fast by default, Shift = fine
     setBpmLive(dragBpm + delta * perPx);
   });
-  const end = () => { if (!dragging) return; dragging = false; dial.classList.remove("active"); setBpm(S.click.bpm); };
+  const end = () => {
+    if (!dragging) return;
+    dragging = false; dial.classList.remove("active");
+    if (moved) { setBpm(S.click.bpm); return; }
+    flashDialTap();                                 // clean press = a tempo tap
+    tapper();
+  };
   dial.addEventListener("pointerup", end);
   dial.addEventListener("pointercancel", end);
   dial.addEventListener("wheel", (e) => { e.preventDefault(); if (tempoLocked()) { lockToast(); return; } nudgeBpm((e.deltaY < 0 ? 1 : -1) * (e.shiftKey ? 1 : 2)); }, { passive: false });
-  dial.addEventListener("dblclick", () => { setBpm(120); toast("Tempo reset to 120"); });
-
 }
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -2784,7 +2808,6 @@ function wire() {
 
   // transport
   wireBpmDial();
-  $("tap-tempo").onclick = makeTapper((bpm) => setBpm(bpm));
   document.querySelectorAll("#free-sig button").forEach(b => b.onclick = () => {
     S.click.time_sig = parseInt(b.dataset.sig, 10);
     paintSeg("free-sig", "sig", String(S.click.time_sig));
