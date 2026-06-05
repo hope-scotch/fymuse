@@ -368,6 +368,8 @@ midi = midi_input.MidiManager(
     on_activity=_on_midi_activity,
     on_learned=_on_midi_learned,
 )
+midi_clock = midi_input.MidiClockOut(
+    lambda: (state["click"]["running"], state["click"]["bpm"]))
 
 
 # ── Show persistence ──────────────────────────────────────────────────────────
@@ -510,6 +512,7 @@ def _save_show():
                          for k in ("scene", "color", "brightness", "num_fixtures")},
             "midi_mapping": midi.mapping,
             "click_out_device": click_out.device,
+            "midi_clock_port": midi_clock.port_name,
         }
         tmp = SHOW_FILE.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(data, indent=2))
@@ -533,6 +536,8 @@ def _load_show():
             midi.set_mapping(d["midi_mapping"])
         if d.get("click_out_device") is not None:
             click_out.start(d["click_out_device"])
+        if d.get("midi_clock_port"):
+            midi_clock.start(d["midi_clock_port"])
     except Exception:
         pass
 
@@ -659,6 +664,15 @@ def handle_ws_message(payload: dict, ws):
         _save_show()
         broadcast("state", _full_state())
 
+    elif action == "set_midi_clock":
+        port = data.get("port") or None
+        if port is None:
+            midi_clock.stop()
+        else:
+            midi_clock.start(port)
+        _save_show()
+        broadcast("state", _full_state())
+
     elif action == "set_click_output":
         dev = data.get("device", None)
         if dev is None:
@@ -767,6 +781,7 @@ def _full_state():
         "profiles": {k: v["width"] for k, v in PROFILES.items()},
         "midi": midi.state(),
         "click_out": click_out.state(),
+        "midi_clock": midi_clock.state(),
     }
 
 
@@ -1168,6 +1183,12 @@ def api_dmx_status():
 @app.route("/api/midi/ports")
 def api_midi_ports():
     return jsonify({"ports": midi.list_ports(), "has_midi": midi_input.HAS_MIDI})
+
+
+@app.route("/api/midi/outports")
+def api_midi_outports():
+    return jsonify({"ports": midi_clock.list_ports(),
+                    "available": midi_input.HAS_MIDI})
 
 
 @app.route("/api/midi/status")

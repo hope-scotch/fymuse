@@ -34,12 +34,12 @@ bands, audibly looser than Ableton's hardware-clock grid.
   (lookahead window), server sends bar/beat *plan*, not per-beat ticks
 - Also fixes: webview throttling risk when the window is backgrounded
 
-### 4. MIDI clock out / Ableton Link
-We receive MIDI (pedal triggers) but send nothing. Delay pedals, drum
-machines and arps can't sync to our tempo, and we can't lock to other
-software.
-- MIDI clock out (24 ppq) following the tempo map
-- Ableton Link session support (open protocol)
+### 4. MIDI clock out / Ableton Link — ✅ clock out SHIPPED
+- ✅ MIDI clock out (24 ppq) following the live tempo (tempo map included),
+  Start/Stop with the transport — Clock out picker in the MIDI dialog,
+  port persisted. Verified 47.94 Hz @120 bpm, ~2.8 ms pulse jitter.
+- Remaining: Ableton Link session support (open protocol, needs a
+  LinkKit binding).
 
 ---
 

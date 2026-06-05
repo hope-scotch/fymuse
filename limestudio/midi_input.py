@@ -19,6 +19,7 @@ double-fire.
 """
 
 import threading
+import time
 
 try:
     import mido
@@ -217,3 +218,102 @@ class MidiManager:
             "has_midi": HAS_MIDI,
             "action_types": list(ACTION_TYPES),
         }
+
+
+class MidiClockOut:
+    """Sends MIDI clock (24 ppq) plus Start/Stop so delay pedals, drum machines
+    and arps follow Lime Studio's tempo. BPM is read live from a callable, so
+    mid-song tempo-map changes propagate within one pulse."""
+
+    def __init__(self, get_state):
+        # get_state() -> (running: bool, bpm: float)
+        self._get_state = get_state
+        self._port = None
+        self.port_name = None
+        self.error = None
+        self._thread = None
+        self._stop_flag = threading.Event()
+
+    def list_ports(self):
+        if not HAS_MIDI:
+            return []
+        try:
+            return list(mido.get_output_names())
+        except Exception:
+            return []
+
+    def start(self, port_name):
+        self.stop()
+        if not port_name:
+            return True
+        if not HAS_MIDI:
+            self.error = "python-mido not installed"
+            return False
+        try:
+            self._port = mido.open_output(port_name)
+            self.port_name = port_name
+            self.error = None
+            self._stop_flag.clear()
+            self._thread = threading.Thread(target=self._run, daemon=True, name="midi-clock")
+            self._thread.start()
+            return True
+        except Exception as e:
+            self.error = str(e)
+            self._port = None
+            return False
+
+    def stop(self):
+        self._stop_flag.set()
+        t = self._thread
+        self._thread = None
+        if t:
+            t.join(timeout=0.5)
+        if self._port:
+            try:
+                self._port.send(mido.Message("stop"))
+                self._port.close()
+            except Exception:
+                pass
+        self._port = None
+        self.port_name = None
+
+    def state(self):
+        return {"port": self.port_name, "error": self.error, "available": HAS_MIDI}
+
+    def _run(self):
+        was_running = False
+        next_t = None
+        while not self._stop_flag.is_set():
+            running, bpm = self._get_state()
+            if not running:
+                if was_running:
+                    try:
+                        self._port.send(mido.Message("stop"))
+                    except Exception:
+                        pass
+                    was_running = False
+                next_t = None
+                time.sleep(0.03)
+                continue
+            if not was_running:
+                try:
+                    self._port.send(mido.Message("start"))
+                except Exception:
+                    pass
+                was_running = True
+                next_t = None
+            try:
+                self._port.send(mido.Message("clock"))
+            except Exception as e:
+                self.error = str(e)
+                time.sleep(0.2)
+                continue
+            # absolute deadlines — pulse-train tempo stays drift-free
+            interval = 60.0 / max(20.0, min(300.0, float(bpm or 120))) / 24.0
+            now = time.monotonic()
+            next_t = (now if next_t is None else next_t) + interval
+            delay = next_t - now
+            if delay > 0:
+                time.sleep(delay)
+            elif delay < -0.25:
+                next_t = now

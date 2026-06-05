@@ -1453,6 +1453,18 @@
         <div class="midi-activity" id="midi-activity">Last message: <b>—</b></div>
       </div>
 
+      <div class="card" style="background:var(--bg-3); margin-top:12px;">
+        <div class="field" style="margin-bottom:0;">
+          <label>Clock out — sync pedals &amp; drum machines</label>
+          <div style="display:flex; gap:6px;">
+            <select id="mclk-port" style="flex:1;"><option value="">Off</option></select>
+            <button class="btn sm icon-btn" id="mclk-refresh" title="Rescan devices" data-ic="refresh"></button>
+          </div>
+          <div class="hint" style="margin-top:8px;">Sends MIDI clock (24 ppq) at the live tempo — tempo-map changes included — plus Start/Stop with the transport.</div>
+          <div class="out-status" id="mclk-status" style="margin-top:8px;">Off</div>
+        </div>
+      </div>
+
       <div class="field">
         <div class="row-between">
           <label>Mappings</label>
@@ -1578,6 +1590,9 @@
 
   <h4>Foot pedal / pads</h4>
   <p>Click <b>MIDI</b> up top, connect your device, then use <b>Learn</b>: tap a pedal, pick what it fires — cues, click on/off, blackout, next song. Mappings save automatically.</p>
+
+  <h4>Sync pedals &amp; drum machines</h4>
+  <p>In the same MIDI dialog, set <b>Clock out</b> to your interface or pedal's MIDI port. Lime Studio sends MIDI clock (24 ppq) at the live tempo — tempo-map changes included — and Start/Stop with the transport, so delays and arps stay locked all set.</p>
 
   <h4>Room listening (optional)</h4>
   <p>The <b>Audio</b> button listens to the room for reactive lighting and live BPM detection. From source this needs the optional mic backend: <code>brew install portaudio</code> then <code>pip install pyaudio</code> (see <code>requirements-optional.txt</code>).</p>
@@ -2755,6 +2770,12 @@ function wire() {
   $("midi-close").onclick = closeMidiModal;
   $("midi-done").onclick = closeMidiModal;
   $("midi-modal").onclick = (e) => { if (e.target.id === "midi-modal") closeMidiModal(); };
+  $("mclk-refresh").onclick = loadMclkPorts;
+  $("mclk-port").onchange = () => {
+    const v = $("mclk-port").value;
+    send("set_midi_clock", { port: v || null });
+    toast(v ? "MIDI clock → " + v : "MIDI clock off");
+  };
   $("midi-refresh").onclick = refreshMidiPorts;
   $("midi-connect").onclick = toggleMidiConnect;
   $("midi-add").onclick = addMidiBinding;
@@ -2923,7 +2944,30 @@ function flashMidi() {
   clearTimeout(flashMidi._t);
   flashMidi._t = setTimeout(() => b.classList.remove("flash"), 120);
 }
+function loadMclkPorts() {
+  fetch("/api/midi/outports").then(r => r.json()).then(d => {
+    const sel = $("mclk-port");
+    const cur = (S.midi_clock && S.midi_clock.port) || "";
+    sel.innerHTML = '<option value="">Off</option>';
+    (d.ports || []).forEach(p => {
+      const o = el("option"); o.value = o.textContent = p; sel.appendChild(o);
+    });
+    sel.value = cur;
+    if (cur && sel.value !== cur) {   // saved port not present right now — show it anyway
+      const o = el("option"); o.value = o.textContent = cur; sel.appendChild(o); sel.value = cur;
+    }
+  }).catch(() => {});
+}
+function renderMclk() {
+  const mc = S.midi_clock || {};
+  const st = $("mclk-status"); if (!st) return;
+  st.className = "out-status" + (mc.error ? " err" : "");
+  st.textContent = mc.error ? ("Error: " + mc.error)
+    : mc.port ? ("Clocking " + mc.port + " — follows the click")
+    : (mc.available === false ? "python-mido not installed on the backend" : "Off");
+}
 function openMidiModal() {
+  loadMclkPorts();
   $("midi-modal").classList.add("open");
   refreshMidiPorts();
   renderMidiModal();
@@ -2958,6 +3002,7 @@ function renderMidiModal() {
   cbtn.classList.toggle("live", !!m.connected);
   renderMidiPorts();
   renderMidiActivity();
+  renderMclk();
   renderMidiList();
 }
 function renderMidiActivity() {
