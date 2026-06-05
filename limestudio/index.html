@@ -207,6 +207,7 @@
   }
   .beat-dot.lit { background: var(--lime); box-shadow: 0 0 10px var(--lime); transform: scale(1.15); }
   .beat-dot.down.lit { background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+  .beat-dot.mid.lit { background: var(--lime-2); box-shadow: 0 0 12px var(--lime-2); }
 
   /* ── Tab nav ───────────────────────────────────────── */
   nav {
@@ -516,6 +517,20 @@
     border: 1px solid var(--line-2); transition: box-shadow .06s, background .06s;
   }
   .perf-bpm { display: flex; align-items: center; gap: 18px; }
+  .pt-stack { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .perf-rec {
+    height: 24px; min-width: 24px; padding: 0 7px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--glass); border: 1px solid var(--line-2); cursor: pointer;
+    transition: border-color .15s, box-shadow .2s;
+  }
+  .perf-rec .rdot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); opacity: .7; }
+  .perf-rec .rt { font-family: var(--mono); font-size: 10.5px; color: var(--red); display: none; }
+  .perf-rec:hover { border-color: rgba(255,77,77,.5); }
+  .perf-rec.on { border-color: var(--red); box-shadow: 0 0 12px rgba(255,77,77,.35); }
+  .perf-rec.on .rdot { opacity: 1; animation: recPulse 1.2s ease-in-out infinite; }
+  .perf-rec.on .rt { display: inline; }
+  @keyframes recPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(.6); } }
   .pb-col { text-align: right; }
   .perf-transport {
     width: 66px; height: 66px; border-radius: 50%; flex-shrink: 0;
@@ -1176,9 +1191,9 @@
           </div>
           <div style="display:flex;gap:8px;">
             <button class="btn ghost sm" id="btn-demo">Load demo set</button>
-            <button class="btn ghost sm" id="btn-import" title="Load a setlist JSON shared by a bandmate">Import</button>
-            <button class="btn ghost sm" id="btn-export" title="Save the setlist to your Desktop as a shareable file">Export</button>
-            <input type="file" id="import-file" accept=".json,application/json" style="display:none;">
+            <button class="btn ghost sm" id="btn-import" title="Load a .limeshow bundle (setlist + audio) shared by a bandmate">Import</button>
+            <button class="btn ghost sm" id="btn-export" title="Save a .limeshow bundle (setlist + backing tracks) to your Desktop">Export</button>
+            <input type="file" id="import-file" accept=".limeshow,.json,.zip,application/json,application/zip" style="display:none;">
             <button class="btn primary" id="btn-add-song">+ Add song</button>
           </div>
         </div>
@@ -1308,9 +1323,12 @@
                 <div class="next" id="perf-next"></div>
               </div>
               <div class="perf-bpm">
-                <button class="perf-transport" id="perf-transport" title="Stop / resume the performance (Space)">
-                  <svg id="perf-transport-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                </button>
+                <div class="pt-stack">
+                  <button class="perf-transport" id="perf-transport" title="Stop / resume the performance (Space)">
+                    <svg id="perf-transport-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                  </button>
+                  <button class="perf-rec" id="perf-rec" title="Record the room (default mic) to a WAV in ~/.limestudio/recordings"><span class="rdot"></span><span class="rt" id="rec-time"></span></button>
+                </div>
                 <div class="pb-col">
                   <div class="num" id="perf-bpm">—</div>
                   <div class="unit">BPM</div>
@@ -1338,7 +1356,9 @@
                 <div class="seg" id="free-sig">
                   <button data-sig="3">3/4</button>
                   <button data-sig="4">4/4</button>
+                  <button data-sig="5">5/4</button>
                   <button data-sig="6">6/8</button>
+                  <button data-sig="7">7/8</button>
                 </div>
                 <button class="pill tap" id="tap-tempo">Tap</button>
               </div>
@@ -1385,7 +1405,9 @@
         <div class="seg" id="f-sig">
           <button data-sig="3">3/4</button>
           <button data-sig="4">4/4</button>
+          <button data-sig="5">5/4</button>
           <button data-sig="6">6/8</button>
+          <button data-sig="7">7/8</button>
         </div>
       </div>
       <div class="field">
@@ -1859,14 +1881,15 @@ function ensureAudio() {
 }
 // true when the server renders the click on a dedicated device (IEMs)
 function clickRouted() { return !!(S.click_out && S.click_out.device != null); }
-function playClick(downbeat) {
+function playClick(accent) {              // 2 = downbeat · 1 = group accent · 0 = tick
+  const lvl = (accent === true) ? 2 : (accent || 0);
   const ctx = ensureAudio();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.connect(gain); gain.connect(ctx.destination);
-  osc.frequency.value = downbeat ? 1000 : 800;
+  osc.frequency.value = lvl === 2 ? 1000 : lvl === 1 ? 890 : 800;
   const t = ctx.currentTime;
-  gain.gain.setValueAtTime(0.6, t);
+  gain.gain.setValueAtTime(lvl === 0 ? 0.42 : 0.6, t);
   gain.gain.exponentialRampToValueAtTime(0.0008, t + 0.05);
   osc.start(t); osc.stop(t + 0.05);
 }
@@ -1877,7 +1900,7 @@ function onBeat(d) {
   S.click.beat = d.beat;
   if (d.bar) S.pos = { bar: d.bar, beat: d.beat, section: d.section || null, len: d.length_bars || 0 };
   const audioScheduled = d.bar ? schedOnServerBeat(d) : false;
-  if (!audioScheduled && !clickRouted()) playClick(d.downbeat);
+  if (!audioScheduled && !clickRouted()) playClick(d.accent != null ? d.accent : (d.downbeat ? 2 : 0));
   // beat-synced cue segments: each lands exactly on a click
   if (cueSegQueue.length)
     speakNow(cueSegQueue.shift(), Math.max(1.0, Math.min(1.7, S.click.bpm / 105)),
@@ -1900,7 +1923,7 @@ function startLocalClock() {
   const tick = () => {
     const sig = S.click.time_sig;
     const down = (beat % sig === 0);
-    onBeat({ beat, downbeat: down, time_sig: sig, bpm: S.click.bpm });
+    onBeat({ beat, downbeat: down, accent: beatAccent(beat, sig), time_sig: sig, bpm: S.click.bpm });
     beat = (beat + 1) % (sig * 16);
     localClock = setTimeout(tick, 60000 / clamp(S.click.bpm, 20, 300));
   };
@@ -1914,9 +1937,11 @@ function buildBeatDots() {
   const hdr = $("beat-dots"); hdr.innerHTML = "";
   const perf = $("perf-beats"); perf.innerHTML = "";
   for (let i = 0; i < sig; i++) {
-    const d = el("div", "beat-dot" + (i === 0 ? " down" : ""));
+    const acc = beatAccent(i, sig);
+    const cls = acc === 2 ? " down" : acc === 1 ? " mid" : "";
+    const d = el("div", "beat-dot" + cls);
     d.dataset.i = i; hdr.appendChild(d);
-    const p = el("div", "perf-beat" + (i === 0 ? " down" : ""));
+    const p = el("div", "perf-beat" + cls);
     p.dataset.i = i; perf.appendChild(p);
   }
 }
@@ -2048,6 +2073,27 @@ function syncTransport() {
   renderBpmDial();
   const locked = tempoLocked();
   const dial = $("bpm-dial"); if (dial) dial.classList.toggle("locked", locked);
+  const rec = $("perf-rec");
+  if (rec) {
+    const on = !!(S.recorder && S.recorder.active);
+    rec.classList.toggle("on", on);
+    if (on && !syncTransport._recT) {
+      syncTransport._rec0 = Date.now() - ((S.recorder.seconds || 0) * 1000);
+      syncTransport._recT = setInterval(() => {
+        const s = Math.max(0, Math.floor((Date.now() - syncTransport._rec0) / 1000));
+        const e = $("rec-time");
+        if (e) e.textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+      }, 500);
+    }
+    if (!on && syncTransport._recT) {
+      clearInterval(syncTransport._recT); syncTransport._recT = null;
+      const e = $("rec-time"); if (e) e.textContent = "";
+    }
+    if (S.recorder && S.recorder.error && !syncTransport._recErrShown) {
+      syncTransport._recErrShown = S.recorder.error;
+      toast("Recording: " + S.recorder.error);
+    }
+  }
   const pt = $("perf-transport");
   if (pt) {
     pt.classList.toggle("running", S.click.running);
@@ -2739,6 +2785,11 @@ function wire() {
   // tabs
   document.querySelectorAll(".tab").forEach(t => t.onclick = () => switchView(t.dataset.view));
   $("perf-transport").onclick = toggleClick;
+  $("perf-rec").onclick = () => {
+    const on = S.recorder && S.recorder.active;
+    if (!send(on ? "record_stop" : "record_start", {})) { toast("Recording needs the backend running"); return; }
+    if (on) toast("Recording saved to ~/.limestudio/recordings");
+  };
 
   // transport
   wireBpmDial();
@@ -2802,19 +2853,32 @@ function wire() {
   $("btn-import").onclick = () => $("import-file").click();
   $("import-file").onchange = (e) => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => {
-      try {
-        const d = JSON.parse(rd.result);
-        const list = Array.isArray(d) ? d : d.setlist;
-        if (!Array.isArray(list)) throw new Error("not a setlist file");
-        S.setlist = list; S.active_song_idx = null;
-        pushSetlist(); renderAll();
-        toast("Imported " + list.length + " song" + (list.length === 1 ? "" : "s"));
-      } catch (err) { toast("Couldn't read that file — expected a Lime Studio setlist JSON"); }
-    };
-    rd.readAsText(f);
     e.target.value = "";
+    const fd = new FormData();
+    fd.append("file", f);
+    toast("Importing " + f.name + "…");
+    fetch("/api/setlist/import", { method: "POST", body: fd })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.ok) throw new Error(d.error || "import failed");
+        toast("Imported " + d.songs + " song" + (d.songs === 1 ? "" : "s") +
+              (d.tracks_copied ? " + " + d.tracks_copied + " audio file" + (d.tracks_copied === 1 ? "" : "s") : ""));
+      })
+      .catch(() => {
+        // offline fallback: plain JSON only
+        const rd = new FileReader();
+        rd.onload = () => {
+          try {
+            const d2 = JSON.parse(rd.result);
+            const list = Array.isArray(d2) ? d2 : d2.setlist;
+            if (!Array.isArray(list)) throw new Error("not a setlist file");
+            S.setlist = list; S.active_song_idx = null;
+            pushSetlist(); renderAll();
+            toast("Imported " + list.length + " song" + (list.length === 1 ? "" : "s"));
+          } catch (err) { toast("Couldn't read that file — expected a .limeshow bundle or setlist JSON"); }
+        };
+        rd.readAsText(f);
+      });
   };
 
   // modal
@@ -3120,7 +3184,15 @@ function toggleMidiConnect() {
 // ════════════════════════════════════════════════════════════════════════════
 //  Song timeline — bar-based tempo map, sections, cues
 // ════════════════════════════════════════════════════════════════════════════
-const SIG_LABEL = { 3: "3/4", 4: "4/4", 6: "6/8" };
+const SIG_LABEL = { 3: "3/4", 4: "4/4", 5: "5/4", 6: "6/8", 7: "7/8" };
+// secondary accents give odd/compound meters their feel:
+// 5/4 = 3+2 · 6/8 = two dotted pulses · 7/8 = 2+2+3
+const SIG_ACCENTS = { 5: [3], 6: [3], 7: [2, 4] };
+function beatAccent(beat, sig) {
+  const p = beat % (sig || 4);
+  if (p === 0) return 2;
+  return (SIG_ACCENTS[sig] || []).includes(p) ? 1 : 0;
+}
 const sigLbl = (s) => SIG_LABEL[s] || (s + "/4");
 const SEC_COLORS = ["182,255,58", "255,122,26", "77,155,255", "58,209,122", "212,83,126", "199,255,102"];
 const LIGHT_COLORS = { reactive: "192,140,255", chase: "255,110,199", static: "94,222,212", off: "120,126,140" };
@@ -3479,12 +3551,13 @@ function startTrackSource(buf, when, offset, gain) {
   src.start(when, Math.max(0, offset || 0));
   sched.sources.push(src);
 }
-function schedClickAt(t, down) {
+function schedClickAt(t, accent) {
+  const lvl = (accent === true) ? 2 : (accent || 0);
   const ctx = ensureAudio();
   const osc = ctx.createOscillator(), g = ctx.createGain();
   osc.connect(g); g.connect(ctx.destination);
-  osc.frequency.value = down ? 1000 : 800;
-  g.gain.setValueAtTime(0.6, t);
+  osc.frequency.value = lvl === 2 ? 1000 : lvl === 1 ? 890 : 800;
+  g.gain.setValueAtTime(lvl === 0 ? 0.42 : 0.6, t);
   g.gain.exponentialRampToValueAtTime(0.0008, t + 0.05);
   osc.start(t); osc.stop(t + 0.05);
   sched.sources.push(osc);
@@ -3508,7 +3581,7 @@ function schedPump() {
         }
       });
     }
-    if (!clickRouted()) schedClickAt(sched.nextT, sched.beat === 0);
+    if (!clickRouted()) schedClickAt(sched.nextT, beatAccent(sched.beat, seg.time_sig));
     sched.beatTimes[sched.bar + ":" + sched.beat] = sched.nextT;
     sched.nextT += 60 / seg.bpm;
     sched.beat++;
@@ -3695,7 +3768,7 @@ function tlPopTempo(bar) {
          </div>
          <button class="btn sm" id="tp-tap">Tap</button></div></div>
      <div class="field"><label>Time signature</label>
-       <div class="seg" id="tp-sig"><button data-sig="3">3/4</button><button data-sig="4">4/4</button><button data-sig="6">6/8</button></div></div>
+       <div class="seg" id="tp-sig"><button data-sig="3">3/4</button><button data-sig="4">4/4</button><button data-sig="5">5/4</button><button data-sig="6">6/8</button><button data-sig="7">7/8</button></div></div>
      <div class="tp-row"><button class="btn primary sm" id="tp-save">Save</button>` +
      (ex && bar !== 1 ? `<button class="btn danger sm" id="tp-del">Remove</button>` : "") +
      `<button class="btn ghost sm" id="tp-x">Cancel</button></div>`;

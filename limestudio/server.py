@@ -396,7 +396,8 @@ class ClickOutput:
         self.error = None
         self.backend = None
         self._w_down = self._tone(1000.0)
-        self._w_beat = self._tone(800.0)
+        self._w_mid = self._tone(890.0)
+        self._w_beat = self._tone(800.0, vol=0.42)
 
     @staticmethod
     def _tone(freq, dur=0.05, vol=0.6):
@@ -471,11 +472,14 @@ class ClickOutput:
         with self._lock:
             self._active = []
 
-    def tick(self, downbeat):
+    def tick(self, accent):
+        """accent: 2 = downbeat · 1 = group accent (5/4, 6/8, 7/8 feels) · 0 = tick"""
         if not self._stream:
             return
+        lvl = 2 if accent is True else int(accent or 0)
+        w = self._w_down if lvl == 2 else (self._w_mid if lvl == 1 else self._w_beat)
         with self._lock:
-            self._active.append([self._w_down if downbeat else self._w_beat, 0])
+            self._active.append([w, 0])
 
     def _mix(self, frame_count):
         buf = array.array("f", bytes(4 * frame_count))
@@ -500,6 +504,123 @@ class ClickOutput:
 
 
 click_out = ClickOutput()
+
+
+# ── Show recorder ─────────────────────────────────────────────────────────────
+# One-button room capture: default input device -> timestamped WAV in
+# ~/.limestudio/recordings. For post-gig review, not multitracking.
+class ShowRecorder:
+    RATE = 44100
+
+    def __init__(self):
+        self._stream = None
+        self._wav = None
+        self._lock = threading.Lock()
+        self.path = None
+        self.started_at = None
+        self.error = None
+
+    def state(self):
+        return {
+            "active": self._stream is not None,
+            "file": (self.path.name if self.path else None),
+            "seconds": round(time.time() - self.started_at, 1) if (self._stream and self.started_at) else 0,
+            "available": HAS_SD or HAS_PYAUDIO,
+            "error": self.error,
+        }
+
+    def start(self):
+        self.stop()
+        if not (HAS_SD or HAS_PYAUDIO):
+            self.error = "no audio backend — pip install sounddevice"
+            return False
+        folder = CONFIG_DIR / "recordings"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / (time.strftime("show %Y-%m-%d %H.%M.%S") + ".wav")
+            channels = 1
+            if HAS_SD:
+                try:
+                    di = sd.query_devices(kind="input")
+                    channels = max(1, min(2, int(di.get("max_input_channels", 1))))
+                except Exception:
+                    pass
+            self._wav = wave.open(str(path), "wb")
+            self._wav.setnchannels(channels)
+            self._wav.setsampwidth(2)
+            self._wav.setframerate(self.RATE)
+            if HAS_SD:
+                self._stream = sd.RawInputStream(
+                    samplerate=self.RATE, channels=channels, dtype="int16",
+                    blocksize=2048, callback=self._sd_cb)
+                self._stream.start()
+            else:
+                self._pa = pyaudio.PyAudio()
+                self._stream = self._pa.open(
+                    format=pyaudio.paInt16, channels=channels, rate=self.RATE,
+                    input=True, frames_per_buffer=2048, stream_callback=self._pa_cb)
+                self._stream.start_stream()
+            self.path = path
+            self.started_at = time.time()
+            self.error = None
+            return True
+        except Exception as e:
+            self.error = str(e)
+            self._close_wav()
+            try:
+                if path.exists():
+                    path.unlink()
+            except Exception:
+                pass
+            self._stream = None
+            return False
+
+    def stop(self):
+        st = self._stream
+        self._stream = None
+        try:
+            if st:
+                st.stop() if HAS_SD else st.stop_stream()
+                st.close()
+        except Exception:
+            pass
+        try:
+            if getattr(self, "_pa", None):
+                self._pa.terminate()
+                self._pa = None
+        except Exception:
+            pass
+        self._close_wav()
+        p = self.path
+        self.started_at = None
+        return p
+
+    def _close_wav(self):
+        with self._lock:
+            try:
+                if self._wav:
+                    self._wav.close()
+            except Exception:
+                pass
+            self._wav = None
+
+    def _write(self, data):
+        with self._lock:
+            if self._wav:
+                try:
+                    self._wav.writeframes(data)
+                except Exception:
+                    pass
+
+    def _sd_cb(self, indata, frames, time_info, status_flags):
+        self._write(bytes(indata))
+
+    def _pa_cb(self, in_data, frame_count, time_info, status_flags):
+        self._write(in_data)
+        return (None, pyaudio.paContinue)
+
+
+recorder = ShowRecorder()
 
 
 def _save_show():
@@ -664,6 +785,14 @@ def handle_ws_message(payload: dict, ws):
         _save_show()
         broadcast("state", _full_state())
 
+    elif action == "record_start":
+        recorder.start()                  # failure shows up in state.recorder.error
+        broadcast("state", _full_state())
+
+    elif action == "record_stop":
+        recorder.stop()
+        broadcast("state", _full_state())
+
     elif action == "set_midi_clock":
         port = data.get("port") or None
         if port is None:
@@ -782,10 +911,23 @@ def _full_state():
         "midi": midi.state(),
         "click_out": click_out.state(),
         "midi_clock": midi_clock.state(),
+        "recorder": recorder.state(),
     }
 
 
 # ── Click track engine ────────────────────────────────────────────────────────
+# Secondary accents give odd/compound meters their feel:
+# 5/4 = 3+2 · 6/8 = two dotted pulses · 7/8 = 2+2+3
+SIG_ACCENTS = {5: (3,), 6: (3,), 7: (2, 4)}
+
+
+def _beat_accent(beat, sig):
+    p = beat % (sig or 4)
+    if p == 0:
+        return 2
+    return 1 if p in SIG_ACCENTS.get(sig, ()) else 0
+
+
 def _beat_sleep(next_t, interval):
     """Drift-free beat pacing: sleep to an absolute deadline instead of a
     relative interval, so per-beat scheduling error doesn't accumulate into
@@ -872,10 +1014,11 @@ def click_thread():
                 "beat": beat, "bar": bar,
                 "bpm": bpm, "time_sig": time_sig,
                 "downbeat": beat == 0,
+                "accent": _beat_accent(beat, time_sig),
                 "section": _song_section(song, bar),
                 "length_bars": song["length_bars"],
             })
-            click_out.tick(beat == 0)
+            click_out.tick(_beat_accent(beat, time_sig))
 
             if state["lighting"]["scene"] == "chase":
                 _chase_pos += 1
@@ -903,8 +1046,9 @@ def click_thread():
             broadcast("beat", {
                 "beat": beat, "bpm": bpm, "time_sig": time_sig,
                 "downbeat": (beat % time_sig == 0),
+                "accent": _beat_accent(beat, time_sig),
             })
-            click_out.tick(beat % time_sig == 0)
+            click_out.tick(_beat_accent(beat, time_sig))
             if state["lighting"]["scene"] == "chase":
                 _chase_pos += 1
                 _update_dmx_from_lighting()
@@ -1297,16 +1441,75 @@ def api_voice():
 
 @app.route("/api/setlist/export", methods=["POST"])
 def api_setlist_export():
-    """Write the setlist to the Desktop as a shareable JSON file."""
+    """Write the set to the Desktop as a .limeshow bundle — the setlist JSON
+    plus every backing-track audio file it references, so a bandmate's import
+    is complete. Plain zip inside, custom extension to keep it double-click
+    friendly later."""
+    import zipfile
     try:
         folder = Path.home() / "Desktop"
         if not folder.is_dir():
             folder = Path.home()           # no Desktop? home dir works everywhere
-        dest = folder / "Lime Studio setlist.json"
-        dest.write_text(json.dumps({"setlist": state["setlist"]}, indent=2))
+        dest = folder / "Lime Studio set.limeshow"
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("setlist.json", json.dumps({"setlist": state["setlist"]}, indent=2))
+            seen = set()
+            for song in state["setlist"]:
+                for t in song.get("tracks", []) or []:
+                    tid = t.get("id")
+                    if not tid or tid in seen:
+                        continue
+                    seen.add(tid)
+                    p = TRACKS_DIR / tid
+                    if p.is_file():
+                        z.write(p, "tracks/" + tid)
         return jsonify({"ok": True, "path": str(dest)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/setlist/import", methods=["POST"])
+def api_setlist_import():
+    """Import a .limeshow bundle (zip: setlist.json + tracks/) or a legacy
+    plain-JSON setlist. Audio lands in the local track library."""
+    import io
+    import zipfile
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "no file"}), 400
+    raw = f.read()
+    try:
+        if raw[:2] == b"PK":                       # zip bundle
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                d = json.loads(z.read("setlist.json").decode("utf-8"))
+                TRACKS_DIR.mkdir(parents=True, exist_ok=True)
+                copied = 0
+                for name in z.namelist():
+                    if not name.startswith("tracks/") or name.endswith("/"):
+                        continue
+                    tid = os.path.basename(name)
+                    stem, ext = os.path.splitext(tid)
+                    if (len(stem) != 32 or not all(c in "0123456789abcdef" for c in stem)
+                            or ext not in TRACK_EXTS):
+                        continue                    # only well-formed library ids
+                    p = TRACKS_DIR / tid
+                    if not p.exists():
+                        p.write_bytes(z.read(name))
+                        copied += 1
+        else:                                       # legacy plain JSON
+            d = json.loads(raw.decode("utf-8"))
+            copied = 0
+        lst = d if isinstance(d, list) else d.get("setlist")
+        if not isinstance(lst, list):
+            return jsonify({"ok": False, "error": "not a Lime Studio setlist"}), 400
+        state["setlist"] = [_migrate_song(s) for s in lst]
+        state["active_song_idx"] = None
+        state["click"]["pending_song"] = None
+        _save_show()
+        broadcast("state", _full_state())
+        return jsonify({"ok": True, "songs": len(lst), "tracks_copied": copied})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
 
 # ── Boot ──────────────────────────────────────────────────────────────────────

@@ -47,15 +47,17 @@ bands, audibly looser than Ableton's hardware-clock grid.
 ## Smaller gaps (grab when convenient)
 
 - **Tempo ramps** — changes are stepwise per-bar; no gradual accel/rit curves.
-- **Meter depth** — only 3/4 · 4/4 · 6/8 in the UI; no 5/4, 7/8; 6/8 clicks as
-  six even ticks, not two dotted pulses (compound-meter feel).
+- **Meter depth** — ✅ SHIPPED: 5/4 and 7/8 added everywhere; accent patterns
+  give the feel (5/4 = 3+2, 6/8 = two dotted pulses, 7/8 = 2+2+3) with a
+  three-level click voice (down / group accent / tick) in browser + routed out.
 - **Sampled count-ins / voices** — ✅ SHIPPED: server renders cue words once
   with the macOS system voice (`/api/voice`, silence-trimmed, cached), client
   plays them as Web Audio buffers locked to the click; TTS remains the fallback.
 - **Editor undo/history** — no undo in the song editor; mistakes need manual
   fixes. (Auto-save makes this more important, not less.)
-- **Show recording** — no capture of the performance (even a stereo bounce of
-  the room mic would be useful for review).
+- **Show recording** — ✅ SHIPPED: REC button under the perf transport records
+  the default input to a timestamped WAV in ~/.limestudio/recordings
+  (sounddevice, pyaudio fallback).
 - **Lighting depth** — 4 scenes vs real fixture libraries, cue stacks, chases
   with curves, per-section lighting automation. Per-section scene changes is
   the cheap first step.
