@@ -676,6 +676,23 @@ class ShowRecorder:
         self.path = None
         self.started_at = None
         self.error = None
+        # recording source: None = default input (room mic). With the XR18
+        # as the input device and the channel pair carrying its USB return of
+        # the main LR, REC captures the actual live board mix.
+        self.device = None
+        self.channel = None        # 1-based first channel of the stereo pair
+        self._nch = 2              # channels the stream is opened with
+        self._pair0 = 0            # 0-based offset of the recorded pair
+
+    def configure(self, device=None, channel=None):
+        try:
+            self.device = int(device) if device is not None else None
+        except (TypeError, ValueError):
+            self.device = None
+        try:
+            self.channel = max(1, min(31, int(channel))) if channel else None
+        except (TypeError, ValueError):
+            self.channel = None
 
     def state(self):
         return {
@@ -683,6 +700,8 @@ class ShowRecorder:
             "file": (self.path.name if self.path else None),
             "seconds": round(time.time() - self.started_at, 1) if (self._stream and self.started_at) else 0,
             "available": HAS_SD or HAS_PYAUDIO,
+            "device": self.device,
+            "channel": self.channel,
             "error": self.error,
         }
 
@@ -695,27 +714,36 @@ class ShowRecorder:
         try:
             folder.mkdir(parents=True, exist_ok=True)
             path = folder / (time.strftime("show %Y-%m-%d %H.%M.%S") + ".wav")
-            channels = 1
+            # open enough channels to reach the chosen pair; write only 2
+            open_ch = (self.channel + 1) if self.channel else 2
+            self._pair0 = (self.channel - 1) if self.channel else 0
             if HAS_SD:
                 try:
-                    di = sd.query_devices(kind="input")
-                    channels = max(1, min(2, int(di.get("max_input_channels", 1))))
+                    di = (sd.query_devices(self.device) if self.device is not None
+                          else sd.query_devices(kind="input"))
+                    maxch = int(di.get("max_input_channels", 1))
                 except Exception:
-                    pass
+                    maxch = 2
+                open_ch = max(1, min(open_ch, maxch))
+            self._nch = open_ch
+            if self._pair0 + 2 > open_ch:               # pair doesn't fit → top pair
+                self._pair0 = max(0, open_ch - 2)
+            wav_ch = min(2, open_ch)
             self._wav = wave.open(str(path), "wb")
-            self._wav.setnchannels(channels)
+            self._wav.setnchannels(wav_ch)
             self._wav.setsampwidth(2)
             self._wav.setframerate(self.RATE)
             if HAS_SD:
                 self._stream = sd.RawInputStream(
-                    samplerate=self.RATE, channels=channels, dtype="int16",
-                    blocksize=2048, callback=self._sd_cb)
+                    samplerate=self.RATE, channels=open_ch, dtype="int16",
+                    device=self.device, blocksize=2048, callback=self._sd_cb)
                 self._stream.start()
             else:
                 self._pa = pyaudio.PyAudio()
                 self._stream = self._pa.open(
-                    format=pyaudio.paInt16, channels=channels, rate=self.RATE,
-                    input=True, frames_per_buffer=2048, stream_callback=self._pa_cb)
+                    format=pyaudio.paInt16, channels=open_ch, rate=self.RATE,
+                    input=True, input_device_index=self.device,
+                    frames_per_buffer=2048, stream_callback=self._pa_cb)
                 self._stream.start_stream()
             self.path = path
             self.started_at = time.time()
@@ -762,6 +790,16 @@ class ShowRecorder:
             self._wav = None
 
     def _write(self, data):
+        # extract the chosen stereo pair from the interleaved capture
+        if self._nch > 2 or self._pair0 > 0:
+            src = array.array("h")
+            src.frombytes(data)
+            out = array.array("h")
+            step = self._nch
+            for i in range(0, len(src) - step + 1, step):
+                out.append(src[i + self._pair0])
+                out.append(src[i + self._pair0 + 1])
+            data = out.tobytes()
         with self._lock:
             if self._wav:
                 try:
@@ -796,6 +834,8 @@ def _save_show():
             "midi_mapping": midi.mapping,
             "click_out_device": click_out.device,
             "click_out_channel": click_out.channel,
+            "rec_device": recorder.device,
+            "rec_channel": recorder.channel,
             "midi_clock_port": midi_clock.port_name,
         }
         tmp = SHOW_FILE.with_suffix(".json.tmp")
@@ -829,8 +869,10 @@ def _load_show():
         if mx.get("bus_names"):
             state["mixer"]["bus_names"] = [str(n)[:16] for n in mx["bus_names"]][:6]
         mixer.channels = max(1, min(16, len(state["mixer"]["ch_names"])))
-        if state["mixer"]["host"]:
-            mixer.connect(state["mixer"]["host"])
+        # NOTE: deliberately NO auto-connect. Connecting is a hands-on act —
+        # the saved host only prefills the Connect prompt. (Auto-connect plus
+        # song auto-select used to push a sim-built mix onto the real desk at
+        # app launch.)
         profs = d.get("profiles") or {}
         state["profiles"] = {
             str(k)[:16]: {"width": max(1, min(32, int(v.get("width", 1)))),
@@ -849,6 +891,7 @@ def _load_show():
             midi.set_mapping(d["midi_mapping"])
         if d.get("click_out_device") is not None:
             click_out.start(d["click_out_device"], d.get("click_out_channel"))
+        recorder.configure(d.get("rec_device"), d.get("rec_channel"))
         if d.get("midi_clock_port"):
             midi_clock.start(d["midi_clock_port"])
     except Exception:
@@ -911,11 +954,14 @@ def handle_ws_message(payload: dict, ws):
     elif action == "click_start":
         song = _active_song()
         if song is not None:
-            # song mode: play the active song's bar timeline from the seek point
+            # song mode: resume from where it's paused; an explicit bar (a
+            # seek-and-play) jumps there and starts that bar clean
             _migrate_song(song)
+            explicit = "bar" in data
             bar = max(1, min(song["length_bars"], int(data.get("bar", state["click"].get("bar", 1)))))
             seg = _song_segment(song, bar)
-            state["click"].update({"mode": "song", "bar": bar, "beat": 0,
+            beat = 0 if explicit else state["click"].get("beat", 0)
+            state["click"].update({"mode": "song", "bar": bar, "beat": beat,
                                    "bpm": seg["bpm"], "time_sig": seg["time_sig"]})
         else:
             state["click"]["mode"] = "free"
@@ -926,9 +972,9 @@ def handle_ws_message(payload: dict, ws):
         broadcast("state", _full_state())
 
     elif action == "click_stop":
+        # PAUSE in place — bar/beat are kept so the next play resumes from here.
+        # (Re-activate the song or seek to bar 1 to rewind.)
         state["click"]["running"] = False
-        state["click"]["beat"] = 0
-        state["click"]["bar"] = 1          # stop rewinds — next play starts clean
         state["click"]["pending_song"] = None
         _pending_cues.clear()
         broadcast("state", _full_state())
@@ -1008,6 +1054,24 @@ def handle_ws_message(payload: dict, ws):
         _save_show()
         broadcast("state", _full_state())
 
+    elif action == "click_test":
+        # three audible ticks on the routed output — verify routing without
+        # running the transport
+        def _ticks():
+            for i in range(3):
+                click_out.tick(2 if i == 0 else 0)
+                time.sleep(0.35)
+        if click_out._stream:
+            threading.Thread(target=_ticks, daemon=True).start()
+        broadcast("state", _full_state())
+
+    elif action == "set_rec_input":
+        # where REC records from: device + 1-based first channel of the pair.
+        # XR18 + the pair carrying its USB main-LR return = board-mix recording.
+        recorder.configure(data.get("device"), data.get("channel"))
+        _save_show()
+        broadcast("state", _full_state())
+
     elif action == "set_click_output":
         dev = data.get("device", None)
         if dev is None:
@@ -1030,6 +1094,11 @@ def handle_ws_message(payload: dict, ws):
         else:
             mixer.disconnect()
         _save_show()
+        broadcast("state", _full_state())
+
+    elif action == "mixer_disconnect":
+        # drop the link; the saved host stays for the next Connect prompt
+        mixer.disconnect()
         broadcast("state", _full_state())
 
     elif action == "mixer_set":
@@ -1073,11 +1142,12 @@ def handle_ws_message(payload: dict, ws):
         broadcast("state", _full_state())
 
     elif action == "mixer_name":
-        # rename an IN strip (user-owned labels, max 8 chars)
+        # rename an IN (kind "ch") or OUT bus (kind "bus") — user-owned, ≤10 chars
         i = int(data.get("idx", -1))
-        nm = str(data.get("name", "")).strip()[:8]
-        if 0 <= i < len(state["mixer"]["ch_names"]) and nm:
-            state["mixer"]["ch_names"][i] = nm
+        nm = str(data.get("name", "")).strip()[:10]
+        key = "bus_names" if data.get("kind") == "bus" else "ch_names"
+        if 0 <= i < len(state["mixer"][key]) and nm:
+            state["mixer"][key][i] = nm
             _save_show()
         broadcast("state", _full_state())
 
@@ -1294,6 +1364,7 @@ def _full_state():
         "lighting": state["lighting"],
         "looks": state["looks"],
         "mixer": dict(mixer.state(),
+                      saved_host=state["mixer"]["host"],   # prefills Connect
                       scenes=[{"id": s["id"], "name": s["name"]}
                               for s in state["mixer"]["scenes"]],
                       # in-app names are user-owned (editable, ≤8 chars);
@@ -1310,6 +1381,47 @@ def _full_state():
         "midi_clock": midi_clock.state(),
         "recorder": recorder.state(),
     }
+
+
+# Live three-way sync: the desk broadcasts every change to all subscribed
+# remotes (Mixing Station, X Air Edit, us). Desk-side moves land in the link's
+# cache via on_update; we coalesce them and push to our own UI a few times a
+# second (a fader sweep fires hundreds of OSC msgs — no per-message broadcast).
+_mixer_dirty = threading.Event()
+
+
+def _mixer_param_changed(address, args):
+    if address in mixer_osc.managed_addresses(mixer.channels):
+        s = _active_song()
+        if s is not None and isinstance(s.get("mix"), dict) and not mixer.gliding:
+            s["mix"][address] = mixer.get(address)   # desk edits ride into the song too
+    _mixer_dirty.set()
+
+
+def _mixer_push_loop():
+    while True:
+        _mixer_dirty.wait()
+        time.sleep(0.12)                  # coalesce a burst of desk messages
+        _mixer_dirty.clear()
+        if mixer.connected:
+            snap = {a: mixer.get(a) for a in mixer_osc.control_addresses(mixer.channels)}
+            broadcast("mixer_levels", {"cache": snap})
+
+
+mixer.on_update = _mixer_param_changed
+threading.Thread(target=_mixer_push_loop, daemon=True).start()
+
+
+def _mixer_status_changed():
+    if mixer.connected:
+        def adopt():
+            time.sleep(1.2)            # let the query replies fill the cache
+            _store_active_mix()
+        threading.Thread(target=adopt, daemon=True).start()
+    broadcast("state", _full_state())
+
+
+mixer.on_status = _mixer_status_changed
 
 
 # ── Click track engine ────────────────────────────────────────────────────────
@@ -1932,10 +2044,62 @@ def api_audio_devices():
     return jsonify({"devices": devices, "sim": False})
 
 
+@app.route("/api/input/audio-devices")
+def api_input_audio_devices():
+    """Capture devices REC can record from (incl. the XR18's USB return)."""
+    devices = []
+    if HAS_SD:
+        try:
+            if not (click_out._stream or recorder._stream):
+                sd._terminate()
+                sd._initialize()
+        except Exception:
+            pass
+        try:
+            default_in = sd.default.device[0]
+        except Exception:
+            default_in = None
+        try:
+            for i, d in enumerate(sd.query_devices()):
+                if d.get("max_input_channels", 0) > 0:
+                    devices.append({"idx": i, "name": d["name"], "default": i == default_in,
+                                    "channels": int(d.get("max_input_channels", 2))})
+        except Exception:
+            pass
+        return jsonify({"devices": devices, "available": True})
+    if not HAS_PYAUDIO:
+        return jsonify({"devices": [], "available": False})
+    pa = pyaudio.PyAudio()
+    try:
+        try:
+            default_idx = pa.get_default_input_device_info().get("index")
+        except Exception:
+            default_idx = None
+        for i in range(pa.get_device_count()):
+            d = pa.get_device_info_by_index(i)
+            if d.get("maxInputChannels", 0) > 0:
+                devices.append({"idx": i, "name": d["name"], "default": i == default_idx,
+                                "channels": int(d.get("maxInputChannels", 2))})
+    finally:
+        pa.terminate()
+    return jsonify({"devices": devices, "available": True})
+
+
 @app.route("/api/output/audio-devices")
 def api_output_audio_devices():
-    """Playback devices the click can be routed to (IEM feeds etc.)."""
+    """Playback devices the click can be routed to (IEM feeds etc.).
+
+    PortAudio snapshots the device list at init — devices plugged in AFTER
+    launch (the XR18 over USB, typically) would never appear. Re-initialise
+    before listing, but only while no stream is open (terminating PortAudio
+    under an active stream is how apps crash)."""
     if HAS_SD:
+        try:
+            if not (click_out._stream or recorder._stream):
+                sd._terminate()
+                sd._initialize()
+        except Exception:
+            pass
         devices = []
         try:
             default_out = sd.default.device[1]

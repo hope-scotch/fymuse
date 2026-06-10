@@ -572,18 +572,30 @@
   .mx-deck-row { flex: 1 1 auto; min-height: 0; display: flex; gap: 16px; }
   /* bus tabs: one flush rectangular strip; only the last tab keeps a curved
      bottom-right corner; + sits beside it */
-  .mx-conn-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .mx-busrow { display: flex; align-items: center; margin-bottom: 2px; overflow-x: auto; scrollbar-width: none; }
+  .mx-busrow { display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
   .mx-busrow::-webkit-scrollbar { display: none; }
   .mx-outs-lbl { margin: 0 10px 0 0; flex-shrink: 0; }
-  #mx-bus { flex-wrap: nowrap; gap: 0; }
-  #mx-bus button { border-radius: 0; white-space: nowrap; }
-  #mx-bus button + button { border-left-width: 0; }
+  #mx-bus { flex-wrap: nowrap; gap: 6px; }
+  #mx-bus button { border-radius: 8px; white-space: nowrap; }
   .mx-busrow .out-led { align-self: center; }
-  .mx-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+  .mx-left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; min-height: 0; gap: 12px; }
+  /* three concrete sections: connection+outs · ins · presets dock */
+  .mx-sec {
+    border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px;
+    background: rgba(255,255,255,.015); flex-shrink: 0;
+  }
+  .mx-sec-ins { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .seg-mini button { padding: 5px 11px; font-size: 11px; }
+  #mx-wires svg text { font-family: var(--mono); }
+  #mx-wires .wnode { cursor: pointer; }
+  #mx-wires .wnode rect { fill: var(--bg-3); stroke: var(--line-2); }
+  #mx-wires .wnode.sel rect, #mx-wires .wnode:hover rect { stroke: var(--lime); }
+  #mx-wires .wnode text { fill: var(--txt-dim); font-size: 10px; }
+  #mx-wires .wnode.sel text { fill: var(--lime); }
   .mx-detail {
     flex: 0 0 252px; min-height: 0; overflow-y: auto; scrollbar-width: none;
-    border-left: 1px solid var(--line); padding-left: 16px;
+    border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px;
+    background: rgba(255,255,255,.015);
   }
   .mx-detail::-webkit-scrollbar { display: none; }
   .mx-det-lbl { font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--txt-faint); }
@@ -604,15 +616,9 @@
   .mx-knob .kn-lbl { font-size: 9.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--txt-faint); text-align: center; }
   #mx-eq-on.off { background: var(--bg-2); border-color: var(--line-2); color: var(--txt-faint); }
   #mx-eq-on.live { background: rgba(182,255,58,.16); border-color: rgba(182,255,58,.5); color: var(--lime); }
-  .mx-bottom { margin-top: auto; display: flex; flex-direction: column; gap: 7px; padding-top: 10px; }
-  .mx-nowbar {
-    padding: 10px 14px; border-radius: 10px;
-    background: var(--bg-3); border: 1px solid var(--line-2);
-    font-size: 12.5px; color: var(--txt-dim); display: flex; align-items: center; gap: 9px;
-  }
-  .mx-nowbar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 8px rgba(182,255,58,.6); flex-shrink: 0; }
-  .mx-nowbar .dot.idle { background: var(--txt-faint); box-shadow: none; }
-  .mx-nowbar b { color: var(--lime); }
+  .perf-cue.mx-save { justify-content: center; align-items: center; color: var(--txt-dim); }
+  .perf-cue.mx-save .ico { width: 17px; height: 17px; margin-right: 0; }
+  .perf-cue.mx-save:hover { color: var(--lime); border-color: rgba(182,255,58,.4); }
   .mx-scene-row {
     display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 6px;
     background: var(--bg-3); border: 1px solid var(--line-2); border-radius: 9px;
@@ -1314,7 +1320,15 @@
   .perf-barpos { font-family: var(--mono); font-size: 11px; color: var(--txt-faint); text-align: right; margin-top: 4px; }
 
   /* lane affordances: grid = seek, lanes = add markers (editor) */
-  .tl-bar { cursor: crosshair; }
+  .tl-bar { cursor: pointer; }
+  .tl-rs {
+    position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize;
+    z-index: 3; border-radius: 3px;
+    pointer-events: auto;     /* the band is pointer-transparent; edges are not */
+    touch-action: none;
+  }
+  .tl-rs-l { left: 0; } .tl-rs-r { right: 0; }
+  .tl-rs:hover, .tl-rs.live { background: rgba(255,255,255,.28); box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
   .tl-edit .tl-tempo { cursor: copy; }
   .tl-edit .tl-secs  { cursor: copy; }
   .tl-edit .tl-cues  { cursor: copy; }
@@ -1362,7 +1376,7 @@
 
     <div class="hsep"></div>
     <button class="pill" id="audio-toggle" data-ic="mic"><span class="lbl">Audio</span></button>
-    <button class="pill" id="out-btn" data-ic="phones" title="Route the click to a separate output — e.g. the drummer's in-ears"><span class="lbl">Outputs</span></button>
+    <button class="pill" id="out-btn" data-ic="phones" title="Audio I/O — route the click to in-ears and choose what REC captures"><span class="lbl">Audio I/O</span></button>
     <button class="pill detect" id="tempo-chip" title="Tap to set the click to the detected tempo" style="display:none;"></button>
     <button class="pill" id="autofollow" title="Auto-follow the detected tempo" style="display:none;" data-ic="follow"><span class="lbl">Follow</span></button>
     <button class="pill midi" id="midi-btn" title="MIDI cue triggers"><span class="mled"></span><span data-ic="midi"></span><span class="lbl">MIDI</span></button>
@@ -1386,10 +1400,8 @@
         <div class="setlist-head">
           <div>
             <h2 class="view-title">Setlist</h2>
-            <div class="view-sub">Drag to reorder · click a song to edit it · load songs from the Performance tab</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn ghost sm" id="btn-demo">Load demo set</button>
             <button class="btn ghost sm" id="btn-import" title="Load a .limeshow bundle (setlist + audio) shared by a bandmate">Import</button>
             <button class="btn ghost sm" id="btn-export" title="Save a .limeshow bundle (setlist + backing tracks) to your Desktop">Export</button>
             <input type="file" id="import-file" accept=".limeshow,.json,.zip,application/json,application/zip" style="display:none;">
@@ -1585,21 +1597,29 @@
         <div class="card mx-deck-card">
           <div class="mx-deck-row">
             <div class="mx-left">
-              <div class="mx-conn-row">
-                <span class="pad-label" style="margin:0;">XR18</span>
-                <span style="flex:1;"></span>
-                <span class="out-led" id="mx-led-wrap"><span class="led" id="mx-led"></span><span id="mx-led-txt">sim</span></span>
-                <button class="btn sm ghost" id="mx-connect" title="Link to the XR18 — every console move auto-saves into the playing song's mix">Connect</button>
+              <div class="mx-sec">
+                <div class="mx-busrow">
+                  <span class="pad-label mx-outs-lbl">Outs</span>
+                  <div class="seg" id="mx-bus"></div>
+                  <span style="flex:1;"></span>
+                  <span class="pad-label" style="margin:0 10px 0 0;">XR18</span>
+                  <span class="out-led" id="mx-led-wrap" style="margin-right:8px;"><span class="led" id="mx-led"></span><span id="mx-led-txt">sim</span></span>
+                  <button class="btn sm ghost" id="mx-connect" style="flex-shrink:0;" title="Link to the XR18 — every console move auto-saves into the playing song's mix">Connect</button>
+                </div>
               </div>
-              <div class="mx-busrow">
-                <span class="pad-label mx-outs-lbl">Outs</span>
-                <div class="seg" id="mx-bus"></div>
+              <div class="mx-sec mx-sec-ins">
+                <div class="row-between" style="margin-bottom:8px;">
+                  <span class="pad-label" style="margin:0;">Ins</span>
+                  <div class="seg seg-mini" id="mx-view-seg">
+                    <button data-v="faders" class="on">Faders</button>
+                    <button data-v="wires" title="Signal-flow diagram — what feeds what, live">Wires</button>
+                  </div>
+                </div>
+                <div class="mx-strips" id="mx-strips"></div>
+                <div id="mx-wires" style="display:none; flex:1 1 auto; min-height:0;"></div>
               </div>
-              <div class="pad-label" style="margin:10px 0 6px;">Ins</div>
-              <div class="mx-strips" id="mx-strips"></div>
-              <div class="mx-bottom">
-                <div class="mx-nowbar" id="mx-nowbar"></div>
-                <div class="pad-label" style="margin:2px 0 0;">Presets — tap to apply · right-click to delete</div>
+              <div class="mx-sec">
+                <div class="pad-label" style="margin:0 0 8px;">Presets — tap to apply · right-click to delete</div>
                 <div class="pad-row" id="mx-preset-row"></div>
               </div>
             </div>
@@ -1749,18 +1769,30 @@
 
 <!-- ── MIDI setup modal ── -->
 <div class="modal-bg" id="out-modal">
-  <div class="modal" style="max-width:440px;">
-    <h3>Audio outputs</h3>
-    <div class="field">
-      <label>Click output — in-ear monitor feed</label>
-      <select id="click-out-dev"><option value="">Same as everything (default output)</option></select>
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-head"><h3>Audio I/O</h3></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Click output — in-ear monitor feed</label>
+        <select id="click-out-dev"><option value="">Same as everything (default output)</option></select>
+        <span class="hint" id="click-out-hint">The click is rendered straight to this device on the server — tracks and spoken cues stay on the default output. On a multi-out interface (XR18 over USB), pick a channel below so the click rides its own desk channel while tracks keep 1/2.</span>
+      </div>
+      <div class="field" id="click-out-ch-box" style="display:none;">
+        <label>Click channel on that device</label>
+        <select id="click-out-ch"></select>
+      </div>
+      <button class="btn sm ghost" id="click-out-test" style="align-self:flex-start;" title="Three audible ticks on the chosen output — verify the routing without starting the click">Test ticks</button>
+      <div class="field">
+        <label>REC source — what the record button captures</label>
+        <select id="rec-in-dev"><option value="">Default input (room mic)</option></select>
+        <span class="hint">Pick the XR18 and the stereo pair carrying its USB return of the main LR, and REC captures the live board mix — not a room mic. (The desk's In/Out → USB sends page shows which pair carries LR; 17/18 is the usual default.)</span>
+      </div>
+      <div class="field" id="rec-in-ch-box" style="display:none;">
+        <label>Stereo pair to record</label>
+        <select id="rec-in-ch"></select>
+      </div>
     </div>
-    <div class="field" id="click-out-ch-box" style="display:none;">
-      <label>Click channel on that device</label>
-      <select id="click-out-ch"></select>
-    </div>
-    <div class="hint" id="click-out-hint" style="margin-bottom:14px;">Pick your interface's IEM output and the click is rendered straight to it on the server — backing tracks and spoken cues stay on the default output for front of house. On a multi-out interface (like the XR18 over USB), pick a channel so the click rides its own desk channel while tracks keep 1/2.</div>
-    <div class="tp-row" style="justify-content:flex-end;"><button class="btn primary sm" id="out-close">Done</button></div>
+    <div class="modal-foot"><button class="btn primary sm" id="out-close">Done</button></div>
   </div>
 </div>
 
@@ -1915,7 +1947,7 @@
 
   <div class="dpane" id="dpane-setup" style="display:none;">
   <h4>Click in your in-ears</h4>
-  <p>Hit <b>Outputs</b> (headphones, top right) and pick your interface's IEM output. The click is rendered straight to that device while backing tracks and spoken cues stay on the default output for front of house. Needs the <code>sounddevice</code> package — it's in <code>requirements.txt</code>, so a normal install already has it.</p>
+  <p>Hit <b>Audio I/O</b> (headphones, top right) and pick your interface's IEM output for the click — it's rendered straight to that device while backing tracks and spoken cues stay on the default output for front of house. The same panel sets the <b>REC source</b>: point it at the XR18 to record the live board mix. Needs the <code>sounddevice</code> package — it's in <code>requirements.txt</code>, so a normal install already has it.</p>
 
   <h4>Backing tracks</h4>
   <p>Open a song's editor and use <b>+ Add audio</b> under the timeline. Set which bar each file starts on and its gain — it plays sample-locked to the click, joins mid-file if you seek, and survives tempo changes. Files are stored in the app's library, so the original can move or be deleted.</p>
@@ -2025,6 +2057,9 @@ const ICONS_FILLED = {
   note:    '<path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   metro:   '<path d="M10 3h4l4.5 18h-13z"/><line x1="12" y1="16.5" x2="16.5" y2="6.5"/><circle cx="15.6" cy="8.5" r="1.4" fill="currentColor" stroke="none"/>',
   phones:  '<path d="M4 14a8 8 0 0 1 16 0"/><rect x="3" y="14" width="4" height="6" rx="2"/><rect x="17" y="14" width="4" height="6" rx="2"/>',
+  save:    '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+  sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+  console: '<line x1="6" y1="4" x2="6" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="18" y1="4" x2="18" y2="20"/><rect x="3.8" y="12" width="4.4" height="3.6" rx="1.2" fill="currentColor" stroke="none"/><rect x="9.8" y="6.5" width="4.4" height="3.6" rx="1.2" fill="currentColor" stroke="none"/><rect x="15.8" y="13.5" width="4.4" height="3.6" rx="1.2" fill="currentColor" stroke="none"/>',
 };
 function ic(name) {
   if (ICONS_FILLED[name]) return `<svg class="ico" viewBox="0 0 24 24" fill="currentColor">${ICONS_FILLED[name]}</svg>`;
@@ -2099,6 +2134,7 @@ function enterLocalMode() {
   localMode = true;
   setConn("local", "local mode");
   if (S.click.running) startLocalClock();
+  primePerf();
 }
 
 function send(action, data) {
@@ -2135,6 +2171,7 @@ function handleServerEvent(event, data) {
         if (edIdx != null && S.setlist[edIdx]) renderEditorTimeline();
         else closeSongEditor();
       }
+      primePerf();         // first state after the socket opens can now prime
       renderAll();
       break;
     case "beat":
@@ -2152,7 +2189,7 @@ function handleServerEvent(event, data) {
       break;
     case "mixer_levels":
       M = data.cache || {};
-      if (currentView === "mixer") { renderMixerStrips(false); renderMxDetail(); }
+      if (currentView === "mixer") { renderMixerStrips(false); renderMxDetail(); renderMixerWires(); }
       break;
     case "cue":
       speakCue(data.text);
@@ -2219,7 +2256,8 @@ function onBeat(d) {
   if (d.bpm) S.click.bpm = d.bpm;
   S.click.beat = d.beat;
   if (d.bar) S.pos = { bar: d.bar, beat: d.beat, section: d.section || null, len: d.length_bars || 0 };
-  const audioScheduled = d.bar ? schedOnServerBeat(d) : false;
+  const audioScheduled = d.bar ? schedOnServerBeat(d)
+                               : (sched.on && sched.free ? (sched.lastBeatT = null, true) : false);
   if (!audioScheduled && !clickRouted()) playClick(d.accent != null ? d.accent : (d.downbeat ? 2 : 0));
   // beat-synced cue segments: each lands exactly on a click
   if (cueSegQueue.length)
@@ -2521,7 +2559,9 @@ function pushSetlist() {
 }
 function activateSong(idx) {
   const song = (idx != null) ? S.setlist[idx] : null;
-  const title = song ? song.title : "Metronome";
+  // no song means different things per view: a metronome on stage, a free
+  // mix at the desk
+  const title = song ? song.title : (currentView === "mixer" ? "Free mix" : "Metronome");
   if (send("activate_song", { idx })) {
     // mid-playback the server queues the switch for the end of the current bar
     if (S.click.running && S.click.mode === "song" && idx !== S.active_song_idx)
@@ -2549,7 +2589,7 @@ function renderSetlist() {
   if (!S.setlist.length) {
     const e = el("div", "empty",
       '<div class="big" style="color:var(--lime); opacity:.9;"><svg style="width:40px;height:40px;filter:drop-shadow(0 0 14px rgba(182,255,58,.35))" viewBox="0 0 48 48"><use href="#ls-mark"/></svg></div><div>No songs yet.</div>' +
-      '<div style="margin-top:6px;font-size:13px;">Add your first song or load the demo set.</div>');
+      '<div style="margin-top:6px;font-size:13px;">Add your first song.</div>');
     list.appendChild(e);
     return;
   }
@@ -3448,8 +3488,15 @@ function faderDb(f) {
   return d <= -89 ? "−∞" : (d > 0 ? "+" : "") + d.toFixed(1);
 }
 function mxSet(address, value) {
+  // headamp gain is stepped hardware: 0.5 dB over -12..+60 = 144 steps.
+  // Snap to the desk's grid so app and desk always show the same number
+  // (the desk snaps silently and never echoes back to the sender).
+  if (address.indexOf("/headamp/") === 0) value = Math.round(value * 144) / 144;
   M[address] = value;
   send("mixer_set", { address, value });
+  if (mxView === "wires" && !mxSet._raf) {        // live wire redraw, throttled
+    mxSet._raf = requestAnimationFrame(() => { mxSet._raf = 0; renderMixerWires(); });
+  }
 }
 
 function renderMixer() {
@@ -3458,31 +3505,31 @@ function renderMixer() {
   $("mx-led").className = "led" + (mx.connected ? " on" : "");
   $("mx-led-txt").textContent = mx.connected ? "live" : "sim";
   const lw = $("mx-led-wrap"); if (lw) lw.title = mx.status || "";
-  $("mx-connect").textContent = mx.connected ? "XR18 ✓" : "Connect";
+  $("mx-connect").textContent = mx.connected ? "XR18 ✓ · Disconnect"
+                               : mx.host ? "Retrying… · Disconnect" : "Connect";
   // OUT selector — Main + the 5 IEM buses. Bus 6 (click) is configured from
   // the header's Outputs button + Performance, not here.
   const seg = $("mx-bus");
   const busNames = mx.bus_names || ["Bus 1","Bus 2","Bus 3","Bus 4","Bus 5","Bus 6"];
   const labels = ["Main"].concat(busNames.slice(0, 5));
-  if (seg.children.length !== labels.length) {
+  const segKey = labels.join("|");
+  if (seg.dataset.key !== segKey) {
+    seg.dataset.key = segKey;
     seg.innerHTML = "";
     labels.forEach((nm, i) => {
       const b = el("button", null, escapeHtml(nm)); b.dataset.bus = i;
       b.onclick = () => { mxBus = i; renderMixer(); };
+      if (i > 0) {            // Main can't be renamed; IEM buses can (dbl-click)
+        b.title = busNames[i - 1] + " — double-click to rename this OUT";
+        b.ondblclick = () => {
+          const v = prompt("Rename OUT (max 10 letters)", busNames[i - 1] || "");
+          if (v && v.trim()) send("mixer_name", { kind: "bus", idx: i - 1, name: v.trim().slice(0, 10) });
+        };
+      }
       seg.appendChild(b);
     });
-  } else {
-    labels.forEach((nm, i) => { seg.children[i].innerHTML = escapeHtml(nm); });
   }
   seg.querySelectorAll("button").forEach(b => b.classList.toggle("on", parseInt(b.dataset.bus, 10) === mxBus));
-  // bottom status: where every console move lands
-  const nb = $("mx-nowbar");
-  if (nb) {
-    const song = (S.active_song_idx != null) ? S.setlist[S.active_song_idx] : null;
-    nb.innerHTML = song
-      ? `<span class="dot"></span><span>Mix → <b>${escapeHtml(song.title || "Untitled")}</b> — every move auto-saves into this song and recalls when it loads.</span>`
-      : `<span class="dot idle"></span><span><b style="color:var(--txt)">Free mix</b> — moves are live on the desk but belong to no song. Shape something, save it as a preset.</span>`;
-  }
   // presets as pads — tap to apply (becomes the playing song's mix)
   const pr = $("mx-preset-row");
   if (pr) {
@@ -3498,8 +3545,7 @@ function renderMixer() {
       };
       pr.appendChild(b);
     });
-    const sv = el("button", "perf-cue look", "+ Save preset");
-    sv.style.color = "var(--txt-dim)";
+    const sv = el("button", "perf-cue look mx-save", ic("save"));
     sv.title = "Save the current mix (whatever the desk sounds like now) as a reusable preset";
     sv.onclick = () => {
       const nm = prompt("Preset name", "Preset " + ((mx.scenes || []).length + 1));
@@ -3510,6 +3556,7 @@ function renderMixer() {
   }
   renderMixerStrips(true);
   renderMxDetail();
+  renderMixerWires();
 }
 
 // ── Channel detail: gain / pan / reverb / EQ for the selected strip ─────────
@@ -3521,7 +3568,10 @@ const mxEqAddr   = (b, p) => mxSel === "lr" ? `/lr/eq/${b}/${p}` : `/ch/${mxPad(
 const mxEqOnAddr = () => mxSel === "lr" ? "/lr/eq/on" : `/ch/${mxPad(mxSel)}/eq/on`;
 const mxEqBands  = () => mxSel === "lr" ? 6 : 4;     // the LR bus has a 6-band EQ
 const mval = (a, d) => (M[a] != null ? M[a] : d);
-const gainDb = (v) => ((-12 + 72 * v) >= 0 ? "+" : "") + (-12 + 72 * v).toFixed(1) + " dB";
+const gainDb = (v) => {
+  const db = Math.round((-12 + 72 * v) * 2) / 2;   // display on the 0.5 dB grid
+  return (db >= 0 ? "+" : "") + db.toFixed(1) + " dB";
+};
 const panLbl = (v) => { const p = Math.round((v - 0.5) * 200); return p === 0 ? "C" : (p < 0 ? "L" + (-p) : "R" + p); };
 const eqHz = (v) => { const hz = 20 * Math.pow(1000, v); return hz >= 1000 ? (hz / 1000).toFixed(1) + "k" : Math.round(hz) + ""; };
 
@@ -3661,6 +3711,68 @@ function faderScaleHtml() {
   }).join("") + "</div>";
 }
 
+// ── Wires view: FL-style signal-flow diagram, live from the param cache ─────
+let mxView = "faders";
+function renderMixerWires() {
+  const host = $("mx-wires"); if (!host || mxView !== "wires") return;
+  const W = host.clientWidth || 760, H = Math.max(280, host.clientHeight || 320);
+  const mx = S.mixer || {};
+  const chs = mx.ch_names || [];
+  const busNames = mx.bus_names || [];
+  const srcs = chs.map((nm, i) => ({ id: i + 1, name: nm, kind: "ch" }))
+    .concat([{ id: "rtn", name: "Tracks·Click", sub: "USB ← Lime Studio", kind: "rtn" }]);
+  const outs = [{ id: 0, name: "Main LR", sub: "FOH" }]
+    .concat(busNames.map((nm, b) => ({ id: b + 1, name: nm, sub: "Bus " + (b + 1) })));
+  const yAt = (i, n) => 26 + (H - 52) * (n <= 1 ? 0.5 : i / (n - 1));
+  const NW = 112, sx = 18 + NW, ox = W - 18 - NW;
+  const lvl = (s, o) => {
+    const base = s.kind === "ch" ? `/ch/${mxPad(s.id)}/mix` : "/rtn/aux/mix";
+    const on = mval(base + "/on", 1);
+    if (o.id === 0) return on ? mval(base + "/fader", 0.75) : 0;
+    return mval(`${base}/${mxPad(o.id)}/level`, 0.5) * (on ? 1 : 0.18);
+  };
+  let wires = "", nodes = "";
+  srcs.forEach((s, i) => {
+    const y1 = yAt(i, srcs.length);
+    outs.forEach((o, j) => {
+      const v = lvl(s, o);
+      if (v < 0.02) return;
+      const y2 = yAt(j, outs.length), mid = (sx + ox) / 2;
+      const dim = (mxSel != null && mxSel !== "lr" && mxSel !== s.id) ? 0.35 : 1;
+      wires += `<path d="M ${sx} ${y1.toFixed(1)} C ${mid} ${y1.toFixed(1)}, ${mid} ${y2.toFixed(1)}, ${ox} ${y2.toFixed(1)}" ` +
+        `fill="none" stroke="var(--lime)" stroke-linecap="round" ` +
+        `stroke-opacity="${((0.1 + v * 0.6) * dim).toFixed(2)}" stroke-width="${(1 + v * 2.6).toFixed(1)}">` +
+        `<title>${escapeHtml(s.name)} → ${escapeHtml(o.name)} · ${faderDb(v)} dB</title></path>`;
+    });
+  });
+  const nodeHtml = (x, y, n, selId) => {
+    const selCls = (selId != null && mxSel === selId) ? " sel" : "";
+    return `<g class="wnode${selCls}" ${selId != null ? `data-sel="${selId}"` : ""} transform="translate(${x},${(y - 14).toFixed(1)})">` +
+      `<rect width="${NW}" height="28" rx="8"></rect>` +
+      `<text x="${NW / 2}" y="${n.sub ? 13 : 18}" text-anchor="middle">${escapeHtml(String(n.name).slice(0, 14))}</text>` +
+      (n.sub ? `<text x="${NW / 2}" y="23" text-anchor="middle" style="font-size:7px; opacity:.6;">${escapeHtml(n.sub)}</text>` : "") +
+      `</g>`;
+  };
+  srcs.forEach((s, i) => { nodes += nodeHtml(18, yAt(i, srcs.length), s, s.id); });
+  outs.forEach((o, j) => { nodes += nodeHtml(W - 18 - NW, yAt(j, outs.length), o, null); });
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%; height:100%; display:block;">` +
+    `<text x="18" y="14" style="font-size:8px; fill:var(--txt-faint); letter-spacing:.1em;">INS</text>` +
+    `<text x="${W - 18 - NW}" y="14" style="font-size:8px; fill:var(--txt-faint); letter-spacing:.1em;">OUTS</text>` +
+    wires + nodes + `</svg>`;
+  host.querySelectorAll(".wnode[data-sel]").forEach(g => g.onclick = () => {
+    const s = g.dataset.sel;
+    mxSel = (s === "rtn") ? "rtn" : parseInt(s, 10);
+    renderMxDetail(); renderMixerWires();
+  });
+}
+function setMxView(v) {
+  mxView = v;
+  $("mx-strips").style.display = v === "wires" ? "none" : "";
+  $("mx-wires").style.display = v === "wires" ? "" : "none";
+  document.querySelectorAll("#mx-view-seg button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  if (v === "wires") renderMixerWires(); else renderMixerStrips(true);
+}
+
 function renderMixerStrips(rebuild) {
   const mx = S.mixer || {};
   const wrap = $("mx-strips"); if (!wrap) return;
@@ -3670,7 +3782,7 @@ function renderMixerStrips(rebuild) {
     .concat([{ name: "Tracks", addr: mxRtnAddr(), mute: "/rtn/aux/mix/on" },
              { name: mxBus === 0 ? "Main Out" : ((busNames[mxBus - 1] || "Bus") + " Out"),
                addr: mxMastAddr(), mute: mxBus === 0 ? "/lr/mix/on" : null, master: true }]);
-  const key = mxBus + "|" + defs.length;
+  const key = mxBus + "|" + defs.map(d => d.name).join(",");   // names in the key → renames refresh
   if (rebuild && wrap.dataset.key !== key) {
     wrap.dataset.key = key;
     wrap.innerHTML = "";
@@ -3679,7 +3791,7 @@ function renderMixerStrips(rebuild) {
       st.dataset.sel = d.master ? (mxBus === 0 ? "lr" : "")
                                 : (di < chs.length ? String(di + 1) : "rtn");
       st.innerHTML =
-        `<div class="mx-name" title="${escapeAttr(d.name)} — click for gain · pan · reverb · EQ${d.ch != null ? " · double-click to rename" : ""}">${escapeHtml(String(d.name).slice(0, 8))}</div>` +
+        `<div class="mx-name" title="${escapeAttr(d.name)} — click for gain · pan · reverb · EQ${d.ch != null ? " · double-click to rename" : ""}">${escapeHtml(String(d.name).slice(0, 10))}</div>` +
         `<div class="mx-db" data-db></div>` +
         `<div class="mx-fader-box">${faderScaleHtml()}<input type="range" class="mx-fader" min="0" max="1" step="0.001" data-addr="${escapeAttr(d.addr)}"></div>` +
         (d.mute ? `<button class="mx-mute" data-mute="${escapeAttr(d.mute)}">MUTE</button>` : `<div style="height:22px"></div>`);
@@ -3704,8 +3816,8 @@ function renderMixerStrips(rebuild) {
         renderMixerStrips(false); renderMxDetail();
       };
       if (d.ch != null) st.querySelector(".mx-name").ondblclick = () => {
-        const nm = prompt("Rename IN " + (d.ch + 1) + " (max 8 letters)", chs[d.ch] || "");
-        if (nm && nm.trim()) send("mixer_name", { idx: d.ch, name: nm.trim().slice(0, 8) });
+        const nm = prompt("Rename IN " + (d.ch + 1) + " (max 10 letters)", chs[d.ch] || "");
+        if (nm && nm.trim()) send("mixer_name", { kind: "ch", idx: d.ch, name: nm.trim().slice(0, 10) });
       };
       wrap.appendChild(st);
     });
@@ -3727,19 +3839,31 @@ function renderMixerStrips(rebuild) {
 // ════════════════════════════════════════════════════════════════════════════
 //  View switching
 // ════════════════════════════════════════════════════════════════════════════
+let _perfPrimed = false;   // auto-select the first song the first time Performance opens
+// Runs until it can act: needs the perf view, a setlist, AND a live transport
+// (an activate sent before the WS opens gets clobbered by the first state sync).
+function primePerf() {
+  if (_perfPrimed || currentView !== "perf") return;
+  if (S.click.running || S.active_song_idx != null) { _perfPrimed = true; return; }
+  if (!S.setlist.length) return;                   // setlist may still be loading
+  if (!wsConnected && !localMode) return;          // wait for a transport
+  _perfPrimed = true;
+  activateSong(0);
+}
 function switchView(name) {
   currentView = name;
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === name));
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   $("view-" + name).classList.add("active");
   if (name === "mixer") send("mixer_query", {});   // pull current desk levels
+  primePerf();
   renderAll();
 }
 
 function renderAll() {
   if (currentView === "setlist") renderSetlist();
   if (currentView === "lighting") { renderLightingControls(); renderFixtures(); renderEnergy(); }
-  if (currentView === "mixer") { renderMixer(); renderSetRail($("mx-set")); }
+  if (currentView === "mixer") { renderMixer(); renderSetRail($("mx-set"), "mixer"); }
   if (currentView === "perf") { renderPerfHeader(); renderPerfSetlist(); renderPerfTimeline(); renderPerfCues(); renderPerfStrip(); }
   syncTransportLight();
 }
@@ -3838,9 +3962,32 @@ function wire() {
     const ch = $("click-out-ch").value;
     send("set_click_output", { device: v === "" ? null : parseInt(v, 10),
                                channel: ch === "" ? null : parseInt(ch, 10) });
+    // routing failures were silent — surface the verdict once state echoes back
+    setTimeout(() => {
+      const co = S.click_out || {};
+      const hint = $("click-out-hint");
+      if (v !== "" && co.error) {
+        hint.textContent = "Couldn't open that device: " + co.error;
+        toast("Click routing failed — " + co.error);
+      } else if (v !== "" && co.device != null) {
+        hint.textContent = "Click routed ✓ (" + (co.backend || "audio") +
+          (co.channel ? " · channel " + co.channel : "") + ") — hit Test ticks to hear it.";
+      }
+    }, 700);
   };
   $("click-out-dev").onchange = () => { fillClickChannels(); pushClickOut(); };
   $("click-out-ch").onchange = pushClickOut;
+  $("click-out-test").onclick = () => {
+    if (!(S.click_out && S.click_out.device != null)) { toast("Pick a click output device first"); return; }
+    if (!send("click_test", {})) toast("Needs the backend running");
+  };
+  const pushRecIn = () => {
+    const v = $("rec-in-dev").value, ch = $("rec-in-ch").value;
+    send("set_rec_input", { device: v === "" ? null : parseInt(v, 10),
+                            channel: ch === "" ? null : parseInt(ch, 10) });
+  };
+  $("rec-in-dev").onchange = () => { fillRecChannels(); pushRecIn(); };
+  $("rec-in-ch").onchange = pushRecIn;
   $("tempo-chip").onclick = applyDetectedTempo;
   $("autofollow").onclick = toggleAutofollow;
 
@@ -3872,7 +4019,6 @@ function wire() {
     renderAll();
     openSongEditor(S.setlist.length - 1);
   };
-  $("btn-demo").onclick = loadDemoSet;
   $("btn-export").onclick = () => {
     fetch("/api/setlist/export", { method: "POST" }).then(r => r.json()).then(d => {
       toast(d.ok ? "Setlist saved to " + d.path : "Export failed: " + (d.error || ""));
@@ -3935,13 +4081,22 @@ function wire() {
   $("grand-master").oninput = (e) => { S.lighting.master = parseInt(e.target.value, 10); $("gm-val").textContent = Math.round(S.lighting.master / 255 * 100) + "%"; setLighting({ master: S.lighting.master }); };
   $("light-guide").onclick = startLightTour;
 
-  // mixer
+  // mixer — one button: connect when idle, disconnect when linked.
+  // No auto-connect anywhere: linking the desk is always a hands-on act.
   $("mx-connect").onclick = () => {
+    const mx = S.mixer || {};
+    if (mx.connected || mx.host) {
+      if (!confirm("Disconnect from the XR18?\n(Scenes keep working in sim; the desk just stops following.)")) return;
+      if (!send("mixer_disconnect", {})) toast("The mixer link needs the backend running");
+      else toast("XR18 disconnected — songs no longer drive the desk");
+      return;
+    }
     const host = prompt("XR18 IP address\n(AP mode: 192.168.1.1 · otherwise check your router / X Air Edit)",
-                        (S.mixer && S.mixer.host) || "192.168.1.1");
+                        mx.saved_host || "192.168.1.1");
     if (host == null) return;
     if (!send("mixer_connect", { host: host.trim() })) toast("The mixer link needs the backend running");
   };
+  document.querySelectorAll("#mx-view-seg button").forEach(b => b.onclick = () => setMxView(b.dataset.v));
   $("mx-eq-on").onclick = () => {
     if (mxSel == null || mxSel === "rtn") return;
     const on = mval(mxEqOnAddr(), 1) ? 0 : 1;
@@ -4017,7 +4172,34 @@ function fillClickChannels() {
   }
   chSel.value = (S.click_out && S.click_out.channel != null) ? String(S.click_out.channel) : "";
 }
+let _recDevices = [];
+function fillRecChannels() {
+  const dv = $("rec-in-dev").value;
+  const box = $("rec-in-ch-box"), chSel = $("rec-in-ch");
+  const dev = _recDevices.find(d => String(d.idx) === dv);
+  if (!dev || (dev.channels || 2) <= 2) { box.style.display = "none"; chSel.innerHTML = ""; return; }
+  box.style.display = "";
+  chSel.innerHTML = '<option value="">1 / 2</option>';
+  for (let c = 3; c + 1 <= dev.channels; c += 2) {
+    const o = el("option"); o.value = c; o.textContent = c + " / " + (c + 1);
+    chSel.appendChild(o);
+  }
+  chSel.value = (S.recorder && S.recorder.channel != null) ? String(S.recorder.channel) : "";
+}
 function openOutModal() {
+  const rsel = $("rec-in-dev");
+  fetch("/api/input/audio-devices").then(r => r.json()).then(d => {
+    _recDevices = d.devices || [];
+    rsel.innerHTML = '<option value="">Default input (room mic)</option>';
+    _recDevices.forEach(dev => {
+      const o = el("option");
+      o.value = dev.idx;
+      o.textContent = dev.name + " · " + (dev.channels || 2) + " in" + (dev.default ? " · system default" : "");
+      rsel.appendChild(o);
+    });
+    rsel.value = (S.recorder && S.recorder.device != null) ? String(S.recorder.device) : "";
+    fillRecChannels();
+  }).catch(() => {});
   const sel = $("click-out-dev");
   fetch("/api/output/audio-devices").then(r => r.json()).then(d => {
     _outDevices = d.devices || [];
@@ -4335,6 +4517,31 @@ function tempoLabel(song) {
   if (tm.length <= 1) return (song.bpm || 120) + " bpm";
   return tm[0].bpm + "→" + tm[tm.length - 1].bpm + " bpm";
 }
+// ── Edge-drag re-lengthing for section / lighting bands (editor only) ───────
+// The left edge moves where this band starts; the right edge moves where the
+// NEXT marker starts (a band always runs until the next one). Bar-quantized.
+// Listeners live on document so mid-drag re-renders can't kill the gesture.
+let _rsDrag = null;
+function rsEdge(side, BW, resolve) {
+  const h = el("div", "tl-rs tl-rs-" + side);
+  h.title = side === "l" ? "Drag — move where this starts" : "Drag — re-length";
+  h.onpointerdown = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const r = resolve(); if (!r || !r.t) return;
+    _rsDrag = { resolve, BW, x0: e.clientX, bar0: r.t.bar };
+  };
+  return h;
+}
+document.addEventListener("pointermove", (e) => {
+  if (!_rsDrag) return;
+  const r = _rsDrag.resolve(); if (!r || !r.t) { _rsDrag = null; return; }
+  const nb = clamp(_rsDrag.bar0 + Math.round((e.clientX - _rsDrag.x0) / _rsDrag.BW), r.min, r.max);
+  if (nb !== r.t.bar) { r.t.bar = nb; renderEditorTimeline(); }
+});
+document.addEventListener("pointerup", () => {
+  if (_rsDrag) { _rsDrag = null; commitSong(); }
+});
+
 function upsertMarker(arr, bar, obj) {
   const i = arr.findIndex(x => x.bar === bar);
   if (i >= 0) Object.assign(arr[i], obj); else arr.push(Object.assign({ bar }, obj));
@@ -4509,6 +4716,14 @@ function renderTimelineWrapped(song, mount, opts) {
       d.style.left = ((a - start) * BW + 1) + "px";
       d.style.width = Math.max(20, (z - a + 1) * BW - 3) + "px";
       d.style.background = `rgba(${c},.13)`; d.style.borderColor = `rgba(${c},.38)`; d.style.color = `rgb(${c})`;
+      if (opts.onMarker) {       // editor: drag edges to re-length
+        if (a === s.bar) d.appendChild(rsEdge("l", BW, () => ({
+          t: s, min: secs[i - 1] ? secs[i - 1].bar + 1 : 1,
+          max: secs[i + 1] ? secs[i + 1].bar - 1 : bars })));
+        if (secs[i + 1] && z === segEnd) d.appendChild(rsEdge("r", BW, () => ({
+          t: secs[i + 1], min: s.bar + 1,
+          max: secs[i + 2] ? secs[i + 2].bar - 1 : bars })));
+      }
       const lbl = el("span", "lbl", escapeHtml(s.label || "Section"));
       if (opts.onMarker) lbl.onclick = (e) => { e.stopPropagation(); opts.onMarker("section", s, e); };
       d.appendChild(lbl);
@@ -4550,6 +4765,14 @@ function renderTimelineWrapped(song, mount, opts) {
       d.style.left = ((a - start) * BW + 1) + "px";
       d.style.width = Math.max(18, (z - a + 1) * BW - 3) + "px";
       d.style.background = `rgba(${c},.13)`; d.style.borderColor = `rgba(${c},.38)`; d.style.color = `rgb(${c})`;
+      if (opts.onMarker) {       // editor: drag edges to re-length
+        if (a === L.bar) d.appendChild(rsEdge("l", BW, () => ({
+          t: L, min: lms[i - 1] ? lms[i - 1].bar + 1 : 1,
+          max: lms[i + 1] ? lms[i + 1].bar - 1 : bars })));
+        if (lms[i + 1] && z === segEnd) d.appendChild(rsEdge("r", BW, () => ({
+          t: lms[i + 1], min: L.bar + 1,
+          max: lms[i + 2] ? lms[i + 2].bar - 1 : bars })));
+      }
       const lbl = el("span", "lbl", escapeHtml(sceneLabel(L.scene) + (L.fade ? " ≈" + L.fade : "")));
       if (opts.onMarker) lbl.onclick = (e) => { e.stopPropagation(); opts.onMarker("light", L, e); };
       d.appendChild(lbl);
@@ -4620,7 +4843,7 @@ function secondsBetweenBars(song, fromBar, toBar) {
   return t;
 }
 
-const sched = { on: false, songIdx: null, bar: 1, beat: 0, nextT: 0, timer: null,
+const sched = { on: false, free: false, songIdx: null, bar: 1, beat: 0, nextT: 0, timer: null,
                 sources: [], beatTimes: {}, base: null };
 function schedStart(fromBar, fromBeat) {
   schedStop();
@@ -4629,7 +4852,7 @@ function schedStart(fromBar, fromBeat) {
   if (!song) return;
   migrateSong(song); preloadSongTracks(song);
   const ctx = ensureAudio();
-  sched.on = true; sched.songIdx = idx; sched.base = null;
+  sched.on = true; sched.free = false; sched.songIdx = idx; sched.base = null;
   sched.bar = fromBar; sched.beat = fromBeat || 0;
   sched.nextT = ctx.currentTime + 0.08;
   sched.beatTimes = {};
@@ -4645,8 +4868,20 @@ function schedStart(fromBar, fromBeat) {
   sched.timer = setInterval(schedPump, 40);
   schedPump();
 }
+// ONE metronome: the free metronome uses the same lookahead scheduler as song
+// mode, so both are sample-locked to the audio clock (no event-arrival jitter).
+function schedStartFree() {
+  schedStop();
+  const ctx = ensureAudio();
+  sched.on = true; sched.free = true; sched.songIdx = null;
+  sched.beat = (S.click.beat || 0) % Math.max(1, S.click.time_sig || 4);
+  sched.nextT = ctx.currentTime + 0.08;
+  sched.timer = setInterval(schedPump, 40);
+  schedPump();
+}
 function schedStop() {
   sched.on = false;
+  sched.free = false;
   if (sched.timer) { clearInterval(sched.timer); sched.timer = null; }
   sched.sources.forEach(src => { try { src.stop(); } catch (e) {} });
   sched.sources = [];
@@ -4675,6 +4910,15 @@ function schedClickAt(t, accent) {
 function schedPump() {
   if (!sched.on) return;
   const ctx = ensureAudio();
+  if (sched.free) {       // free metronome: fixed grid, live bpm/sig per beat
+    const sig = Math.max(1, S.click.time_sig || 4);
+    while (sched.on && sched.nextT < ctx.currentTime + 0.22) {
+      if (!clickRouted()) schedClickAt(sched.nextT, beatAccent(sched.beat % sig, sig));
+      sched.nextT += 60 / clamp(S.click.bpm, 20, 300);
+      sched.beat = (sched.beat + 1) % (sig * 16);
+    }
+    return;
+  }
   const song = S.setlist[sched.songIdx];
   if (!song) { schedStop(); return; }
   while (sched.on && sched.nextT < ctx.currentTime + 0.22) {
@@ -4718,9 +4962,11 @@ function schedOnServerBeat(d) {
 function syncAudioEngine() {
   const songMode = S.click.mode === "song" && S.active_song_idx != null;
   if (S.click.running && songMode) {
-    if (!sched.on || sched.songIdx !== S.active_song_idx)
+    if (!sched.on || sched.free || sched.songIdx !== S.active_song_idx)
       schedStart(S.click.bar || 1, S.click.beat || 0);
     preloadSongTracks(S.setlist[S.active_song_idx]);
+  } else if (S.click.running) {
+    if (!sched.on || !sched.free) schedStartFree();
   } else {
     schedStop();
   }
@@ -4854,14 +5100,24 @@ window.addEventListener("resize", () => {
 // — timeline popover —
 let _popXY = { x: 0, y: 0 };
 function tlPopAt(e) { _popXY = { x: e.clientX, y: e.clientY }; }
+let _tlPopT = 0;
 function tlPopShow() {
   const pop = $("tl-pop");
   pop.classList.add("show");
+  _tlPopT = Date.now();
   const w = 270, h = pop.offsetHeight || 220;
   pop.style.left = Math.min(Math.max(10, _popXY.x - w / 2), window.innerWidth - w - 10) + "px";
   pop.style.top = Math.min(_popXY.y + 14, window.innerHeight - h - 10) + "px";
 }
 function tlPopHide() { $("tl-pop").classList.remove("show"); }
+// clicking anywhere outside the popover closes it (the opening click is
+// within the arm window and ignored; clicking another bar closes + reopens)
+document.addEventListener("pointerdown", (e) => {
+  const pop = $("tl-pop");
+  if (!pop || !pop.classList.contains("show")) return;
+  if (Date.now() - _tlPopT < 180) return;
+  if (!pop.contains(e.target)) tlPopHide();
+});
 
 function tlPopTempo(bar) {
   const song = edSong(); if (!song) return;
@@ -5059,12 +5315,13 @@ function wireEditor() {
 //  Performance — split view + live playhead
 // ════════════════════════════════════════════════════════════════════════════
 function renderPerfSetlist() {
-  renderSetRail($("perf-set"));
-  renderSetRail($("mx-set"));     // the Mixer tab carries the same rail
+  renderSetRail($("perf-set"), "perf");
+  renderSetRail($("mx-set"), "mixer");   // the Mixer tab carries the same rail
 }
 // One setlist rail, identical everywhere it appears (Performance, Mixer):
-// same rows, same drag-reorder, same quantized song switching.
-function renderSetRail(box) {
+// same rows, same drag-reorder, same quantized song switching. Only the
+// bottom button differs: metronome (perf) vs free mix (mixer).
+function renderSetRail(box, mode) {
   if (!box) return;
   box.innerHTML = "";
   box.appendChild(el("div", "ps-head", "Setlist"));
@@ -5088,10 +5345,15 @@ function renderSetRail(box) {
     });
     box.appendChild(row);
   });
-  // metronome — no bars, no setlist, just a beat for on-the-spot playing
+  // bottom button: perf = metronome · mixer = free mix (deselect the song —
+  // shape the desk freely without writing into any song, save as a preset)
   const wrap = el("div", "ps-free-wrap");
-  const fr = el("button", "ps-free" + (S.active_song_idx == null ? " on" : ""), ic("metro"));
-  fr.title = "Metronome — a dial, a time signature and a click";
+  const mixerMode = mode === "mixer";
+  const fr = el("button", "ps-free" + (S.active_song_idx == null ? " on" : ""),
+                ic(mixerMode ? "console" : "metro"));
+  fr.title = mixerMode
+    ? "Free mix — no song selected: console moves are live on the desk but saved to no song. Save them as a preset."
+    : "Metronome — a dial, a time signature and a click";
   fr.onclick = () => { if (S.active_song_idx != null) activateSong(null); };
   wrap.appendChild(fr);
   box.appendChild(wrap);
@@ -5154,11 +5416,13 @@ function markWelcomed() { try { localStorage.setItem(GUIDE_KEY, "1"); } catch (e
 function hideWelcome() { $("welcome").classList.remove("show"); markWelcomed(); }
 
 const TOUR = [
-  { sel: '.tab[data-view="setlist"]', title: "Setlist", body: "Your songs, in order. Click a song to open its editor, drag to reorder. Loading and playing happens in Performance.", pad: 6 },
-  { sel: '.tab[data-view="lighting"]', title: "Lighting", body: "A live stage preview. Pick a scene, set colours, patch fixtures, and connect real DMX at the venue. Works in simulator mode with no gear.", pad: 6 },
-  { sel: '.tab[data-view="perf"]', title: "Performance", body: "The big, glanceable view for during the show — song title, giant BPM, beat dots and one-tap cues.", pad: 6 },
-  { sel: "#midi-btn", title: "Hands-free", body: "Map a foot pedal or pad here to fire cues, toggle the click or jump songs without touching the laptop.", pad: 6 },
-  { sel: "#help-fab", title: "Always here to help", body: "Open this anytime for the full guide and keyboard shortcuts — and to replay this tour.", pad: 6 },
+  { sel: '.tab[data-view="setlist"]', title: "Setlist", body: "Your songs, in order — drag to reorder, click one to open its editor. Each song carries its own tempo map, time signatures, sections, cues, backing tracks, lights and mix.", pad: 6 },
+  { sel: '.tab[data-view="lighting"]', title: "Lighting", body: "A full stage-lighting console — scenes, captured Looks, tempo-synced effects, moving heads, all driven by the song. Drives real DMX at the venue (ENTTEC or Art-Net), or the on-screen simulator with no gear.", pad: 6 },
+  { sel: '.tab[data-view="mixer"]', title: "Mixer", body: "Remote-controls your XR18 over the network. Each song auto-saves its own mix — faders, IEM sends, EQ — and recalls it with a smooth glide when the song loads. No touching instruments between songs.", pad: 6 },
+  { sel: '.tab[data-view="perf"]', title: "Performance", body: "The big, glanceable show view — song title, giant BPM, beat dots, one-tap cues and live look buttons. Loading a song here fires its click, lights and mix together.", pad: 6 },
+  { sel: "#out-btn", title: "Audio I/O", body: "Route the click to your in-ears (its own channel over USB) and choose what REC records — point it at the XR18 to capture the live board mix.", pad: 6 },
+  { sel: "#midi-btn", title: "Hands-free", body: "Map a foot pedal or pad to fire cues, toggle the click, jump songs or punch a lighting look — all without touching the laptop mid-song.", pad: 6 },
+  { sel: "#help-fab", title: "Always here to help", body: "Open this anytime for the full guide and keyboard shortcuts — and to replay this tour. The Lighting tab also has its own step-by-step Guide.", pad: 6 },
 ];
 let tourI = 0;
 function startTour() {
@@ -5275,10 +5539,13 @@ function boot() {
   renderFixtures();
   renderPerfStrip();
   renderAll();
-  // try to pull a one-shot state snapshot first (works even before WS opens)
+  // try to pull a one-shot state snapshot first (works even before WS opens),
+  // THEN open on Performance (so the setlist is loaded and the first song
+  // auto-selects). Falls back to opening Performance even if the fetch fails.
   fetch("/api/state").then(r => r.json()).then(d => {
     if (d && d.setlist) { S = Object.assign(S, d); if (!S.dmx_preview) S.dmx_preview = new Array(32).fill(0); syncTransport(); renderAll(); }
-  }).catch(() => {});
+    switchView("perf");
+  }).catch(() => switchView("perf"));
   startLocalSim();   // drives lights/energy whenever the server isn't
   connectWS();
   // first user gesture unlocks audio + pre-warms the speech engine

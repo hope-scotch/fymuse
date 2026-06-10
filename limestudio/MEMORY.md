@@ -32,6 +32,152 @@ fymuse/limestudio/
 
 ## Recent change history
 
+**Networking decisions (no code) from the hardware session.** Confirmed AP
+mode works for the user at home (desk connected, faders moved it). Home =
+XR18 REMOTE switch on ACCESS POINT, Mac+phones join the XR18-xxxx WiFi,
+Lime Studio Connect → 192.168.1.1; Mac loses internet on it (fine for
+rehearsal). Ethernet/travel-router only needed for GIG reliability (desk's
+own WiFi is its weakest part). Clarified for the user: "desk" = the XR18;
+only the XR18 needs the Ethernet cable (it→router), the Mac joins by WiFi
+(no Ethernet port needed); a travel router (GL.iNet etc., ~₹3k, has a LAN
+port) is the gig answer if a venue/portless router blocks Ethernet.
+FOH-outputs reality: XR18 has 6 aux + Main LR = 8 analog outs; all 6 buses
+are IEMs, so FOH realistically gets the self-rebalancing stereo Main LR
+(option A) unless IEMs move to Ultranet/P16 to free buses for 5 stems
+(option B). HARDWARE CHECKLIST STILL OPEN: confirm gain (now 0.5dB-snapped)
+/ EQ dots / reverb send / IEM sends / song-switch recall on the real desk.
+
+
+
+**Live 3-way sync + gain quantize (hardware session).** (1) Desk-side moves
+(Mixing Station, X Air Edit, the desk's knobs) now reflect in Lime Studio
+live: `mixer.on_update` → `_mixer_param_changed` marks a dirty Event +
+writes managed-param changes into the active song's mix; a daemon
+`_mixer_push_loop` coalesces bursts (120ms) and broadcasts `mixer_levels`.
+Client already re-renders strips/detail/wires on that event, skipping any
+control mid-drag. All four remotes (MS, X Air, Lime, desk knobs) share the
+ONE state inside the XR18 via /xremote — explained to user; the "X Air
+returns to its own settings" gotcha = X Air Edit's sync dialog "PC→Mixer"
+direction overwriting the desk (house rule: always pick "Mixer→PC"). (2)
+Gain bug: headamp is stepped 0.5 dB (≈144 steps over -12..+60); mxSet snaps
+`/headamp/` values to /144 grid and gainDb displays on the 0.5 dB grid so
+app/desk/X Air show identical numbers (desk snaps silently, never echoes).
+
+
+
+**No auto-connect + explicit Disconnect (user: "it changes the X Air
+settings already present").** Root cause of the weirdness: auto-connect at
+boot + perf auto-select song 1 → that song's SIM-BUILT mix got pushed onto
+the real desk at launch. Fixes: (1) _load_show no longer auto-connects (saved
+host only prefills the prompt; new `saved_host` in _full_state.mixer since
+link host ≠ saved host). (2) On a fresh connect, the DESK is the truth:
+`_mixer_status_changed` waits 1.2s for query replies then `_store_active_mix()`
+— the active song adopts the desk, nothing is pushed by connecting. (3) WS
+`mixer_disconnect` (keeps saved host; mixer.disconnect() now clears the LINK
+host so the button can't show "Retrying…" after a deliberate disconnect).
+(4) Connect button = toggle with confirm; labels: "XR18 ✓ · Disconnect" /
+"Retrying… · Disconnect" (link up but desk quiet) / "Connect". NOTE: found
+client code already modified outside this session (disconnect via
+mixer_connect{host:""} + _mxLastHost) — harmonized into the above. CAUTION
+remains: switching songs after first hardware connect still applies earlier
+sim-built mixes of OTHER songs to the desk; advise rebuilding song mixes
+from the desk at first real rehearsal (play each song, set the desk, switch
+away = stored).
+
+
+
+**FIRST XR18 HARDWARE CONTACT — fixes from live testing.** The desk responds
+(faders move it!) at 192.168.0.240 on the home LAN. Bugs found & fixed:
+(1) connected flag flipped in the rx thread but was never PUSHED to clients —
+`mixer.on_status` hook (set after _full_state def) broadcasts on
+connect/disconnect transitions. (2) False "disconnecting when switching
+tabs": the desk sends nothing unprompted when idle, so the 20s reply timeout
+fired — keepalive now heartbeats `/xinfo` (always answered) every 8s beside
+/xremote. (3) Mac output devices missing from Audio I/O: PortAudio snapshots
+devices at init — both device endpoints now `sd._terminate()/_initialize()`
+before listing, GUARDED by no-active-stream (re-init under a live stream
+crashes). (4) Click routing failed silently — pushClickOut now surfaces
+the verdict 700ms later (routed ✓ w/ backend+channel, or error toast), and a
+"Test ticks" button (WS `click_test` → 3 audible ticks in a thread) verifies
+routing without running the transport. Mapping clarified to user: positional
+— app strip N ↔ XR18 input N, app IEM tab N ↔ bus N; names are labels only,
+nothing read from X Air. User must plug per agreed layout (1 LeadVox … 7
+BackVox). Still pending from the hardware checklist: gain knob / EQ dots /
+reverb send / IEM sends confirmation on the desk.
+
+
+
+**One metronome (roadmap #5 CLOSED) + perf priming fix.** (1) The free
+metronome now runs on the SAME Web Audio lookahead scheduler as song mode:
+`schedStartFree()` + a free branch in schedPump (fixed grid, reads live
+bpm/sig per beat so dial changes apply within the 220ms window, beatAccent
+honoured, clickRouted respected); syncAudioEngine routes running+!songMode →
+free engine; onBeat treats free-engine beats as audioScheduled (lastBeatT
+null → spoken cues stay immediate). Server beats now drive ONLY visuals in
+free mode — no more event-arrival jitter in the audible click; the two
+engines can no longer sound different. Offline localClock fallback unchanged
+(event-driven). (2) Perf auto-select bug: activateSong(0) fired before the
+WS opened, got locally set then CLOBBERED by the first server state sync.
+Now `primePerf()` retries from switchView, the state handler and
+enterLocalMode, and only acts once a transport exists (wsConnected or
+localMode). Also earlier this session: pause-in-place transport (click_stop
+keeps bar/beat; explicit-bar click_start resets the beat), pointer cursor on
+timeline bars, outside-click closes tl-pop popovers (180ms arm), edge-drag
+re-lengthing for section + lighting bands (document-level drag, bar-quantized,
+neighbor-clamped; .tl-rs handles need pointer-events:auto because .tl-sec is
+pointer-transparent), app opens on Performance tab after state fetch.
+
+
+
+**Wires view — FL-style signal-flow diagram in the Mixer.** Faders|Wires
+seg toggle in the Ins section (`setMxView`, mxView state). renderMixerWires:
+SVG with INs column left (7 channels + Tracks·Click node subtitled "USB ←
+Lime Studio") and OUTS column right (Main LR "FOH" + all 6 buses incl. the
+click bus — the wiring view tells the whole truth), bezier wires per
+send where level > 0.02: stroke-opacity 0.1+v*0.6, width 1+v*2.6, <title>
+tooltip with dB; muted sources dim their wires to 18%. Selecting an IN
+(node click → mxSel + detail panel) dims other sources' wires to 35%.
+Live: redraws on mixer_levels, rAF-throttled on every mxSet (knob/fader
+moves repaint wires in real time), renderMixer. Nodes: .wnode rects, lime
+on hover/selected. ALSO: Setlist header explanation line + "Load demo set"
+button removed (loadDemoSet function left unused); user's stale-app
+confusion about the Audio I/O modal resolved (needs app restart).
+
+
+
+**REC records the live board mix + Audio I/O modal.** User asked to remove
+the Outputs button (thought the mixer replaced it) — pushed back: Outputs is
+the bridge INTO the desk (click's USB channel), the mixer is what the desk
+does after. Instead the modal became "Audio I/O" and grew the REC source:
+ShowRecorder.configure(device, channel) — device picker + 1-based stereo-pair
+start; start() opens enough channels to reach the pair (clamped to device
+max, falls back to top pair), `_write()` extracts the pair from the
+interleaved int16 capture (verified: 4ch → pair 3/4 only, [300,400,301,401]).
+XR18 recipe: REC source = XR18 + the pair carrying its USB main-LR return
+(desk In/Out→USB sends page; 17/18 typical) → REC captures the actual live
+mix post-fader, board quality, not a room mic. WS `set_rec_input`, persisted
+rec_device/rec_channel (restored on load), /api/input/audio-devices lists
+capture devices with channel counts, recorder.state() carries
+device/channel. Mixer console UI same session: free-mix icon → 3-fader
+console glyph (old one read as a stop button), "Free mix loaded" toast in
+mixer view (was "Metronome"), Outs+XR18+Connect on ONE line (XR18 cluster
+right), all four zones are outlined .mx-sec panels incl. the right detail
+column.
+
+
+
+**Mixer dock polish.** Nowbar status line REMOVED (mx-nowbar gone entirely).
+Presets dock divided from the strips by a border-top on .mx-bottom. Save
+preset pad is icon-only (new ICONS.save floppy, centred, .perf-cue.mx-save).
+Rail bottom button is now mode-aware (`renderSetRail(box, mode)`): perf =
+metronome, mixer = FREE MIX button (new ICONS.sliders, same
+activateSong(null) behaviour, tooltip explains live-but-unsaved + save as
+preset). NOTE: repo situation — fymuse parent dir is the real git repo with
+origin; the nested limestudio/.git I created earlier was REMOVED; commits
+happen from the user's terminal at the fymuse level.
+
+
+
 **Mixer presets → controller pads + free-mix mode (mirrors Performance).**
 Bottom section of the Mixer deck is now `.mx-bottom`: the nowbar status +
 "Presets" `.pad-row` of `.perf-cue.look` pad buttons — tap applies

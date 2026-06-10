@@ -191,6 +191,7 @@ class XR18Link:
         self.cache = {}            # address -> value (THE desk state, or the sim)
         self.names = {}            # address -> scribble name
         self.on_update = on_update
+        self.on_status = None      # server hook: push connect/disconnect to the UI
         self._run = False
         self._rx_thread = None
         self._ka_thread = None
@@ -233,7 +234,8 @@ class XR18Link:
         except Exception:
             pass
         self.sock = None
-        self.connected = False
+        self.host = ""             # link host = live link only (saved host
+        self.connected = False     # for the Connect prompt lives in state)
         self.status = "Sim — no desk connected; scenes still work"
         return self.state()
 
@@ -260,6 +262,11 @@ class XR18Link:
             if not self.connected:
                 self.connected = True
                 self.status = "XR18 @ " + self.host
+                if self.on_status:
+                    try:
+                        self.on_status()
+                    except Exception:
+                        pass
             if address.endswith("/config/name") and args:
                 self.names[address] = str(args[0])
             elif args:
@@ -273,13 +280,20 @@ class XR18Link:
 
     def _keepalive(self):
         """Renew /xremote (the desk pushes changes for 10 s per request) and
-        watch for the desk going away."""
+        heartbeat with /xinfo — the desk ALWAYS answers /xinfo, so quiet
+        periods (nobody touching anything) can't read as a dead link."""
         while self._run:
             self._send("/xremote")
+            self._send("/xinfo")
             time.sleep(8)
             if self.connected and time.monotonic() - self._last_seen > 20:
                 self.connected = False
                 self.status = "No reply from " + self.host + " — check the network"
+                if self.on_status:
+                    try:
+                        self.on_status()
+                    except Exception:
+                        pass
 
     # -- parameters --
     def query_all(self):
