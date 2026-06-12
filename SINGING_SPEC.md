@@ -1,6 +1,6 @@
 # Singing Practice — Comprehensive Spec
 
-A new main view in Fymuse next to Playground / Listener / Splitter. The most exhaustive vocal-training analysis tool available outside of pro studio software, tuned specifically for **Bollywood pop singers preparing for live performance**. Not a generic karaoke scorer.
+A new main view in Lime Labs next to Playground / Listener / Splitter. The most exhaustive vocal-training analysis tool available outside of pro studio software, tuned specifically for **Bollywood pop singers preparing for live performance**. Not a generic karaoke scorer.
 
 This document is the canonical reference for the build. v1, v2, and v3 are phased — but the analysis engine, data model, and scoring framework are designed once, end-to-end, so v2/v3 features bolt on as feature flags rather than rewrites.
 
@@ -40,7 +40,7 @@ A serious live-prep regimen runs three or four such sessions per week with at le
 
 ---
 
-## 3. Section architecture — fitting into Fymuse
+## 3. Section architecture — fitting into Lime Labs
 
 Follows the established Listener / Splitter pattern exactly. Six additions:
 
@@ -480,7 +480,7 @@ Take, Phrase, Note, BaselineCard, TakeFeatures, PrescribedExercise are all typed
 
 ### 11.2 New code modules
 
-All inline in `index.html` for consistency with the rest of Fymuse, but logically separated by clear section comments:
+All inline in `index.html` for consistency with the rest of Lime Labs, but logically separated by clear section comments:
 
 `singerFeatures` — the frame-level extractor (§5.1). Pure functions, no DOM, no state. Operates on Float32Array audio buffers.
 
@@ -500,7 +500,7 @@ All inline in `index.html` for consistency with the rest of Fymuse, but logicall
 
 `singerHandoff` — Splitter → Singer handoff logic. New button in Splitter view, song loading into singerState.
 
-### 11.3 Reuse from existing Fymuse code
+### 11.3 Reuse from existing Lime Labs code
 
 `splitterDetectMonophonicNotes` — reused as-is for both reference and take F0 extraction. The HPS + parabolic-interpolation pipeline is excellent for vocal.
 
@@ -510,7 +510,7 @@ All inline in `index.html` for consistency with the rest of Fymuse, but logicall
 
 Header Key picker — reused for the tonal-framework picker (Key + Raga together define the scoring target).
 
-Tone.js — reused for warm-up exercise playback (already loaded in Fymuse).
+Tone.js — reused for warm-up exercise playback (already loaded in Lime Labs).
 
 WebAudio playback graph patterns from Splitter — reused for backing track + vocal-guide playback.
 
@@ -528,7 +528,7 @@ In-memory only. `singerState` lives in JS heap. Reload = fresh session. The Revi
 
 The take-analysis pipeline targets <8 seconds for a 4-minute song on a mid-range MacBook. Profile budget: frame-extraction ≈3s (this is the heavy lift — FFT every 20ms × 12000 frames at 4-min × 60s × 50 fps = ~12000 FFTs of 2048 samples). Aggregation + scoring ≈1s. Ornament detection ≈1s. DTW alignment ≈1.5s. Rendering ≈0.5s.
 
-Web Worker offloading: the frame-extraction stage runs in a Web Worker (new — not used elsewhere in Fymuse yet) so the UI stays responsive. The worker is reused across takes in a session (one-time spin-up cost amortized).
+Web Worker offloading: the frame-extraction stage runs in a Web Worker (new — not used elsewhere in Lime Labs yet) so the UI stays responsive. The worker is reused across takes in a session (one-time spin-up cost amortized).
 
 ---
 
@@ -598,7 +598,7 @@ Generative songwriting assist for vocal lines. Out of scope; that's Songwriter t
 
 **MediaRecorder format inconsistency.** Different browsers default to different containers (Chrome → WebM/Opus, Safari → MP4/AAC). The take-analysis pipeline decodes via `AudioContext.decodeAudioData`, which handles both, but the user-download experience differs. Mitigation: detect browser and offer the user-appropriate download with the right extension.
 
-**Web Worker availability in Cloudflare Pages deployment.** Should work — Web Workers are standard browser API — but the COOP/COEP headers Fymuse already sets for ONNX Runtime are sufficient. Verify during build.
+**Web Worker availability in Cloudflare Pages deployment.** Should work — Web Workers are standard browser API — but the COOP/COEP headers Lime Labs already sets for ONNX Runtime are sufficient. Verify during build.
 
 ---
 

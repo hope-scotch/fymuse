@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tiny HTTP server for FYmuse. Serves the current folder with the
+Tiny HTTP server for Lime Labs. Serves the current folder with the
 Cross-Origin-Opener-Policy + Cross-Origin-Embedder-Policy headers that
 ONNX Runtime Web needs to enable SharedArrayBuffer (= multi-thread WASM).
 
@@ -56,7 +56,7 @@ RECIPE_TIMEOUT_SEC = 90              # Claude CLI invocation timeout
 RECIPE_DEFAULT_MODEL = "sonnet"      # 'sonnet', 'opus', 'haiku', or full ID
 
 # ---- Cross-origin from the deployed Pages site ---------------------------
-# When the user has FYmuse open on https://fymuse.pages.dev (or another
+# When the user has Lime Labs open on https://lime-labs.pages.dev (or another
 # allowed origin) and wants to route AI refinement through THIS local
 # server, the browser sends a CORS preflight. Whitelist known origins
 # below — anything else gets no Access-Control headers and the browser
@@ -67,16 +67,16 @@ RECIPE_DEFAULT_MODEL = "sonnet"      # 'sonnet', 'opus', 'haiku', or full ID
 # blocks it — users on Safari can't use prod→local; they need API mode
 # or to open the site directly via http://localhost:4747.
 ALLOWED_ORIGINS = {
-    "https://fymuse.pages.dev",
+    "https://lime-labs.pages.dev",
     "http://localhost:4747",
     "http://127.0.0.1:4747",
 }
 
-# Optional shared-token auth: when FYMUSE_TOKEN is set in the environment,
-# /api/recipe requires an X-Fymuse-Token: <value> header that matches.
+# Optional shared-token auth: when LIME_TOKEN is set in the environment,
+# /api/recipe requires an X-Lime-Token: <value> header that matches.
 # Prevents random other tabs/sites from burning your subscription if they
 # happen to find localhost while server.py is running.
-RECIPE_SHARED_TOKEN = os.environ.get("FYMUSE_TOKEN", "").strip()
+RECIPE_SHARED_TOKEN = os.environ.get("LIME_TOKEN", "").strip()
 
 
 class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
@@ -97,7 +97,7 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
         if origin and origin in ALLOWED_ORIGINS:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "content-type, x-fymuse-token")
+            self.send_header("Access-Control-Allow-Headers", "content-type, x-lime-token")
             # Private Network Access — Chrome flags public→private fetches
             # without this header. Required even when origin is on localhost.
             self.send_header("Access-Control-Allow-Private-Network", "true")
@@ -128,11 +128,11 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
 
     def _check_recipe_token(self):
         """Return True if a shared-token gate is enforced AND the
-        request's X-Fymuse-Token header matches. Returns True
+        request's X-Lime-Token header matches. Returns True
         immediately when no token is configured (open mode)."""
         if not RECIPE_SHARED_TOKEN:
             return True
-        sent = (self.headers.get("X-Fymuse-Token") or "").strip()
+        sent = (self.headers.get("X-Lime-Token") or "").strip()
         return sent == RECIPE_SHARED_TOKEN
 
     def _read_json_body(self):
@@ -198,11 +198,11 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
             return self._send_json(503, {"ok": False, "error": f"claude --version failed: {e}"})
 
     def _handle_recipe(self):
-        # Token gate (only when FYMUSE_TOKEN env var is set)
+        # Token gate (only when LIME_TOKEN env var is set)
         if not self._check_recipe_token():
             return self._send_json(403, {
                 "ok": False,
-                "error": "Missing or invalid X-Fymuse-Token. Set the matching token in the AI Settings popover.",
+                "error": "Missing or invalid X-Lime-Token. Set the matching token in the AI Settings popover.",
             })
         body = self._read_json_body()
         if not body or not isinstance(body, dict):
@@ -323,7 +323,7 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
             req = urllib.request.Request(
                 url,
                 headers={
-                    "User-Agent": "FYmuse-proxy/1.0",
+                    "User-Agent": "LimeLabs-proxy/1.0",
                     "Accept": "*/*",
                 },
             )
@@ -444,7 +444,7 @@ def main():
             print(f"Invalid port: {sys.argv[1]}")
             sys.exit(1)
     server = HTTPServer(("127.0.0.1", port), CrossOriginIsolatedHandler)
-    print(f"FYmuse running at http://localhost:{port}/")
+    print(f"Lime Labs running at http://localhost:{port}/")
     print("Cross-origin isolation is on — Splitter ML mode will use multi-thread WASM.")
     print("URL proxy endpoint available at /api/proxy?url=<encoded-url>.")
     if shutil.which("yt-dlp") or shutil.which("yt-dlp.exe"):
@@ -463,8 +463,8 @@ def main():
         masked = RECIPE_SHARED_TOKEN[:4] + "…" + RECIPE_SHARED_TOKEN[-4:] if len(RECIPE_SHARED_TOKEN) > 8 else "***"
         print(f"Shared token enforced ({masked}) — set the same value in AI Settings.")
     else:
-        print("No shared token (FYMUSE_TOKEN env var not set) — anyone reaching localhost can call /api/recipe.")
-        print("  To restrict: `FYMUSE_TOKEN=$(openssl rand -hex 16) python3 server.py`")
+        print("No shared token (LIME_TOKEN env var not set) — anyone reaching localhost can call /api/recipe.")
+        print("  To restrict: `LIME_TOKEN=$(openssl rand -hex 16) python3 server.py`")
     print("Ctrl+C to stop.")
     try:
         server.serve_forever()

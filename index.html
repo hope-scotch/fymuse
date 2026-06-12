@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>FYMuse — Chord Progression Finder</title>
+<title>Lime Labs — Chord Progression Finder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -1951,7 +1951,7 @@
 <body>
 <header>
   <div class="header-row top">
-    <h1><a href="#" class="brand-link" aria-label="FYmuse home"><img src="logo.png" alt="FYmuse" class="brand-logo"></a></h1>
+    <h1><a href="#" class="brand-link" aria-label="Lime Labs home"><img src="logo.png" alt="Lime Labs" class="brand-logo"></a></h1>
     <div class="controls-right">
       <div class="header-tools">
         <button id="header-playground-btn" class="header-action-btn" title="Switch to Playground (every chord in the key)"><i class="ph-duotone ph-piano-keys"></i> Playground</button>
@@ -5091,7 +5091,7 @@ Hard rules:
 
 // Minimal state: probe result + the base URL that succeeded. Two cases:
 //   - Same-origin (user opened http://localhost:4747 directly): base = ''
-//   - Cross-origin (user on https://fymuse.pages.dev reaching their
+//   - Cross-origin (user on https://lime-labs.pages.dev reaching their
 //     laptop's server.py): base = 'http://localhost:4747'
 // The probe tries same-origin first, then falls back to the localhost
 // URL so the deployed Pages site automatically picks up a server.py
@@ -5118,7 +5118,7 @@ async function aiTryProbe(base) {
 }
 
 async function aiProbeLocalProxy() {
-  // 1) Try same-origin first (the user opened FYmuse via http://localhost:4747)
+  // 1) Try same-origin first (the user opened Lime Labs via http://localhost:4747)
   const same = await aiTryProbe('');
   if (same.ok) {
     aiState.localBase = '';
@@ -5147,7 +5147,7 @@ async function aiProbeLocalProxy() {
     ok: false,
     error: onLocalhost
       ? 'no /api/recipe-health response — is `python3 server.py` running? (' + (same.error || ('HTTP ' + same.status)) + ')'
-      : 'no local proxy reachable — start `python3 server.py` on your laptop (Refine works from both http://localhost:4747 and https://fymuse.pages.dev). Safari users: HTTPS→localhost is blocked, switch to Chrome/Firefox/Edge.',
+      : 'no local proxy reachable — start `python3 server.py` on your laptop (Refine works from both http://localhost:4747 and https://lime-labs.pages.dev). Safari users: HTTPS→localhost is blocked, switch to Chrome/Firefox/Edge.',
   };
   aiState.probed = true;
   return aiState.localHealth;
@@ -6132,7 +6132,7 @@ function rulesPickModxVocalFX(m) {
 // Recipes cost real money — cache them aggressively. Key includes the
 // song's content hash, stem id, region bounds, AND a hash of the user's
 // gear notes so editing the gear inventory invalidates stale recipes.
-const AI_CACHE_DB_NAME = 'fymuse-ai-cache';
+const AI_CACHE_DB_NAME = 'lime-labs-ai-cache';
 const AI_CACHE_DB_STORE = 'recipes';
 const AI_CACHE_DB_VERSION = 1;
 let aiCacheDBHandle = null;
@@ -8477,7 +8477,7 @@ function splitterUpdateStemCursors() {
 //   - vocals: no vocal processor in the rig
 //   - bass:   user configured NUX MG-30 as guitar-only and MODX 6 as
 //             keyboard-only (bass goes through a separate chain not in
-//             FYmuse's inventory). The MG-30 itself has bass-amp models
+//             Lime Labs's inventory). The MG-30 itself has bass-amp models
 //             and MODX has bass Performances, but the user explicitly
 //             opted out, so we hide the bass card here.
 const TONE_WINDOW_SEC = 4.0;     // analysis window width
@@ -13452,7 +13452,7 @@ function splitterUpdateStatusUI() {
 // stored as plain Float32Array channels + sampleRate so the cache survives
 // across sessions and reloads instantly (no AudioBuffer serialization
 // gymnastics).
-const SPLITTER_DB_NAME = 'fymuse-splitter-cache';
+const SPLITTER_DB_NAME = 'lime-labs-splitter-cache';
 const SPLITTER_DB_STORE = 'splits';
 const SPLITTER_DB_VERSION = 1;
 let splitterDBHandle = null;

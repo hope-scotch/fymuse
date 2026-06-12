@@ -1,4 +1,4 @@
-# Fymuse — Claude Orientation
+# Lime Labs — Claude Orientation
 
 Single-file HTML/JS/CSS music tool. ~15 K lines of `index.html`, no build step. Edit and reload.
 

@@ -1,4 +1,4 @@
-# FYmuse
+# Lime Labs
 
 A single-file music-theory + songwriting + audio-analysis tool. Open `index.html` in any modern browser. No build step.
 
@@ -12,15 +12,15 @@ A single-file music-theory + songwriting + audio-analysis tool. Open `index.html
 
 ## Sharing with band members / collaborators (Phase 1)
 
-The deployed site (`fymuse.pages.dev`) supports drag-drop and direct audio URLs for everyone — share the link freely. **YouTube / YT Music URLs only work in local mode** because Google blocks every known cloud datacenter IP from extracting audio.
+The deployed site (`lime-labs.pages.dev`) supports drag-drop and direct audio URLs for everyone — share the link freely. **YouTube / YT Music URLs only work in local mode** because Google blocks every known cloud datacenter IP from extracting audio.
 
 For collaborators who want the full one-click "paste YT URL → split" flow, the simplest path is to have them run their own local copy. Each laptop is its own residential IP, so YouTube treats them as normal browsers:
 
 ```bash
 # One-time setup (per collaborator, ~2 minutes)
 brew install yt-dlp ffmpeg python    # macOS — use apt / choco on other OSes
-git clone https://github.com/<your-username>/fymuse.git
-cd fymuse
+git clone https://github.com/<your-username>/lime-labs.git
+cd lime-labs
 
 # Each session
 python3 server.py

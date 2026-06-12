@@ -211,7 +211,7 @@ If one person works on this full-time:
 - **Week 5:** Iteration — multi-resolution STFT loss, longer training,
   curriculum learning, augmentation tuning. **Milestone:** model beats
   `htdemucs_6s` on the test set.
-- **Week 6:** ONNX export, browser integration, A/B testing in FYmuse,
+- **Week 6:** ONNX export, browser integration, A/B testing in Lime Labs,
   ship behind a feature flag. **Milestone:** shipped.
 
 Part-time evenings/weekends: 3–4 months realistic.
@@ -264,7 +264,7 @@ WebGPU as the preferred backend (already supported in `ort-web`).
 
 ## 10. When we pick this up — first concrete steps
 
-1. Set up a GitHub repo separate from FYmuse: `fymuse-splitter-training`.
+1. Set up a GitHub repo separate from Lime Labs: `lime-labs-splitter-training`.
 2. Apply for MedleyDB access (free, takes a few days).
 3. Spin up a RunPod A100 instance, install PyTorch + Lightning + asteroid.
 4. Write the MedleyDB ingestion script + label dictionary. This alone
