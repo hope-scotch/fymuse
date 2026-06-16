@@ -5,3 +5,9 @@ package-lock.json
 *.del.*
 __pycache__/
 *.pyc
+
+# Desktop app build artifacts
+.venv/
+build/
+dist/
+vendor/

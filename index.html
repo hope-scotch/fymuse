@@ -57,7 +57,7 @@
   .brand-link { display: flex; align-items: center; line-height: 1; text-decoration: none; min-width: 0; max-width: 100%; }
   .brand-logo {
     display: block;
-    height: 48px;
+    height: 20px;
     width: auto;
     max-width: 100%;
     object-fit: contain;
@@ -356,15 +356,11 @@
 
   /* Header tools row (Playground / Path Finder / Melody Mode / Songwriter) */
   .header-tools { display: flex; gap: 3px; align-items: center; padding: 2px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; flex-wrap: wrap; }
-  .header-tools .header-action-btn { padding: 5px 9px; font-size: 12.5px; background: transparent; border: none; border-radius: 6px; color: var(--text-2); white-space: nowrap; }
-  .header-tools .header-action-btn i[class*="ph-"] { font-size: 14px; }
-  /* On narrower viewports, hide button labels and show icons only.
-     The label is everything after the icon — we use font-size:0 to hide
-     the text node while keeping the icon visible (icon font-size is reset). */
-  @media (max-width: 1500px) {
-    .header-tools .header-action-btn { font-size: 0; padding: 6px 8px; }
-    .header-tools .header-action-btn i[class*="ph-"] { font-size: 16px; vertical-align: middle; }
-  }
+  /* Icon-only nav: the text label after each icon is hidden via font-size:0,
+     leaving a compact, evenly-padded icon button. Tooltips (title=) name each
+     tool on hover, so the labels stay discoverable without taking up space. */
+  .header-tools .header-action-btn { padding: 7px 9px; font-size: 0; background: transparent; border: none; border-radius: 6px; color: var(--text-2); white-space: nowrap; }
+  .header-tools .header-action-btn i[class*="ph-"] { font-size: 17px; vertical-align: middle; }
   .header-tools .header-action-btn:hover { color: var(--text); background: var(--panel); }
   .header-tools .header-action-btn.active { background: var(--accent); color: #1a1a1a; }
   .header-tools .header-action-btn#header-songwriter-btn.active { background: var(--accent-2); color: #0a0a10; }
@@ -752,8 +748,8 @@
   .chord-chart-empty { color: var(--muted); font-size: 12px; padding: 8px 4px; font-style: italic; }
   .stem-track { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.15s, border-color 0.15s; }
   .stem-track-controls { display: grid; grid-template-columns: 160px auto 1fr 56px auto; align-items: center; gap: 14px; }
-  .stem-midi-btn { padding: 5px 10px; background: var(--panel); color: var(--text-2); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.4px; display: inline-flex; align-items: center; gap: 5px; transition: all 0.12s; white-space: nowrap; }
-  .stem-midi-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .stem-midi-btn, .stem-audio-btn { padding: 5px 10px; background: var(--panel); color: var(--text-2); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: 0.4px; display: inline-flex; align-items: center; gap: 5px; transition: all 0.12s; white-space: nowrap; }
+  .stem-midi-btn:hover, .stem-audio-btn:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
   .stem-track:not(.has-events) .stem-midi-btn { opacity: 0.4; pointer-events: none; }
   .stem-track:not(.has-events) .stem-midi-btn[title]::after { content: ' (no events)'; }
   .stem-track.is-soloed { border-color: var(--accent); background: var(--panel); }
@@ -9551,6 +9547,55 @@ function splitterDownloadMIDI(stemId) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+// ---- Per-stem audio (.wav) export ---------------------------------------
+// Encode an AudioBuffer to a 16-bit PCM WAV (RIFF/WAVE), channels interleaved.
+function splitterAudioBufferToWav(buffer) {
+  const numCh = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const numFrames = buffer.length;
+  const blockAlign = numCh * 2;            // 2 bytes/sample (16-bit)
+  const dataSize = numFrames * blockAlign;
+  const ab = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(ab);
+  let p = 0;
+  const wstr = (s) => { for (let i = 0; i < s.length; i++) view.setUint8(p++, s.charCodeAt(i)); };
+  const u32 = (v) => { view.setUint32(p, v, true); p += 4; };
+  const u16 = (v) => { view.setUint16(p, v, true); p += 2; };
+  wstr('RIFF'); u32(36 + dataSize); wstr('WAVE');
+  wstr('fmt '); u32(16); u16(1); u16(numCh); u32(sampleRate);
+  u32(sampleRate * blockAlign); u16(blockAlign); u16(16);
+  wstr('data'); u32(dataSize);
+  const channels = [];
+  for (let c = 0; c < numCh; c++) channels.push(buffer.getChannelData(c));
+  for (let i = 0; i < numFrames; i++) {
+    for (let c = 0; c < numCh; c++) {
+      let s = Math.max(-1, Math.min(1, channels[c][i]));
+      s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      view.setInt16(p, s, true); p += 2;
+    }
+  }
+  return ab;
+}
+
+function splitterDownloadStemAudio(stemId) {
+  const stem = splitterState.stems[stemId];
+  if (!stem || !stem.buffer) {
+    splitterSetStatus('No audio to export for ' + stemId, 'idle');
+    return;
+  }
+  const wav = splitterAudioBufferToWav(stem.buffer);
+  const blob = new Blob([wav], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  const baseName = (splitterState.fileName || 'song').replace(/\.[^.]+$/, '');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = baseName + ' - ' + stemId + '.wav';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 // ---- Notes modal — full per-stem event timeline with vertical stacking ---
 const splitterModalState = {
   open: false,
@@ -11149,6 +11194,7 @@ function splitterRebuildMixerSkeleton() {
           <input type="range" class="stem-volume" data-stem="${s.id}" min="0" max="100" value="80" title="Volume">
         </div>
         <span class="stem-vu" id="stem-vu-${s.id}">80%</span>
+        <button class="stem-audio-btn" data-stem="${s.id}" title="Download .wav audio for this stem"><i class="ph-duotone ph-download-simple sz-sm"></i> WAV</button>
         <button class="stem-midi-btn" data-stem="${s.id}" title="Download .mid file for this stem"><i class="ph-duotone ph-file-arrow-down sz-sm"></i> MIDI</button>
       </div>
       <div class="stem-timeline" data-stem="${s.id}" id="stem-timeline-${s.id}" title="Click to jump to that position">
@@ -11169,6 +11215,13 @@ function splitterRebuildMixerSkeleton() {
     btn.onclick = (e) => {
       e.stopPropagation();
       splitterDownloadMIDI(btn.dataset.stem);
+    };
+  });
+  // WAV audio export button (stopPropagation so the click doesn't open the modal)
+  mixer.querySelectorAll('.stem-audio-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      splitterDownloadStemAudio(btn.dataset.stem);
     };
   });
   // Click anywhere on a stem timeline = jump global playhead to that point.

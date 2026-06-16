@@ -121,6 +121,16 @@ class CrossOriginIsolatedHandler(SimpleHTTPRequestHandler):
             return self._handle_recipe_health()
         return super().do_GET()
 
+    def copyfile(self, source, outputfile):
+        # The webview (and browsers) routinely cancel in-flight requests when
+        # reloading or when a large asset like index.html is replaced mid-load.
+        # That surfaces as BrokenPipe / ConnectionReset deep in copyfile; it's
+        # harmless, so swallow it instead of dumping a traceback on the console.
+        try:
+            super().copyfile(source, outputfile)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
     def do_POST(self):
         if self.path.startswith("/api/recipe"):
             return self._handle_recipe()

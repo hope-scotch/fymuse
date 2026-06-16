@@ -1,0 +1,14 @@
+# Lime Labs — desktop app dependencies (macOS / Windows / Linux)
+
+# Native desktop window (no browser, no Electron). Pulls pyobjc on macOS,
+# uses WebView2 on Windows. Linux also needs a backend: pip install "pywebview[qt]"
+pywebview>=5.0
+
+# YouTube / SoundCloud audio extraction. server.py shells out to the `yt-dlp`
+# binary; installing the package puts it on PATH in dev. For the frozen app,
+# build.sh vendors the standalone yt-dlp binary (see LimeLabs.spec).
+yt-dlp>=2024.1.1
+
+# NOTE: ffmpeg is NOT a pip package. Dev: `brew install ffmpeg` (macOS) /
+# `apt install ffmpeg` (Debian). Frozen app: build.sh vendors a static binary.
+# Some YouTube formats require it for muxing/extraction.
